@@ -66,6 +66,7 @@ curl http://localhost:8000/api/tools
 编排与监控：
 - `docker-compose.yml` 包含 `agent` 和 `prometheus` 服务。
 - `AGENT_ENABLE_MEMORY=true` 和 `VECTOR_MEMORY_PATH=/app/data/vector_memory.json` 已在 Docker 环境中启用。
+- 升级旧版 Compose 部署时，请在首次启动新配置前迁移旧版向量记忆：如果项目根目录存在 `vector_memory.json` 且 `data/vector_memory.json` 不存在，PowerShell 执行 `New-Item -ItemType Directory -Force .\data; Copy-Item .\vector_memory.json .\data\vector_memory.json`。
 - 生产部署至少应配置 `AGENT_AUTH_REQUIRED=true`、`AGENT_API_KEYS` 和 `AGENT_HTTP_ALLOWED_HOSTS`。
 - Prometheus 使用 `./data/metrics-token` 作为 Bearer token；生产环境必须把它替换为与 `AGENT_METRICS_API_KEY` 相同的随机值。
 - Compose 会把 `./data` 挂载到容器的 `/app/data`，用于持久化向量记忆和审计日志。

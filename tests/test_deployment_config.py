@@ -36,3 +36,10 @@ def test_readme_documents_security_configuration():
     assert "AGENT_AUTH_REQUIRED" in readme
     assert "AGENT_API_KEYS" in readme
     assert "AGENT_HTTP_ALLOWED_HOSTS" in readme
+
+
+def test_readme_documents_vector_memory_migration():
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+
+    assert "Copy-Item .\\vector_memory.json .\\data\\vector_memory.json" in readme
+    assert "旧版向量记忆" in readme
