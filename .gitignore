@@ -44,6 +44,7 @@ prometheus.yml
 
 # Temporary directories
 .tmp
+.worktrees/
 
 # Vector memory persistence
 vector_memory.json
