@@ -1,21 +1,42 @@
-import os
+class FakeChatCompletions:
+    def __init__(self):
+        self.calls = []
 
-import openai
+    def create(self, **kwargs):
+        self.calls.append(kwargs)
+        return type(
+            "Response",
+            (),
+            {
+                "choices": [
+                    type(
+                        "Choice",
+                        (),
+                        {"message": type("Message", (), {"content": "第一句。第二句?"})()},
+                    )
+                ]
+            },
+        )()
 
 
-def test_openai_adapter_monkeypatch(monkeypatch):
-    # 模拟环境变量
+class FakeOpenAIClient:
+    def __init__(self):
+        self.chat = type("Chat", (), {"completions": FakeChatCompletions()})()
+
+
+def test_openai_adapter_uses_v1_chat_client_contract(monkeypatch):
     monkeypatch.setenv("OPENAI_API_KEY", "dummy-key")
-
-    # 模拟 openai.ChatCompletion.create 的返回值
-    def fake_create(model, messages, max_tokens):
-        return {"choices": [{"message": {"content": "第一句。第二句?"}}]}
-
-    # 有些 openai 发行版没有 ChatCompletion 属性，模拟整个 ChatCompletion 类
-    monkeypatch.setattr(openai, "ChatCompletion", type("C", (), {"create": staticmethod(fake_create)}), raising=False)
+    client = FakeOpenAIClient()
 
     from src.agent.llm_openai import OpenAIAdapter
 
-    adapter = OpenAIAdapter(model="dummy-model")
-    steps = adapter.plan("任何提示")
-    assert steps == ["echo: 第一句", "echo: 第二句"]
+    adapter = OpenAIAdapter(model="dummy-model", client=client)
+
+    assert adapter.plan("任何提示") == ["echo: 第一句", "echo: 第二句"]
+    assert client.chat.completions.calls == [
+        {
+            "model": "dummy-model",
+            "messages": [{"role": "user", "content": "任何提示"}],
+            "max_tokens": 512,
+        }
+    ]
