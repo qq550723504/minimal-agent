@@ -7,6 +7,8 @@ def _bool_env(name: str, default: str = "true") -> bool:
 
 LLM_BACKEND = os.getenv("AGENT_LLM_BACKEND", "mock").strip().lower()
 OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-3.5-turbo").strip()
+EMBEDDING_BACKEND = os.getenv("AGENT_EMBEDDING_BACKEND", "mock").strip().lower()
+OPENAI_EMBEDDING_MODEL = os.getenv("OPENAI_EMBEDDING_MODEL", "text-embedding-3-small").strip()
 VECTOR_MEMORY_PATH = os.getenv("VECTOR_MEMORY_PATH", "vector_memory.json").strip()
 ENABLE_MEMORY = _bool_env("AGENT_ENABLE_MEMORY", "true")
 QUEUE_WORKER_COUNT = int(os.getenv("QUEUE_WORKER_COUNT", "2"))
