@@ -43,3 +43,13 @@ def test_readme_documents_vector_memory_migration():
 
     assert "Copy-Item .\\vector_memory.json .\\data\\vector_memory.json" in readme
     assert "旧版向量记忆" in readme
+
+
+def test_compose_forwards_gemini_configuration():
+    compose = (ROOT / "docker-compose.yml").read_text(encoding="utf-8")
+
+    assert "GEMINI_API_KEY=${GEMINI_API_KEY:-}" in compose
+    assert "GEMINI_MODEL=${GEMINI_MODEL:-gemini-2.5-flash}" in compose
+    assert "GEMINI_EMBEDDING_MODEL=${GEMINI_EMBEDDING_MODEL:-gemini-embedding-2}" in compose
+    assert "AGENT_LLM_BACKEND=${AGENT_LLM_BACKEND:-mock}" in compose
+    assert "AGENT_EMBEDDING_BACKEND=${AGENT_EMBEDDING_BACKEND:-mock}" in compose

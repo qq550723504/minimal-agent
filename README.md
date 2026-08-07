@@ -35,12 +35,15 @@ curl http://localhost:8000/
 
 4. 环境变量说明：
 
-- `AGENT_LLM_BACKEND`: 选择后端，默认 `mock`，可设置为 `openai`。
+- `AGENT_LLM_BACKEND`: 选择后端，默认 `mock`，可设置为 `openai` 或 `gemini`。
 - `OPENAI_MODEL`: OpenAI 模型名称，默认 `gpt-3.5-turbo`。
 - `OPENAI_API_KEY`: OpenAI API key（仅当 `AGENT_LLM_BACKEND=openai` 或 `AGENT_EMBEDDING_BACKEND=openai` 时需要）。
+- `GEMINI_MODEL`: Gemini 模型名称，默认 `gemini-2.5-flash`。
+- `GEMINI_API_KEY`: Gemini API key（仅当 `AGENT_LLM_BACKEND=gemini` 或 `AGENT_EMBEDDING_BACKEND=gemini` 时需要）。
 - `AGENT_ENABLE_MEMORY`: 是否启用向量记忆，默认 `true`。
-- `AGENT_EMBEDDING_BACKEND`: 嵌入后端，默认 `mock`，可设置为 `openai`。
+- `AGENT_EMBEDDING_BACKEND`: 嵌入后端，默认 `mock`，可设置为 `openai` 或 `gemini`。
 - `OPENAI_EMBEDDING_MODEL`: OpenAI Embedding 模型名称，默认 `text-embedding-3-small`。
+- `GEMINI_EMBEDDING_MODEL`: Gemini Embeddings 模型名称，默认 `gemini-embedding-2`。
 - `VECTOR_MEMORY_PATH`: 向量记忆持久化文件路径，Docker 默认 `/app/data/vector_memory.json`。
 - `QUEUE_WORKER_COUNT`: 后台任务队列工作线程数，默认 `2`。
 - `AGENT_AUTH_REQUIRED`: 是否强制 API Key 鉴权，默认 `false`；生产环境建议设置为 `true`。
@@ -68,6 +71,7 @@ curl http://localhost:8000/api/tools
 - `AGENT_ENABLE_MEMORY=true` 和 `VECTOR_MEMORY_PATH=/app/data/vector_memory.json` 已在 Docker 环境中启用。
 - 升级旧版 Compose 部署时，请在首次启动新配置前迁移旧版向量记忆：如果项目根目录存在 `vector_memory.json` 且 `data/vector_memory.json` 不存在，PowerShell 执行 `New-Item -ItemType Directory -Force .\data; Copy-Item .\vector_memory.json .\data\vector_memory.json`。
 - 生产部署至少应配置 `AGENT_AUTH_REQUIRED=true`、`AGENT_API_KEYS` 和 `AGENT_HTTP_ALLOWED_HOSTS`。
+- 切换 `AGENT_EMBEDDING_BACKEND` 或 Embeddings 模型后，向量空间可能不兼容；应删除并重建 `VECTOR_MEMORY_PATH` 中的旧向量数据。
 - Prometheus 使用 `./data/metrics-token` 作为 Bearer token；生产环境必须把它替换为与 `AGENT_METRICS_API_KEY` 相同的随机值。
 - Compose 会把 `./data` 挂载到容器的 `/app/data`，用于持久化向量记忆和审计日志。
 - 访问 `http://localhost:9090` 可查看 Prometheus UI。
