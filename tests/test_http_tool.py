@@ -1,21 +1,42 @@
 import json
+import socket
+
+import pytest
 
 from src.agent.tools import _http_get_tool, _http_post_tool
+from src.agent.http_security import validate_http_url
+
+
+class FakeResponse:
+    def __init__(self, body=b'{"ok": true}', status_code=200, headers=None):
+        self.body = body
+        self.status_code = status_code
+        self.headers = headers or {"Content-Length": str(len(body))}
+
+    def raise_for_status(self):
+        if self.status_code >= 400:
+            raise RuntimeError(f"status {self.status_code}")
+
+    def iter_content(self, chunk_size=8192):
+        yield self.body
+
+
+def allow_example_host(monkeypatch):
+    monkeypatch.setenv("AGENT_HTTP_ALLOWED_HOSTS", "api.example.com")
+    monkeypatch.setattr(
+        socket,
+        "getaddrinfo",
+        lambda *args, **kwargs: [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("93.184.216.34", 443))],
+    )
 
 
 def test_http_get_tool_payload_parsing(monkeypatch):
-    def fake_get(url, params=None, timeout=None):
-        class FakeResp:
-            def __init__(self):
-                self.status_code = 200
+    allow_example_host(monkeypatch)
+    calls = []
 
-            def raise_for_status(self):
-                pass
-
-            def json(self):
-                return {"url": url, "params": params}
-
-        return FakeResp()
+    def fake_get(url, params=None, **kwargs):
+        calls.append((url, params, kwargs))
+        return FakeResponse(body=json.dumps({"url": url, "params": params}).encode())
 
     import requests
     monkeypatch.setattr(requests, "get", fake_get)
@@ -25,21 +46,16 @@ def test_http_get_tool_payload_parsing(monkeypatch):
     parsed = json.loads(result)
     assert parsed["url"] == "https://api.example.com/data"
     assert parsed["params"] == {"q": "test"}
+    assert calls[0][2]["allow_redirects"] is False
+    assert calls[0][2]["stream"] is True
 
 
 def test_http_post_tool_payload_parsing(monkeypatch):
-    def fake_post(url, data=None, json=None, timeout=None):
-        class FakeResp:
-            def __init__(self):
-                self.status_code = 200
+    allow_example_host(monkeypatch)
 
-            def raise_for_status(self):
-                pass
-
-            def json(self):
-                return {"url": url, "data": data, "json": json}
-
-        return FakeResp()
+    def fake_post(url, data=None, json=None, **kwargs):
+        body = {"url": url, "data": data, "json": json}
+        return FakeResponse(body=__import__("json").dumps(body).encode())
 
     import requests
     monkeypatch.setattr(requests, "post", fake_post)
@@ -49,3 +65,69 @@ def test_http_post_tool_payload_parsing(monkeypatch):
     parsed = json.loads(result)
     assert parsed["url"] == "https://api.example.com/items"
     assert parsed["json"] == {"name": "agent"}
+
+
+def test_http_tool_rejects_empty_allowlist_without_calling_requests(monkeypatch):
+    monkeypatch.delenv("AGENT_HTTP_ALLOWED_HOSTS", raising=False)
+    called = False
+
+    def fake_get(*args, **kwargs):
+        nonlocal called
+        called = True
+        return FakeResponse()
+
+    import requests
+    monkeypatch.setattr(requests, "get", fake_get)
+
+    with pytest.raises(ValueError, match="allowlist"):
+        _http_get_tool("https://api.example.com/data")
+    assert called is False
+
+
+@pytest.mark.parametrize("url", ["file:///etc/passwd", "http://127.0.0.1:8080/", "http://169.254.169.254/latest"])
+def test_http_tool_rejects_unsafe_urls(monkeypatch, url):
+    monkeypatch.setenv("AGENT_HTTP_ALLOWED_HOSTS", "api.example.com")
+    called = False
+
+    def fake_get(*args, **kwargs):
+        nonlocal called
+        called = True
+        return FakeResponse()
+
+    import requests
+    monkeypatch.setattr(requests, "get", fake_get)
+
+    with pytest.raises(ValueError):
+        _http_get_tool(url)
+    assert called is False
+
+
+def test_validate_http_url_rejects_dns_resolving_to_metadata_ip(monkeypatch):
+    monkeypatch.setenv("AGENT_HTTP_ALLOWED_HOSTS", "metadata.example.com")
+    monkeypatch.setattr(
+        socket,
+        "getaddrinfo",
+        lambda *args, **kwargs: [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("169.254.169.254", 80))],
+    )
+
+    with pytest.raises(ValueError, match="unsafe"):
+        validate_http_url("http://metadata.example.com/latest")
+
+
+def test_http_tool_rejects_redirect(monkeypatch):
+    allow_example_host(monkeypatch)
+    import requests
+    monkeypatch.setattr(requests, "get", lambda *args, **kwargs: FakeResponse(status_code=302))
+
+    with pytest.raises(ValueError, match="redirect"):
+        _http_get_tool("https://api.example.com/data")
+
+
+def test_http_tool_rejects_oversized_response(monkeypatch):
+    allow_example_host(monkeypatch)
+    monkeypatch.setenv("AGENT_HTTP_MAX_RESPONSE_BYTES", "4")
+    import requests
+    monkeypatch.setattr(requests, "get", lambda *args, **kwargs: FakeResponse(body=b"12345"))
+
+    with pytest.raises(ValueError, match="large"):
+        _http_get_tool("https://api.example.com/data")

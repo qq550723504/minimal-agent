@@ -1,4 +1,5 @@
 import json
+import socket
 import requests
 
 from src.agent.executor import WorkflowExecutionError, execute_step, execute_tasks, execute_workflow, enqueue_task_execution
@@ -14,16 +15,24 @@ def test_execute_step_plain_text():
 
 
 def test_execute_step_http_get_payload_parsing(monkeypatch):
-    def fake_get(url, params=None, timeout=None):
+    monkeypatch.setenv("AGENT_HTTP_ALLOWED_HOSTS", "api.example.com")
+    monkeypatch.setattr(
+        socket,
+        "getaddrinfo",
+        lambda *args, **kwargs: [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("93.184.216.34", 443))],
+    )
+
+    def fake_get(url, params=None, **kwargs):
         class FakeResp:
             def __init__(self):
                 self.status_code = 200
+                self.headers = {"Content-Length": "50"}
 
             def raise_for_status(self):
                 pass
 
-            def json(self):
-                return {"url": url, "params": params}
+            def iter_content(self, chunk_size=8192):
+                yield json.dumps({"url": url, "params": params}).encode()
 
         return FakeResp()
 
@@ -36,16 +45,24 @@ def test_execute_step_http_get_payload_parsing(monkeypatch):
 
 
 def test_execute_step_structured_tool_step(monkeypatch):
-    def fake_get(url, params=None, timeout=None):
+    monkeypatch.setenv("AGENT_HTTP_ALLOWED_HOSTS", "api.example.com")
+    monkeypatch.setattr(
+        socket,
+        "getaddrinfo",
+        lambda *args, **kwargs: [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("93.184.216.34", 443))],
+    )
+
+    def fake_get(url, params=None, **kwargs):
         class FakeResp:
             def __init__(self):
                 self.status_code = 200
+                self.headers = {"Content-Length": "50"}
 
             def raise_for_status(self):
                 pass
 
-            def json(self):
-                return {"url": url, "params": params}
+            def iter_content(self, chunk_size=8192):
+                yield json.dumps({"url": url, "params": params}).encode()
 
         return FakeResp()
 
