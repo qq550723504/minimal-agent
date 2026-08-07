@@ -13,6 +13,7 @@ if __package__ is None and __name__ == "__main__":
 
 from src.agent.planner import plan_task
 from src.agent.executor import execute_tasks, enqueue_task_execution
+from src.agent.memory_manager import initialize_memory, save_memory
 
 
 def handle_input(prompt: str) -> str:
@@ -29,18 +30,22 @@ def enqueue_input(prompt: str):
 
 
 def main_loop():
+    initialize_memory()
     print("Minimal Agent starting. 输入 'quit' 退出。")
-    while True:
-        try:
-            prompt = input("> ")
-        except EOFError:
-            break
-        if not prompt:
-            continue
-        if prompt.strip().lower() in ("quit", "exit"):
-            break
-        out = handle_input(prompt)
-        print(out)
+    try:
+        while True:
+            try:
+                prompt = input("> ")
+            except EOFError:
+                break
+            if not prompt:
+                continue
+            if prompt.strip().lower() in ("quit", "exit"):
+                break
+            out = handle_input(prompt)
+            print(out)
+    finally:
+        save_memory()
 
 
 if __name__ == "__main__":

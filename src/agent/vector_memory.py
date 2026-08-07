@@ -26,11 +26,12 @@ class VectorMemory:
             return []
         query_vec = self._vectorizer.transform([text])
         similarities = cosine_similarity(query_vec, self._matrix)[0]
-        top_idx = similarities.argsort()[::-1][:top_k]
-        return [
+        scored = [
             {"text": self._documents[i], "score": float(similarities[i]), "metadata": self._metadata[i]}
-            for i in top_idx
+            for i in similarities.argsort()[::-1]
+            if similarities[i] > 0
         ]
+        return scored[:top_k]
 
     def save(self, path: str) -> None:
         data = {

@@ -4,6 +4,7 @@ from typing import Any, List, Optional
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from src.agent.main import handle_input, enqueue_input
+from src.agent.memory_manager import initialize_memory, save_memory
 from src.agent.observability import setup_metrics
 from src.agent.security import audit_log, sanitize_input
 from src.agent.task_queue import get_status, list_tasks, start_queue, stop_queue
@@ -35,11 +36,13 @@ class TaskStatusOut(BaseModel):
 
 @app.on_event("startup")
 def on_startup():
+    initialize_memory()
     start_queue()
 
 
 @app.on_event("shutdown")
 def on_shutdown():
+    save_memory()
     stop_queue()
 
 
