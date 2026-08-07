@@ -1,0 +1,34 @@
+"""最小可运行 Agent 示例
+
+提供 `handle_input()` 供测试调用，以及 CLI 主循环用于手工运行。
+"""
+from typing import List
+
+from src.agent.planner import plan_task
+from src.agent.executor import execute_tasks
+
+
+def handle_input(prompt: str) -> str:
+    """对外接口：接收输入，规划并执行，返回合并后的结果字符串。"""
+    steps = plan_task(prompt)
+    results = execute_tasks(steps)
+    return " | ".join(results)
+
+
+def main_loop():
+    print("Minimal Agent starting. 输入 'quit' 退出。")
+    while True:
+        try:
+            prompt = input("> ")
+        except EOFError:
+            break
+        if not prompt:
+            continue
+        if prompt.strip().lower() in ("quit", "exit"):
+            break
+        out = handle_input(prompt)
+        print(out)
+
+
+if __name__ == "__main__":
+    main_loop()

@@ -1,0 +1,44 @@
+# Python
+*.pyc
+__pycache__/
+*.pyo
+*.pyd
+*.pym
+
+# Virtual environment
+.venv/
+env/
+venv/
+
+# Editor files
+.vscode/
+.idea/
+*.swp
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs and runtime files
+*.log
+pytest.log
+
+# Docker
+docker-compose.override.yml
+
+# Python packaging
+*.egg-info/
+*.egg
+dist/
+build/
+.eggs/
+
+# Logs and audit
+audit.log
+
+# Prometheus config
+prometheus.yml
+
+# Temporary directories
+.tmp

@@ -1,0 +1,23 @@
+# Minimal Agent 示例
+
+运行示例：
+
+1. 本地运行：
+
+```bash
+python -m venv .venv
+.venv\Scripts\activate
+pip install -r requirements.txt
+python src/agent/main.py
+```
+
+2. Docker 运行：
+
+```bash
+docker build -t minimal-agent .
+docker run -it --rm minimal-agent
+
+更多文档：请参见 `docs/AGENT_GUIDE.md`，其中包含架构设计、部署建议、安全与维护策略。
+
+版本与变更记录：请参见 `CHANGELOG.md`。
+```
