@@ -1,7 +1,8 @@
 import json
 import requests
 
-from src.agent.executor import execute_step, execute_tasks
+from src.agent.executor import WorkflowExecutionError, execute_step, execute_tasks, execute_workflow, enqueue_task_execution
+from src.agent.tool_registry import register_tool
 
 
 def test_execute_step_echo():
@@ -58,3 +59,51 @@ def test_execute_step_structured_tool_step(monkeypatch):
 
 def test_execute_tasks_batch():
     assert execute_tasks(["echo: a", "b"]) == ["a", "b"]
+
+
+def test_execute_workflow_preserves_step_order():
+    events = []
+
+    def record(payload):
+        events.append(payload)
+        return payload
+
+    register_tool("test_record_order", record)
+
+    result = execute_workflow(["test_record_order: first", "test_record_order: second"])
+
+    assert result == ["first", "second"]
+    assert events == ["first", "second"]
+
+
+def test_execute_workflow_reports_failed_step():
+    def fail(_payload):
+        raise RuntimeError("boom")
+
+    register_tool("test_workflow_failure", fail)
+
+    try:
+        execute_workflow(["echo: first", "test_workflow_failure: second"])
+    except WorkflowExecutionError as exc:
+        assert exc.step_index == 1
+        assert "boom" in str(exc)
+    else:
+        raise AssertionError("execute_workflow should report the failed step")
+
+
+def test_enqueue_task_execution_creates_one_workflow_task(monkeypatch):
+    calls = []
+
+    def fake_enqueue(func, *args, **kwargs):
+        calls.append((func, args, kwargs))
+        return "workflow-task"
+
+    monkeypatch.setattr("src.agent.executor.enqueue_task", fake_enqueue)
+
+    result = enqueue_task_execution(["echo: first", "echo: second"], owner_id="alice")
+
+    assert result == {"status": "queued", "task_id": "workflow-task", "task_ids": ["workflow-task"]}
+    assert len(calls) == 1
+    assert calls[0][0].__name__ == "execute_workflow"
+    assert calls[0][1] == (["echo: first", "echo: second"],)
+    assert calls[0][2]["owner_id"] == "alice"

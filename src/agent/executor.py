@@ -9,23 +9,29 @@ from src.agent.tool_registry import get_tool
 import src.agent.tools  # noqa: F401
 
 
+class WorkflowExecutionError(RuntimeError):
+    def __init__(self, step_index: int, cause: Exception):
+        self.step_index = step_index
+        self.cause = cause
+        super().__init__(f"workflow step {step_index} failed: {cause}")
+
+
+def _invoke_tool(tool_name: str, payload: str) -> str:
+    tool = get_tool(tool_name)
+    if tool is None:
+        raise ValueError(f"Unknown tool: {tool_name}")
+    return tool(payload)
+
+
 def execute_tool_step(step: str) -> str:
     """执行通用工具步骤。"""
-    try:
-        if not step:
-            raise ValueError("tool step is empty")
+    if not step:
+        raise ValueError("tool step is empty")
 
-        parts = step.split(" ", 1)
-        tool_name = parts[0].strip().lower().rstrip(":")
-        payload = parts[1].strip() if len(parts) > 1 else ""
-
-        tool = get_tool(tool_name)
-        if tool is None:
-            raise ValueError(f"Unknown tool: {tool_name}")
-
-        return tool(payload)
-    except Exception as exc:
-        return f"ERROR: {exc}"
+    parts = step.split(" ", 1)
+    tool_name = parts[0].strip().lower().rstrip(":")
+    payload = parts[1].strip() if len(parts) > 1 else ""
+    return _invoke_tool(tool_name, payload)
 
 
 def execute_step(step: Any) -> str:
@@ -36,10 +42,7 @@ def execute_step(step: Any) -> str:
             payload = step.get("payload", "")
             if not isinstance(payload, str):
                 payload = json.dumps(payload, ensure_ascii=False)
-            tool = get_tool(tool_name)
-            if tool is None:
-                return f"ERROR: Unknown tool: {tool_name}"
-            return tool(payload)
+            return _invoke_tool(tool_name, payload)
 
         action = step.get("action") or step.get("text") or step.get("step")
         if isinstance(action, str):
@@ -67,15 +70,29 @@ def execute_tasks(steps: List[Any]) -> List[str]:
     return [execute_step(step) for step in steps]
 
 
-def enqueue_task_execution(steps: List[Any], max_retries: int = 0, retry_delay: float = 0.0):
-    """把步骤加入后台队列执行，并返回任务 ID 列表。"""
-    task_ids = []
-    for step in steps:
-        task_id = enqueue_task(
-            execute_step,
-            step,
-            max_retries=max_retries,
-            retry_delay=retry_delay,
-        )
-        task_ids.append(task_id)
-    return {"status": "queued", "task_ids": task_ids}
+def execute_workflow(steps: List[Any]) -> List[str]:
+    """按计划顺序执行整个 workflow。"""
+    results = []
+    for step_index, step in enumerate(steps):
+        try:
+            results.append(execute_step(step))
+        except Exception as exc:
+            raise WorkflowExecutionError(step_index, exc) from exc
+    return results
+
+
+def enqueue_task_execution(
+    steps: List[Any],
+    owner_id: str = "default",
+    max_retries: int = 0,
+    retry_delay: float = 0.0,
+):
+    """把完整 workflow 加入后台队列，并返回单个任务 ID。"""
+    task_id = enqueue_task(
+        execute_workflow,
+        steps,
+        owner_id=owner_id,
+        max_retries=max_retries,
+        retry_delay=retry_delay,
+    )
+    return {"status": "queued", "task_id": task_id, "task_ids": [task_id]}

@@ -1,4 +1,3 @@
-import json
 import logging
 import threading
 import time
@@ -7,18 +6,22 @@ from dataclasses import dataclass, field
 from queue import Queue, Empty
 from typing import Callable, Any, Dict, Optional, List
 
+from src.agent.config import QUEUE_WORKER_COUNT
+
 logger = logging.getLogger(__name__)
 
 
 @dataclass
 class TaskRecord:
     task_id: str
+    owner_id: str = "default"
     status: str = "pending"
     attempts: int = 0
     max_retries: int = 0
     retry_delay: float = 0.0
     result: Any = None
     error: str = ""
+    failed_step: Optional[int] = None
     created_at: float = field(default_factory=time.time)
     completed_at: Optional[float] = None
 
@@ -52,6 +55,7 @@ class TaskQueue:
         self,
         func: Callable[..., Any],
         *args,
+        owner_id: str = "default",
         max_retries: int = 0,
         retry_delay: float = 0.0,
         **kwargs,
@@ -59,6 +63,7 @@ class TaskQueue:
         task_id = uuid.uuid4().hex
         self._records[task_id] = TaskRecord(
             task_id=task_id,
+            owner_id=owner_id,
             max_retries=max_retries,
             retry_delay=retry_delay,
         )
@@ -109,6 +114,7 @@ class TaskQueue:
             record.completed_at = time.time()
         except Exception as exc:
             record.error = repr(exc)
+            record.failed_step = getattr(exc, "step_index", None)
             if record.attempts <= max_retries:
                 record.status = "retrying"
                 logger.warning(
@@ -128,7 +134,7 @@ class TaskQueue:
                 logger.exception("Task %s failed after %s attempts", task_id, record.attempts)
 
 
-QUEUE = TaskQueue(worker_count=2)
+QUEUE = TaskQueue(worker_count=QUEUE_WORKER_COUNT)
 
 
 def start_queue():
