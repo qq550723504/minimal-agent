@@ -6,6 +6,10 @@ services:
       - "8000:8000"
     environment:
       - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - AGENT_ENABLE_MEMORY=true
+      - VECTOR_MEMORY_PATH=/app/vector_memory.json
+    volumes:
+      - ./vector_memory.json:/app/vector_memory.json
   prometheus:
     image: prom/prometheus:latest
     ports:
