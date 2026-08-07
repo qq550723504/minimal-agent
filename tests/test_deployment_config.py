@@ -14,6 +14,8 @@ def test_prometheus_config_is_tracked_and_compose_references_it():
     assert "./data:/etc/prometheus/data:ro" in compose
     prometheus = prometheus_path.read_text(encoding="utf-8")
     assert "credentials_file" in prometheus
+    assert "    authorization:" in prometheus
+    assert "    http_config:" not in prometheus
 
 
 def test_ci_does_not_hide_dependency_install_failures():
