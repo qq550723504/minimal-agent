@@ -23,6 +23,7 @@ Thumbs.db
 # Logs and runtime files
 *.log
 pytest.log
+.pytest_cache/
 
 # Docker
 docker-compose.override.yml
