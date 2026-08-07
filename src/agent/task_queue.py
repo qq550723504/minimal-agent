@@ -30,6 +30,8 @@ class TaskQueue:
     """一个支持重试与状态查询的任务队列实现。"""
 
     def __init__(self, worker_count: int = 1, poll_interval: float = 0.1):
+        if worker_count <= 0:
+            raise ValueError("worker_count must be positive")
         self._queue: Queue[tuple[str, Callable[..., Any], tuple, dict, int, float]] = Queue()
         self._worker_count = worker_count
         self._poll_interval = poll_interval
@@ -116,6 +118,7 @@ class TaskQueue:
             result = func(*args, **kwargs)
             record.result = result
             record.error = ""
+            record.failed_step = None
             record.status = "completed"
             record.completed_at = time.time()
         except Exception as exc:

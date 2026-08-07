@@ -22,18 +22,22 @@ SENSITIVE_PATTERNS = [
 REDACTION = "[REDACTED]"
 
 
+class ClientInputError(ValueError):
+    """Raised when a request payload is invalid before execution starts."""
+
+
 def sanitize_input(prompt: str, max_len: int = 1024) -> str:
     if not isinstance(prompt, str):
-        raise ValueError("prompt must be a string")
+        raise ClientInputError("prompt must be a string")
 
     if "\x00" in prompt:
-        raise ValueError("prompt contains disallowed NUL bytes")
+        raise ClientInputError("prompt contains disallowed NUL bytes")
 
     cleaned = prompt.strip()
     if len(cleaned) > max_len:
-        raise ValueError("prompt is too long")
+        raise ClientInputError("prompt is too long")
     if any(ord(c) < 32 and c not in ("\n", "\r", "\t") for c in cleaned):
-        raise ValueError("prompt contains disallowed control characters")
+        raise ClientInputError("prompt contains disallowed control characters")
     return cleaned
 
 

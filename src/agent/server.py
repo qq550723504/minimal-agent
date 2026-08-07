@@ -8,7 +8,7 @@ from src.agent.auth import get_current_user
 from src.agent.main import handle_input, enqueue_input
 from src.agent.memory_manager import initialize_memory, save_memory
 from src.agent.observability import setup_metrics
-from src.agent.security import audit_log, sanitize_input
+from src.agent.security import ClientInputError, audit_log, sanitize_input
 from src.agent.task_queue import get_status, list_tasks, start_queue, stop_queue
 from src.agent.tool_registry import list_tool_metadata
 
@@ -21,8 +21,8 @@ app = FastAPI()
 setup_metrics(app)
 
 
-@app.exception_handler(ValueError)
-async def value_error_handler(_request, exc: ValueError):
+@app.exception_handler(ClientInputError)
+async def client_input_error_handler(_request, exc: ClientInputError):
     return JSONResponse(status_code=400, content={"detail": str(exc)})
 
 

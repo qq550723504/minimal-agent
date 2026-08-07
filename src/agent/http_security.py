@@ -1,6 +1,8 @@
 import ipaddress
 import os
 import socket
+import threading
+from contextlib import contextmanager
 from dataclasses import dataclass
 from typing import Optional, Set
 from urllib.parse import urlsplit
@@ -12,6 +14,10 @@ class ParsedURL:
     scheme: str
     hostname: str
     port: int
+    resolved_addresses: tuple[str, ...]
+
+
+_DNS_PIN_LOCK = threading.RLock()
 
 
 def _bool_env(name: str, default: str = "false") -> bool:
@@ -26,9 +32,8 @@ def _allowed_hosts_from_env() -> Set[str]:
     }
 
 
-def _address_from_info(info) -> ipaddress._BaseAddress:
-    raw_address = info[4][0]
-    return ipaddress.ip_address(raw_address)
+def _address_from_info(info) -> str:
+    return info[4][0]
 
 
 def _is_unsafe_address(address: ipaddress._BaseAddress) -> bool:
@@ -60,9 +65,6 @@ def validate_http_url(url: str, allowed_hosts: Optional[Set[str]] = None) -> Par
     except ValueError as exc:
         raise ValueError("HTTP URL port is invalid") from exc
 
-    if _bool_env("AGENT_HTTP_ALLOW_PRIVATE"):
-        return ParsedURL(url=parsed.geturl(), scheme=scheme, hostname=hostname, port=port)
-
     try:
         literal_address = ipaddress.ip_address(hostname)
         addresses = [literal_address]
@@ -73,7 +75,48 @@ def validate_http_url(url: str, allowed_hosts: Optional[Set[str]] = None) -> Par
             raise ValueError(f"HTTP host could not be resolved: {hostname}") from exc
         addresses = [_address_from_info(info) for info in infos]
 
-    if not addresses or any(_is_unsafe_address(address) for address in addresses):
+    parsed_addresses = [ipaddress.ip_address(address) for address in addresses]
+    if not parsed_addresses or (not _bool_env("AGENT_HTTP_ALLOW_PRIVATE") and any(_is_unsafe_address(address) for address in parsed_addresses)):
         raise ValueError(f"HTTP host resolves to an unsafe address: {hostname}")
 
-    return ParsedURL(url=parsed.geturl(), scheme=scheme, hostname=hostname, port=port)
+    return ParsedURL(
+        url=parsed.geturl(),
+        scheme=scheme,
+        hostname=hostname,
+        port=port,
+        resolved_addresses=tuple(str(address) for address in parsed_addresses),
+    )
+
+
+@contextmanager
+def pin_dns_resolution(parsed: ParsedURL):
+    """Keep requests on the addresses validated for this hostname and request."""
+    original_getaddrinfo = socket.getaddrinfo
+    normalized_hostname = parsed.hostname.rstrip(".").lower()
+
+    def pinned_getaddrinfo(host, port, family=0, type=0, proto=0, flags=0):
+        if not isinstance(host, str) or host.rstrip(".").lower() != normalized_hostname:
+            return original_getaddrinfo(host, port, family, type, proto, flags)
+
+        results = []
+        for address in parsed.resolved_addresses:
+            ip_address = ipaddress.ip_address(address)
+            address_family = socket.AF_INET6 if ip_address.version == 6 else socket.AF_INET
+            if family not in (0, socket.AF_UNSPEC, address_family):
+                continue
+            socket_type = type or socket.SOCK_STREAM
+            if socket_type != socket.SOCK_STREAM:
+                continue
+            target_port = port or parsed.port
+            sockaddr = (address, target_port, 0, 0) if address_family == socket.AF_INET6 else (address, target_port)
+            results.append((address_family, socket_type, proto or socket.IPPROTO_TCP, "", sockaddr))
+        if not results:
+            raise socket.gaierror(f"no validated address for {host}")
+        return results
+
+    with _DNS_PIN_LOCK:
+        socket.getaddrinfo = pinned_getaddrinfo
+        try:
+            yield
+        finally:
+            socket.getaddrinfo = original_getaddrinfo

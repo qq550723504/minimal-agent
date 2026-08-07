@@ -47,3 +47,5 @@ prometheus.yml
 
 # Vector memory persistence
 vector_memory.json
+data/*.json
+data/*.log

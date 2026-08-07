@@ -3,7 +3,7 @@ from time import perf_counter
 from fastapi import Depends, FastAPI, Request, Response
 from prometheus_client import Counter, Histogram, generate_latest, CONTENT_TYPE_LATEST
 
-from src.agent.auth import get_current_user
+from src.agent.auth import get_metrics_access
 
 REQUEST_COUNT = Counter(
     "agent_request_count",
@@ -27,7 +27,7 @@ def setup_metrics(app: FastAPI) -> None:
         REQUEST_COUNT.labels(request.method, request.url.path, str(response.status_code)).inc()
         return response
 
-    @app.get("/metrics", dependencies=[Depends(get_current_user)])
+    @app.get("/metrics", dependencies=[Depends(get_metrics_access)])
     def metrics() -> Response:
         data = generate_latest()
         return Response(content=data, media_type=CONTENT_TYPE_LATEST)

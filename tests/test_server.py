@@ -42,7 +42,23 @@ def test_invalid_prompt_returns_bad_request(monkeypatch):
 def test_metrics_requires_key_when_authentication_is_enabled(monkeypatch):
     monkeypatch.setenv("AGENT_AUTH_REQUIRED", "true")
     monkeypatch.setenv("AGENT_API_KEYS", "alice:secret")
+    monkeypatch.setenv("AGENT_METRICS_API_KEY", "secret")
     client = TestClient(server.app)
 
     assert client.get("/metrics").status_code == 401
-    assert client.get("/metrics", headers={"X-API-Key": "secret"}).status_code == 200
+    assert client.get("/metrics", headers={"Authorization": "Bearer secret"}).status_code == 200
+
+
+def test_downstream_value_error_is_not_reported_as_client_input(monkeypatch):
+    monkeypatch.setenv("AGENT_AUTH_REQUIRED", "false")
+
+    def fail(*args, **kwargs):
+        raise ValueError("provider failure")
+
+    monkeypatch.setattr(server, "handle_input", fail)
+    client = TestClient(server.app, raise_server_exceptions=False)
+
+    response = client.post("/api/handle", json={"prompt": "hello"})
+
+    assert response.status_code == 500
+    assert "provider failure" not in response.text

@@ -2,7 +2,7 @@ import json
 import os
 from typing import Any
 
-from src.agent.http_security import validate_http_url
+from src.agent.http_security import pin_dns_resolution, validate_http_url
 
 
 def _timeout() -> tuple[float, float]:
@@ -63,13 +63,14 @@ def call_http_get(url: str, params: dict | None = None) -> dict:
         raise RuntimeError("requests package is required for HTTP tools") from exc
 
     parsed = validate_http_url(url)
-    response = requests.get(
-        parsed.url,
-        params=params,
-        timeout=_timeout(),
-        allow_redirects=False,
-        stream=True,
-    )
+    with pin_dns_resolution(parsed):
+        response = requests.get(
+            parsed.url,
+            params=params,
+            timeout=_timeout(),
+            allow_redirects=False,
+            stream=True,
+        )
     return _read_json_response(response, _max_response_bytes())
 
 
@@ -80,12 +81,13 @@ def call_http_post(url: str, data: dict | None = None, json_body: dict | None = 
         raise RuntimeError("requests package is required for HTTP tools") from exc
 
     parsed = validate_http_url(url)
-    response = requests.post(
-        parsed.url,
-        data=data,
-        json=json_body,
-        timeout=_timeout(),
-        allow_redirects=False,
-        stream=True,
-    )
+    with pin_dns_resolution(parsed):
+        response = requests.post(
+            parsed.url,
+            data=data,
+            json=json_body,
+            timeout=_timeout(),
+            allow_redirects=False,
+            stream=True,
+        )
     return _read_json_response(response, _max_response_bytes())

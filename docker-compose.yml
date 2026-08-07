@@ -10,6 +10,7 @@ services:
       - AGENT_AUDIT_LOG=/app/data/audit.log
       - AGENT_AUTH_REQUIRED=${AGENT_AUTH_REQUIRED:-false}
       - AGENT_API_KEYS=${AGENT_API_KEYS:-}
+      - AGENT_METRICS_API_KEY=${AGENT_METRICS_API_KEY:-local-dev-metrics}
       - AGENT_HTTP_ALLOWED_HOSTS=${AGENT_HTTP_ALLOWED_HOSTS:-}
     volumes:
       - ./data:/app/data
@@ -19,3 +20,4 @@ services:
       - "9090:9090"
     volumes:
       - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./data:/etc/prometheus/data:ro

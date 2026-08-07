@@ -4,7 +4,7 @@ import socket
 import pytest
 
 from src.agent.tools import _http_get_tool, _http_post_tool
-from src.agent.http_security import validate_http_url
+from src.agent.http_security import pin_dns_resolution, validate_http_url
 
 
 class FakeResponse:
@@ -131,3 +131,18 @@ def test_http_tool_rejects_oversized_response(monkeypatch):
 
     with pytest.raises(ValueError, match="large"):
         _http_get_tool("https://api.example.com/data")
+
+
+def test_http_tool_pins_requests_dns_to_the_validated_address(monkeypatch):
+    monkeypatch.setenv("AGENT_HTTP_ALLOWED_HOSTS", "api.example.com")
+    answers = iter([
+        [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("93.184.216.34", 443))],
+        [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("169.254.169.254", 443))],
+    ])
+    monkeypatch.setattr(socket, "getaddrinfo", lambda *args, **kwargs: next(answers))
+
+    parsed = validate_http_url("https://api.example.com/data")
+    with pin_dns_resolution(parsed):
+        pinned = socket.getaddrinfo("api.example.com", 443, type=socket.SOCK_STREAM)
+
+    assert pinned[0][4][0] == "93.184.216.34"

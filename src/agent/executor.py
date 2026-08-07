@@ -10,9 +10,10 @@ import src.agent.tools  # noqa: F401
 
 
 class WorkflowExecutionError(RuntimeError):
-    def __init__(self, step_index: int, cause: Exception):
+    def __init__(self, step_index: int, cause: Exception, completed_results=None):
         self.step_index = step_index
         self.cause = cause
+        self.completed_results = list(completed_results or [])
         super().__init__(f"workflow step {step_index} failed: {cause}")
 
 
@@ -70,15 +71,31 @@ def execute_tasks(steps: List[Any]) -> List[str]:
     return [execute_step(step) for step in steps]
 
 
+class WorkflowRunner:
+    """执行 workflow，并在队列重试时从失败步骤继续。"""
+
+    def __init__(self, steps: List[Any]):
+        self.steps = list(steps)
+        self.results: List[str] = []
+        self.next_step = 0
+        self.__name__ = "execute_workflow"
+
+    def __call__(self) -> List[str]:
+        while self.next_step < len(self.steps):
+            step_index = self.next_step
+            step = self.steps[step_index]
+            try:
+                result = execute_step(step)
+            except Exception as exc:
+                raise WorkflowExecutionError(step_index, exc, self.results) from exc
+            self.results.append(result)
+            self.next_step += 1
+        return list(self.results)
+
+
 def execute_workflow(steps: List[Any]) -> List[str]:
     """按计划顺序执行整个 workflow。"""
-    results = []
-    for step_index, step in enumerate(steps):
-        try:
-            results.append(execute_step(step))
-        except Exception as exc:
-            raise WorkflowExecutionError(step_index, exc) from exc
-    return results
+    return WorkflowRunner(steps)()
 
 
 def enqueue_task_execution(
@@ -88,9 +105,9 @@ def enqueue_task_execution(
     retry_delay: float = 0.0,
 ):
     """把完整 workflow 加入后台队列，并返回单个任务 ID。"""
+    runner = WorkflowRunner(steps)
     task_id = enqueue_task(
-        execute_workflow,
-        steps,
+        runner,
         owner_id=owner_id,
         max_retries=max_retries,
         retry_delay=retry_delay,

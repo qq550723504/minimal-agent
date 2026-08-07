@@ -2,7 +2,7 @@ import json
 import socket
 import requests
 
-from src.agent.executor import WorkflowExecutionError, execute_step, execute_tasks, execute_workflow, enqueue_task_execution
+from src.agent.executor import WorkflowExecutionError, WorkflowRunner, execute_step, execute_tasks, execute_workflow, enqueue_task_execution
 from src.agent.tool_registry import register_tool
 
 
@@ -122,5 +122,7 @@ def test_enqueue_task_execution_creates_one_workflow_task(monkeypatch):
     assert result == {"status": "queued", "task_id": "workflow-task", "task_ids": ["workflow-task"]}
     assert len(calls) == 1
     assert calls[0][0].__name__ == "execute_workflow"
-    assert calls[0][1] == (["echo: first", "echo: second"],)
+    assert calls[0][1] == ()
+    assert isinstance(calls[0][0], WorkflowRunner)
+    assert calls[0][0].steps == ["echo: first", "echo: second"]
     assert calls[0][2]["owner_id"] == "alice"

@@ -19,3 +19,12 @@ def test_tools_endpoint_uses_default_user_when_authentication_is_disabled(monkey
     response = TestClient(server.app).get("/api/tools")
 
     assert response.status_code == 200
+
+
+def test_unicode_api_key_is_authenticated_without_server_error(monkeypatch):
+    monkeypatch.setenv("AGENT_AUTH_REQUIRED", "true")
+    monkeypatch.setenv("AGENT_API_KEYS", "alice:秘密")
+
+    from src.agent.auth import get_current_user
+
+    assert get_current_user("秘密") == "alice"

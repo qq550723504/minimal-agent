@@ -10,6 +10,10 @@ def test_prometheus_config_is_tracked_and_compose_references_it():
 
     assert prometheus_path.exists()
     assert "./prometheus.yml:/etc/prometheus/prometheus.yml:ro" in compose
+    assert (ROOT / "data" / "metrics-token").exists()
+    assert "./data:/etc/prometheus/data:ro" in compose
+    prometheus = prometheus_path.read_text(encoding="utf-8")
+    assert "credentials_file" in prometheus
 
 
 def test_ci_does_not_hide_dependency_install_failures():
