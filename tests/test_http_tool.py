@@ -12,6 +12,10 @@ class FakeResponse:
         self.body = body
         self.status_code = status_code
         self.headers = headers or {"Content-Length": str(len(body))}
+        self.closed = False
+
+    def close(self):
+        self.closed = True
 
     def raise_for_status(self):
         if self.status_code >= 400:
@@ -28,6 +32,22 @@ def allow_example_host(monkeypatch):
         "getaddrinfo",
         lambda *args, **kwargs: [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("93.184.216.34", 443))],
     )
+    import requests
+
+    class FakeSession:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc_value, traceback):
+            self.close()
+
+        def close(self):
+            pass
+
+        def request(self, method, url, **kwargs):
+            return getattr(requests, method.lower())(url, **kwargs)
+
+    monkeypatch.setattr(requests, "Session", FakeSession)
 
 
 def test_http_get_tool_payload_parsing(monkeypatch):
@@ -114,6 +134,18 @@ def test_validate_http_url_rejects_dns_resolving_to_metadata_ip(monkeypatch):
         validate_http_url("http://metadata.example.com/latest")
 
 
+def test_validate_http_url_rejects_non_global_cgnat_address(monkeypatch):
+    monkeypatch.setenv("AGENT_HTTP_ALLOWED_HOSTS", "carrier.example.com")
+    monkeypatch.setattr(
+        socket,
+        "getaddrinfo",
+        lambda *args, **kwargs: [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("100.64.0.1", 80))],
+    )
+
+    with pytest.raises(ValueError, match="unsafe"):
+        validate_http_url("http://carrier.example.com/status")
+
+
 def test_http_tool_rejects_redirect(monkeypatch):
     allow_example_host(monkeypatch)
     import requests
@@ -127,10 +159,65 @@ def test_http_tool_rejects_oversized_response(monkeypatch):
     allow_example_host(monkeypatch)
     monkeypatch.setenv("AGENT_HTTP_MAX_RESPONSE_BYTES", "4")
     import requests
-    monkeypatch.setattr(requests, "get", lambda *args, **kwargs: FakeResponse(body=b"12345"))
+    response = FakeResponse(body=b"12345")
+    monkeypatch.setattr(requests, "get", lambda *args, **kwargs: response)
 
     with pytest.raises(ValueError, match="large"):
         _http_get_tool("https://api.example.com/data")
+    assert response.closed is True
+
+
+@pytest.mark.parametrize("status_code", [302, 500])
+def test_http_get_closes_response_on_rejection(monkeypatch, status_code):
+    allow_example_host(monkeypatch)
+    import requests
+    response = FakeResponse(status_code=status_code)
+    monkeypatch.setattr(requests, "get", lambda *args, **kwargs: response)
+
+    with pytest.raises((ValueError, RuntimeError)):
+        _http_get_tool("https://api.example.com/data")
+    assert response.closed is True
+
+
+def test_http_post_closes_response_on_rejection(monkeypatch):
+    allow_example_host(monkeypatch)
+    import requests
+    response = FakeResponse(status_code=302)
+    monkeypatch.setattr(requests, "post", lambda *args, **kwargs: response)
+
+    with pytest.raises(ValueError, match="redirect"):
+        _http_post_tool('{"url": "https://api.example.com/items", "json": {}}')
+    assert response.closed is True
+
+
+def test_http_tools_disable_environment_proxies(monkeypatch):
+    allow_example_host(monkeypatch)
+    import requests
+    sessions = []
+
+    class RecordingSession:
+        def __init__(self):
+            self.trust_env = True
+            sessions.append(self)
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc_value, traceback):
+            self.close()
+
+        def close(self):
+            pass
+
+        def request(self, method, url, **kwargs):
+            return FakeResponse()
+
+    monkeypatch.setattr(requests, "Session", RecordingSession)
+
+    _http_get_tool('{"url": "https://api.example.com/data"}')
+
+    assert len(sessions) == 1
+    assert sessions[0].trust_env is False
 
 
 def test_http_tool_pins_requests_dns_to_the_validated_address(monkeypatch):

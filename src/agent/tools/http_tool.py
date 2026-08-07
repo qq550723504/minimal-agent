@@ -56,38 +56,43 @@ def _read_json_response(response: Any, max_bytes: int) -> dict:
         raise ValueError("HTTP response is not valid JSON") from exc
 
 
-def call_http_get(url: str, params: dict | None = None) -> dict:
+def _request_json(
+    method: str,
+    parsed,
+    *,
+    params: dict | None = None,
+    data: dict | None = None,
+    json_body: dict | None = None,
+) -> dict:
     try:
         import requests
     except ImportError as exc:
         raise RuntimeError("requests package is required for HTTP tools") from exc
 
+    request_kwargs = {
+        "params": params,
+        "data": data,
+        "json": json_body,
+        "timeout": _timeout(),
+        "allow_redirects": False,
+        "stream": True,
+    }
+    request_kwargs = {key: value for key, value in request_kwargs.items() if value is not None}
+    with requests.Session() as session:
+        session.trust_env = False
+        with pin_dns_resolution(parsed):
+            response = session.request(method, parsed.url, **request_kwargs)
+        try:
+            return _read_json_response(response, _max_response_bytes())
+        finally:
+            response.close()
+
+
+def call_http_get(url: str, params: dict | None = None) -> dict:
     parsed = validate_http_url(url)
-    with pin_dns_resolution(parsed):
-        response = requests.get(
-            parsed.url,
-            params=params,
-            timeout=_timeout(),
-            allow_redirects=False,
-            stream=True,
-        )
-    return _read_json_response(response, _max_response_bytes())
+    return _request_json("GET", parsed, params=params)
 
 
 def call_http_post(url: str, data: dict | None = None, json_body: dict | None = None) -> dict:
-    try:
-        import requests
-    except ImportError as exc:
-        raise RuntimeError("requests package is required for HTTP tools") from exc
-
     parsed = validate_http_url(url)
-    with pin_dns_resolution(parsed):
-        response = requests.post(
-            parsed.url,
-            data=data,
-            json=json_body,
-            timeout=_timeout(),
-            allow_redirects=False,
-            stream=True,
-        )
-    return _read_json_response(response, _max_response_bytes())
+    return _request_json("POST", parsed, data=data, json_body=json_body)

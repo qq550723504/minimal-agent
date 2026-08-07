@@ -41,7 +41,7 @@ def _address_from_info(info) -> str:
 
 
 def _is_unsafe_address(address: ipaddress._BaseAddress) -> bool:
-    return address.is_loopback or address.is_private or address.is_link_local or address.is_reserved or address.is_unspecified
+    return not address.is_global
 
 
 def validate_http_url(url: str, allowed_hosts: Optional[Set[str]] = None) -> ParsedURL:
