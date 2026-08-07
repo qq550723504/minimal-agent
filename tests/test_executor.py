@@ -6,6 +6,20 @@ from src.agent.executor import WorkflowExecutionError, WorkflowRunner, execute_s
 from src.agent.tool_registry import register_tool
 
 
+def _patch_http_session(monkeypatch, request_fn):
+    class FakeSession:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc_value, traceback):
+            pass
+
+        def request(self, method, url, **kwargs):
+            return request_fn(url, **kwargs)
+
+    monkeypatch.setattr(requests, "Session", FakeSession)
+
+
 def test_execute_step_echo():
     assert execute_step("echo: hello") == "hello"
 
@@ -34,9 +48,12 @@ def test_execute_step_http_get_payload_parsing(monkeypatch):
             def iter_content(self, chunk_size=8192):
                 yield json.dumps({"url": url, "params": params}).encode()
 
+            def close(self):
+                pass
+
         return FakeResp()
 
-    monkeypatch.setattr(requests, "get", fake_get)
+    _patch_http_session(monkeypatch, fake_get)
     step = "http_get: {\"url\": \"https://api.example.com/data\", \"params\": {\"q\": \"test\"}}"
     result = execute_step(step)
     parsed = json.loads(result)
@@ -64,9 +81,12 @@ def test_execute_step_structured_tool_step(monkeypatch):
             def iter_content(self, chunk_size=8192):
                 yield json.dumps({"url": url, "params": params}).encode()
 
+            def close(self):
+                pass
+
         return FakeResp()
 
-    monkeypatch.setattr(requests, "get", fake_get)
+    _patch_http_session(monkeypatch, fake_get)
     step = {"tool": "http_get", "payload": {"url": "https://api.example.com/data", "params": {"q": "test"}}}
     result = execute_step(step)
     parsed = json.loads(result)
