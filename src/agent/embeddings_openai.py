@@ -18,7 +18,7 @@ class OpenAIEmbeddingAdapter(EmbeddingAdapter):
         self._model = model
 
     def embed(self, text: str) -> List[float]:
-        resp = self._openai.Embedding.create(
+        resp = self._openai.embeddings.create(
             model=self._model,
             input=text,
         )

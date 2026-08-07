@@ -45,6 +45,10 @@ class VectorStore:
         self._metadata = data.get("metadata", [])
         self._vectors = data.get("vectors", [])
 
+        # Migrate legacy persisted format when vectors are missing or mismatched.
+        if len(self._vectors) != len(self._documents):
+            self._vectors = [self._adapter.embed(text) for text in self._documents]
+
     @staticmethod
     def _cosine_similarity(a: List[float], b: List[float]) -> float:
         dot = sum(x * y for x, y in zip(a, b))

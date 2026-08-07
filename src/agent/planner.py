@@ -56,7 +56,9 @@ def plan_task(prompt: str, user_id: str = "default", llm: Optional[LLMAdapter] =
         initialize_memory()
 
     mem = get_global_memory()
-    conversation_history = mem.recent(user_id, limit=5)
+    conversation_history: List[dict] = []
+    if user_id != "default":
+        conversation_history = mem.recent(user_id, limit=5)
 
     wrapped_prompt = prompt
     relevant: List[dict] = []
@@ -66,7 +68,9 @@ def plan_task(prompt: str, user_id: str = "default", llm: Optional[LLMAdapter] =
     if relevant or conversation_history:
         wrapped_prompt = _build_rag_prompt(prompt, relevant, conversation_history)
 
-    mem.add(user_id, {"prompt": prompt})
+    if user_id != "default":
+        mem.add(user_id, {"prompt": prompt})
+
     if ENABLE_MEMORY:
         add_memory(prompt, {"user_id": user_id})
 

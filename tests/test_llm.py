@@ -24,6 +24,12 @@ def test_parse_plan_output_text_fallback():
     assert parsed == ["Review requirements", "Draft architecture", "Validate deployment"]
 
 
+def test_parse_plan_output_line_breaks():
+    output = "Collect requirements\nDraft architecture\nValidate deployment"
+    parsed = parse_plan_output(output)
+    assert parsed == ["Collect requirements", "Draft architecture", "Validate deployment"]
+
+
 def test_parse_plan_output_invalid_json():
     output = "[Review requirements, Draft architecture]"
     parsed = parse_plan_output(output)

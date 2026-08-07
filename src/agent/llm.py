@@ -30,7 +30,7 @@ def parse_plan_output(text: str) -> List[Union[str, dict]]:
         except json.JSONDecodeError:
             pass
 
-    parts = [p.strip() for p in re.split(r"[。.?!]", text) if p.strip()]
+    parts = [p.strip() for p in re.split(r"[\r\n]+|[。.?!]", text) if p.strip()]
     if not parts:
         return [text.strip()]
     return parts

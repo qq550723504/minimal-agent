@@ -69,3 +69,23 @@ def test_plan_task_includes_conversation_history():
     assert "Conversation history:" in llm.prompt
     assert "Earlier request about deployment." in llm.prompt
     assert "Task:\nNow summarize the deployment plan." in llm.prompt
+
+
+def test_plan_task_skips_default_user_history():
+    class RecordingLLM(LLMAdapter):
+        def __init__(self):
+            self.prompt = None
+
+        def plan(self, prompt: str):
+            self.prompt = prompt
+            return [prompt]
+
+    llm = RecordingLLM()
+    mem = get_global_memory()
+    mem.add("default", {"prompt": "Earlier request about deployment."})
+
+    steps = plan_task("Now summarize the deployment plan.", llm=llm)
+    assert steps == [llm.prompt]
+    assert "Conversation history:" not in llm.prompt
+    assert "Earlier request about deployment." not in llm.prompt
+    assert "Task:\nNow summarize the deployment plan." in llm.prompt
