@@ -1,4 +1,7 @@
 import json
+import os
+import tempfile
+import threading
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -11,43 +14,92 @@ class VectorStore:
         self._documents: List[str] = []
         self._metadata: List[dict] = []
         self._vectors: List[List[float]] = []
+        self._lock = threading.RLock()
 
     def add(self, text: str, metadata: Optional[dict] = None) -> None:
-        metadata = metadata or {}
-        self._documents.append(text)
-        self._metadata.append(metadata)
-        self._vectors.append(self._adapter.embed(text))
+        with self._lock:
+            metadata = metadata or {}
+            self._documents.append(text)
+            self._metadata.append(metadata)
+            self._vectors.append(self._adapter.embed(text))
 
-    def query(self, text: str, top_k: int = 3) -> List[Dict[str, Any]]:
-        if not self._documents:
-            return []
-        query_vector = self._adapter.embed(text)
-        similarities = [self._cosine_similarity(query_vector, vec) for vec in self._vectors]
-        scored = [
-            {"text": self._documents[i], "score": similarities[i], "metadata": self._metadata[i]}
-            for i in sorted(range(len(similarities)), key=lambda ix: similarities[ix], reverse=True)
-            if similarities[i] > 0
-        ]
-        return scored[:top_k]
+    def query(self, text: str, top_k: int = 3, user_id: Optional[str] = None) -> List[Dict[str, Any]]:
+        with self._lock:
+            if not self._documents:
+                return []
+            query_vector = self._adapter.embed(text)
+            scored = []
+            for index, (document, metadata, vector) in enumerate(zip(self._documents, self._metadata, self._vectors)):
+                owner_id = metadata.get("user_id", "default")
+                if user_id is not None and owner_id != user_id:
+                    continue
+                score = self._cosine_similarity(query_vector, vector)
+                if score > 0:
+                    scored.append({"text": document, "score": score, "metadata": metadata})
+            scored.sort(key=lambda item: item["score"], reverse=True)
+            return scored[:top_k]
 
     def save(self, path: str) -> None:
-        data = {
-            "documents": self._documents,
-            "metadata": self._metadata,
-            "vectors": self._vectors,
-        }
-        Path(path).write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+        target = Path(path)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        with self._lock:
+            data = {
+                "documents": self._documents,
+                "metadata": self._metadata,
+                "vectors": self._vectors,
+            }
+            temporary_path = None
+            try:
+                with tempfile.NamedTemporaryFile(
+                    mode="w",
+                    encoding="utf-8",
+                    dir=target.parent,
+                    prefix=f".{target.name}.",
+                    suffix=".tmp",
+                    delete=False,
+                ) as temporary:
+                    temporary_path = Path(temporary.name)
+                    json.dump(data, temporary, ensure_ascii=False, indent=2)
+                    temporary.flush()
+                    os.fsync(temporary.fileno())
+                os.replace(temporary_path, target)
+            finally:
+                if temporary_path and temporary_path.exists():
+                    temporary_path.unlink()
 
     def load(self, path: str) -> None:
-        raw = Path(path).read_text(encoding="utf-8")
-        data = json.loads(raw)
-        self._documents = data.get("documents", [])
-        self._metadata = data.get("metadata", [])
-        self._vectors = data.get("vectors", [])
+        try:
+            raw = Path(path).read_text(encoding="utf-8")
+            data = json.loads(raw)
+        except (OSError, json.JSONDecodeError) as exc:
+            raise ValueError(f"invalid vector memory file: {path}") from exc
 
-        # Migrate legacy persisted format when vectors are missing or mismatched.
-        if len(self._vectors) != len(self._documents):
-            self._vectors = [self._adapter.embed(text) for text in self._documents]
+        documents = data.get("documents") if isinstance(data, dict) else None
+        metadata = data.get("metadata") if isinstance(data, dict) else None
+        vectors = data.get("vectors") if isinstance(data, dict) else None
+        if not isinstance(documents, list) or not all(isinstance(item, str) for item in documents):
+            raise ValueError("vector memory documents must be a list of strings")
+        if metadata is None:
+            metadata = [{} for _ in documents]
+        if not isinstance(metadata, list) or len(metadata) != len(documents):
+            raise ValueError("vector memory documents and metadata must have the same length")
+        if not all(isinstance(item, dict) for item in metadata):
+            raise ValueError("vector memory metadata must be a list of objects")
+        if vectors is None:
+            vectors = []
+        if not isinstance(vectors, list):
+            raise ValueError("vector memory vectors must be a list")
+        if vectors and len(vectors) != len(documents):
+            raise ValueError("vector memory documents and vectors must have the same length")
+        if vectors and not all(isinstance(vector, list) and all(isinstance(value, (int, float)) for value in vector) for vector in vectors):
+            raise ValueError("vector memory vectors must be numeric lists")
+        if not vectors:
+            vectors = [self._adapter.embed(text) for text in documents]
+
+        with self._lock:
+            self._documents = documents
+            self._metadata = metadata
+            self._vectors = vectors
 
     @staticmethod
     def _cosine_similarity(a: List[float], b: List[float]) -> float:
