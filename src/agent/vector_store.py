@@ -17,17 +17,17 @@ class VectorStore:
         self._lock = threading.RLock()
 
     def add(self, text: str, metadata: Optional[dict] = None) -> None:
+        vector = self._adapter.embed(text)
         with self._lock:
-            vector = self._adapter.embed(text)
             self._documents.append(text)
             self._metadata.append(metadata or {})
             self._vectors.append(vector)
 
     def query(self, text: str, top_k: int = 3, user_id: Optional[str] = None) -> List[Dict[str, Any]]:
+        query_vector = self._adapter.embed(text)
         with self._lock:
             if not self._documents:
                 return []
-            query_vector = self._adapter.embed(text)
             scored = []
             for index, (document, metadata, vector) in enumerate(zip(self._documents, self._metadata, self._vectors)):
                 owner_id = metadata.get("user_id", "default")

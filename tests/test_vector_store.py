@@ -30,3 +30,16 @@ def test_failed_embedding_does_not_partially_append_vector_record(tmp_path):
 
     store.save(str(path))
     assert json.loads(path.read_text(encoding="utf-8")) == baseline
+
+
+def test_embedding_calls_happen_outside_vector_store_lock():
+    store = None
+
+    class LockAwareEmbedding(EmbeddingAdapter):
+        def embed(self, text):
+            assert not store._lock._is_owned()
+            return [1.0]
+
+    store = VectorStore(LockAwareEmbedding())
+    store.add("first")
+    store.query("first")

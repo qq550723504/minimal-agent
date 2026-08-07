@@ -2,7 +2,7 @@ import hmac
 import os
 from typing import Dict, Optional
 
-from fastapi import Header, HTTPException, status
+from fastapi import Cookie, Header, HTTPException, status
 
 
 def _auth_required() -> bool:
@@ -18,7 +18,7 @@ def _api_keys() -> Dict[str, str]:
         user_id, key = item.split(":", 1)
         user_id = user_id.strip()
         key = key.strip()
-        if user_id and key:
+        if user_id and user_id != "default" and key:
             entries[user_id] = key
     return entries
 
@@ -39,10 +39,13 @@ def _authenticate_api_key(api_key: Optional[str]) -> str:
     raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid API key")
 
 
-def get_current_user(api_key: Optional[str] = Header(default=None, alias="X-API-Key")) -> str:
+def get_current_user(
+    api_key: Optional[str] = Header(default=None, alias="X-API-Key"),
+    session_token: Optional[str] = Cookie(default=None, alias="agent_session"),
+) -> str:
     if not _auth_required():
         return "default"
-    return _authenticate_api_key(api_key)
+    return _authenticate_api_key(api_key if api_key is not None else session_token)
 
 
 def get_metrics_access(authorization: Optional[str] = Header(default=None, alias="Authorization")) -> str:

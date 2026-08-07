@@ -55,8 +55,24 @@ def test_generated_api_docs_require_authentication(monkeypatch):
     client = TestClient(server.app)
 
     for path in ("/docs", "/redoc", "/openapi.json"):
-        assert client.get(path).status_code == 401
+        assert TestClient(server.app).get(path).status_code == 401
         assert client.get(path, headers={"X-API-Key": "secret"}).status_code == 200
+
+
+def test_authenticated_docs_session_can_fetch_openapi_without_header(monkeypatch):
+    monkeypatch.setenv("AGENT_AUTH_REQUIRED", "true")
+    monkeypatch.setenv("AGENT_API_KEYS", "alice:secret")
+    client = TestClient(server.app)
+
+    response = client.get("/docs", headers={"X-API-Key": "secret"})
+
+    assert response.status_code == 200
+    assert response.cookies.get("agent_session") == "secret"
+    assert client.get("/openapi.json").status_code == 200
+
+    redoc_response = client.get("/redoc", headers={"X-API-Key": "secret"})
+    assert redoc_response.status_code == 200
+    assert redoc_response.cookies.get("agent_session") == "secret"
 
 
 def test_downstream_value_error_is_not_reported_as_client_input(monkeypatch):
