@@ -24,9 +24,13 @@ def _bool_env(name: str, default: str = "false") -> bool:
     return os.getenv(name, default).strip().lower() in ("1", "true", "yes", "on")
 
 
+def _normalize_hostname(hostname: str) -> str:
+    return hostname.rstrip(".").lower().encode("idna").decode("ascii")
+
+
 def _allowed_hosts_from_env() -> Set[str]:
     return {
-        item.strip().lower()
+        _normalize_hostname(item.strip())
         for item in os.getenv("AGENT_HTTP_ALLOWED_HOSTS", "").split(",")
         if item.strip()
     }
@@ -56,8 +60,8 @@ def validate_http_url(url: str, allowed_hosts: Optional[Set[str]] = None) -> Par
         raise ValueError("HTTP URL host is required")
     hostname = hostname.lower().rstrip(".")
     hosts = allowed_hosts if allowed_hosts is not None else _allowed_hosts_from_env()
-    hosts = {host.lower().rstrip(".") for host in hosts}
-    if hostname not in hosts:
+    hosts = {_normalize_hostname(host) for host in hosts}
+    if _normalize_hostname(hostname) not in hosts:
         raise ValueError(f"HTTP host is not in the allowlist: {hostname}")
 
     try:
@@ -91,30 +95,30 @@ def validate_http_url(url: str, allowed_hosts: Optional[Set[str]] = None) -> Par
 @contextmanager
 def pin_dns_resolution(parsed: ParsedURL):
     """Keep requests on the addresses validated for this hostname and request."""
-    original_getaddrinfo = socket.getaddrinfo
-    normalized_hostname = parsed.hostname.rstrip(".").lower()
-
-    def pinned_getaddrinfo(host, port, family=0, type=0, proto=0, flags=0):
-        if not isinstance(host, str) or host.rstrip(".").lower() != normalized_hostname:
-            return original_getaddrinfo(host, port, family, type, proto, flags)
-
-        results = []
-        for address in parsed.resolved_addresses:
-            ip_address = ipaddress.ip_address(address)
-            address_family = socket.AF_INET6 if ip_address.version == 6 else socket.AF_INET
-            if family not in (0, socket.AF_UNSPEC, address_family):
-                continue
-            socket_type = type or socket.SOCK_STREAM
-            if socket_type != socket.SOCK_STREAM:
-                continue
-            target_port = port or parsed.port
-            sockaddr = (address, target_port, 0, 0) if address_family == socket.AF_INET6 else (address, target_port)
-            results.append((address_family, socket_type, proto or socket.IPPROTO_TCP, "", sockaddr))
-        if not results:
-            raise socket.gaierror(f"no validated address for {host}")
-        return results
-
     with _DNS_PIN_LOCK:
+        original_getaddrinfo = socket.getaddrinfo
+        normalized_hostname = _normalize_hostname(parsed.hostname)
+
+        def pinned_getaddrinfo(host, port, family=0, type=0, proto=0, flags=0):
+            if not isinstance(host, str) or _normalize_hostname(host) != normalized_hostname:
+                return original_getaddrinfo(host, port, family, type, proto, flags)
+
+            results = []
+            for address in parsed.resolved_addresses:
+                ip_address = ipaddress.ip_address(address)
+                address_family = socket.AF_INET6 if ip_address.version == 6 else socket.AF_INET
+                if family not in (0, socket.AF_UNSPEC, address_family):
+                    continue
+                socket_type = type or socket.SOCK_STREAM
+                if socket_type != socket.SOCK_STREAM:
+                    continue
+                target_port = port or parsed.port
+                sockaddr = (address, target_port, 0, 0) if address_family == socket.AF_INET6 else (address, target_port)
+                results.append((address_family, socket_type, proto or socket.IPPROTO_TCP, "", sockaddr))
+            if not results:
+                raise socket.gaierror(f"no validated address for {host}")
+            return results
+
         socket.getaddrinfo = pinned_getaddrinfo
         try:
             yield

@@ -4,7 +4,7 @@ import socket
 import pytest
 
 from src.agent.tools import _http_get_tool, _http_post_tool
-from src.agent.http_security import pin_dns_resolution, validate_http_url
+from src.agent.http_security import ParsedURL, pin_dns_resolution, validate_http_url
 
 
 class FakeResponse:
@@ -146,3 +146,36 @@ def test_http_tool_pins_requests_dns_to_the_validated_address(monkeypatch):
         pinned = socket.getaddrinfo("api.example.com", 443, type=socket.SOCK_STREAM)
 
     assert pinned[0][4][0] == "93.184.216.34"
+
+
+def test_validate_http_url_accepts_unicode_host_against_idna_allowlist(monkeypatch):
+    monkeypatch.setenv("AGENT_HTTP_ALLOWED_HOSTS", "xn--bcher-kva.example")
+    monkeypatch.setattr(
+        socket,
+        "getaddrinfo",
+        lambda *args, **kwargs: [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("93.184.216.34", 443))],
+    )
+
+    parsed = validate_http_url("https://bücher.example/data")
+
+    assert parsed.hostname == "bücher.example"
+
+
+def test_pinned_dns_matches_idna_connection_hostname(monkeypatch):
+    parsed = ParsedURL(
+        url="https://bücher.example/data",
+        scheme="https",
+        hostname="bücher.example",
+        port=443,
+        resolved_addresses=("93.184.216.34",),
+    )
+
+    def unexpected_resolution(*args, **kwargs):
+        raise AssertionError("validated hostname was not used")
+
+    monkeypatch.setattr(socket, "getaddrinfo", unexpected_resolution)
+    with pin_dns_resolution(parsed):
+        pinned = socket.getaddrinfo("xn--bcher-kva.example", 443, type=socket.SOCK_STREAM)
+
+    assert pinned[0][4][0] == "93.184.216.34"
+    assert socket.getaddrinfo is unexpected_resolution
