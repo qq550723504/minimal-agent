@@ -22,6 +22,12 @@ def test_ci_does_not_hide_dependency_install_failures():
         assert "pip install -r requirements.txt || true" not in content
 
 
+def test_ci_targets_the_main_default_branch():
+    ci = (ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
+
+    assert "branches: [ main ]" in ci
+
+
 def test_readme_documents_security_configuration():
     readme = (ROOT / "README.md").read_text(encoding="utf-8")
 
