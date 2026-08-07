@@ -40,8 +40,10 @@ pip install -r requirements.txt
 
 ## 八、示例模板说明
 工作区包含 `src/agent` 的最小示例：
-- `src/agent/main.py`: 最小主循环与核心方法 `handle_input()`，用于单元测试。
+- `src/agent/main.py`: 最小主循环与核心方法 `handle_input()` 和 `enqueue_input()`。
+- `src/agent/task_queue.py`: 本地任务队列实现示例。
 - `tests/test_agent.py`: 简单断言。
+- `tests/test_task_queue.py`: 验证任务队列功能。
 - `Dockerfile`: 构建镜像示例。
 - `.github/workflows/ci.yml`: CI 验证示例（运行测试）。
 

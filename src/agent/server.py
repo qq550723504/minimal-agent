@@ -31,3 +31,12 @@ def handle_route(payload: PromptIn):
     result = handle_input(safe_prompt)
     audit_log("anonymous", "request_completed", result)
     return {"result": result}
+
+
+@app.post("/api/handle/queue")
+def handle_queue_route(payload: PromptIn):
+    safe_prompt = sanitize_input(payload.prompt)
+    audit_log("anonymous", "request_queued", safe_prompt)
+    status = enqueue_input(safe_prompt)
+    audit_log("anonymous", "request_queued_completed", status)
+    return {"status": status}

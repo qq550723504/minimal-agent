@@ -5,7 +5,7 @@
 from typing import List
 
 from src.agent.planner import plan_task
-from src.agent.executor import execute_tasks
+from src.agent.executor import execute_tasks, enqueue_task_execution
 
 
 def handle_input(prompt: str) -> str:
@@ -13,6 +13,12 @@ def handle_input(prompt: str) -> str:
     steps = plan_task(prompt)
     results = execute_tasks(steps)
     return " | ".join(results)
+
+
+def enqueue_input(prompt: str) -> str:
+    """对外接口：接收输入后将执行任务加入队列。"""
+    steps = plan_task(prompt)
+    return enqueue_task_execution(steps)
 
 
 def main_loop():
