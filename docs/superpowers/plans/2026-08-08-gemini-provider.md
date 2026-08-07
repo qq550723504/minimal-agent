@@ -6,7 +6,7 @@
 
 **Architecture:** 新增两个独立 adapter，分别实现 `LLMAdapter` 和 `EmbeddingAdapter`。生产路径使用 `google.genai.Client(api_key=...)`，测试路径注入 fake client；factory 根据 `AGENT_LLM_BACKEND` 和 `AGENT_EMBEDDING_BACKEND` 在 mock、OpenAI、Gemini 之间选择，不改业务层接口。
 
-**Tech Stack:** Python 3.11+, `google-genai==2.17.0`, pytest, existing adapter/factory interfaces.
+**Tech Stack:** Python 3.11+, `fastapi==0.141.1`, `pydantic==2.13.4`, `httpx==0.28.1`, `google-genai==2.17.0`, pytest, existing adapter/factory interfaces.
 
 ## Global Constraints
 
@@ -14,6 +14,7 @@
 - 不使用旧版 `google-generativeai` SDK。
 - 继续从 `GEMINI_API_KEY` 读取配置，缺失时抛出明确 `ValueError`。
 - 默认后端仍为 `mock`，现有 OpenAI 路径必须保持兼容。
+- FastAPI/Pydantic/httpx 升级后必须通过完整服务测试。
 - Gemini Embeddings 默认使用 `gemini-embedding-2`；切换 provider 时不混用旧向量。
 
 ---
@@ -179,7 +180,7 @@ Add `GEMINI_MODEL` and `GEMINI_EMBEDDING_MODEL` to `src/agent/config.py`; import
 
 - [ ] **Step 4: Update dependency and README**
 
-Add `google-genai==2.17.0` to `requirements.txt`. Document `GEMINI_API_KEY`, `GEMINI_MODEL`, `GEMINI_EMBEDDING_MODEL`, and both `AGENT_*_BACKEND=gemini` settings. Add a warning that changing embedding providers requires rebuilding vector memory.
+Update `requirements.txt` to `fastapi==0.141.1`, `pydantic==2.13.4`, `httpx==0.28.1`, and add `google-genai==2.17.0`. Document `GEMINI_API_KEY`, `GEMINI_MODEL`, `GEMINI_EMBEDDING_MODEL`, and both `AGENT_*_BACKEND=gemini` settings. Add a warning that changing embedding providers requires rebuilding vector memory.
 
 - [ ] **Step 5: Run factory and deployment/config tests**
 

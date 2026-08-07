@@ -32,6 +32,10 @@ GeminiEmbeddingAdapter(model="gemini-embedding-2", client=None)
 - `openai`、`gemini` 和 `mock` 三种后端都保持互不影响。
 - README 增加 Gemini 环境变量和使用示例。
 
+## 依赖升级
+
+`google-genai` 依赖 Pydantic 2 和较新的 HTTPX，因此同步升级现有服务栈到 `fastapi==0.141.1`、`pydantic==2.13.4`、`httpx==0.28.1`。本次升级保持现有路由和生命周期行为，必须通过全量服务测试验证。
+
 ## 向量记忆兼容性
 
 Gemini Embeddings 与 OpenAI/mock 的向量空间和维度不保证兼容；切换到 Gemini Embeddings 后，已有 `VECTOR_MEMORY_PATH` 数据应删除或重新生成。代码不自动混用不同 provider 的旧向量，也不在本次改动中设计迁移算法。
