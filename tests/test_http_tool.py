@@ -179,3 +179,62 @@ def test_pinned_dns_matches_idna_connection_hostname(monkeypatch):
 
     assert pinned[0][4][0] == "93.184.216.34"
     assert socket.getaddrinfo is unexpected_resolution
+
+
+def test_overlapping_dns_pinning_restores_original_resolver(monkeypatch):
+    import threading
+
+    class GateLock:
+        def __init__(self):
+            self._lock = threading.Lock()
+            self.second_attempted = threading.Event()
+            self.calls = 0
+
+        def __enter__(self):
+            self.calls += 1
+            if self.calls == 2:
+                self.second_attempted.set()
+            self._lock.acquire()
+            return self
+
+        def __exit__(self, exc_type, exc_value, traceback):
+            self._lock.release()
+
+    import src.agent.http_security as security
+
+    original_resolver = socket.getaddrinfo
+    gate = GateLock()
+    monkeypatch.setattr(security, "_DNS_PIN_LOCK", gate)
+    parsed = ParsedURL(
+        url="https://api.example.com/data",
+        scheme="https",
+        hostname="api.example.com",
+        port=443,
+        resolved_addresses=("93.184.216.34",),
+    )
+    first_entered = threading.Event()
+    release_first = threading.Event()
+    errors = []
+
+    def worker():
+        try:
+            with pin_dns_resolution(parsed):
+                first_entered.set()
+                release_first.wait(timeout=2)
+        except BaseException as exc:
+            errors.append(exc)
+
+    first = threading.Thread(target=worker)
+    second = threading.Thread(target=worker)
+    first.start()
+    assert first_entered.wait(timeout=2)
+    second.start()
+    assert gate.second_attempted.wait(timeout=2)
+    release_first.set()
+    first.join(timeout=2)
+    second.join(timeout=2)
+
+    assert not errors
+    assert not first.is_alive()
+    assert not second.is_alive()
+    assert socket.getaddrinfo is original_resolver
