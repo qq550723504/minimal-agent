@@ -23,3 +23,18 @@ def test_memory_manager_save_load(tmp_path, monkeypatch):
 
     assert any(item["text"] == "hello world" for item in results_hello)
     assert any(item["text"] == "another doc" for item in results_another)
+
+
+def test_memory_manager_filters_relevant_memory_by_user(monkeypatch):
+    from src.agent.memory_manager import get_relevant_memory
+
+    monkeypatch.setenv("AGENT_ENABLE_MEMORY", "true")
+    reset_memory()
+    initialize_memory()
+    add_memory("shared context", {"user_id": "alice"})
+    add_memory("shared context", {"user_id": "bob"})
+
+    results = get_relevant_memory("shared context", user_id="alice")
+
+    assert results
+    assert all(item["metadata"].get("user_id") == "alice" for item in results)

@@ -88,4 +88,17 @@ def test_plan_task_skips_default_user_history():
     assert steps == [llm.prompt]
     assert "Conversation history:" not in llm.prompt
     assert "Earlier request about deployment." not in llm.prompt
-    assert "Task:\nNow summarize the deployment plan." in llm.prompt
+    assert llm.prompt == "Now summarize the deployment plan."
+
+
+def test_plan_task_passes_user_id_to_relevant_memory(monkeypatch):
+    captured = {}
+
+    def fake_relevant_memory(text, top_k=3, user_id=None):
+        captured.update(text=text, top_k=top_k, user_id=user_id)
+        return []
+
+    monkeypatch.setattr("src.agent.planner.get_relevant_memory", fake_relevant_memory)
+    plan_task("alice request", user_id="alice", llm=MockLLM())
+
+    assert captured["user_id"] == "alice"

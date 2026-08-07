@@ -15,8 +15,8 @@ class VectorMemory:
     def add(self, text: str, metadata: Optional[dict] = None) -> None:
         self._store.add(text, metadata)
 
-    def query(self, text: str, top_k: int = 3) -> List[dict]:
-        return self._store.query(text, top_k)
+    def query(self, text: str, top_k: int = 3, user_id: Optional[str] = None) -> List[dict]:
+        return self._store.query(text, top_k, user_id=user_id)
 
     def save(self, path: str) -> None:
         self._store.save(path)

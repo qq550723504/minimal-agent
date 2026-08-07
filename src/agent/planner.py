@@ -1,10 +1,9 @@
 from typing import List, Optional
 
-from src.agent.config import ENABLE_MEMORY, VECTOR_MEMORY_PATH
 from src.agent.llm import LLMAdapter
 from src.agent.llm_factory import create_llm_adapter
 from src.agent.memory import get_global_memory
-from src.agent.memory_manager import add_memory, get_relevant_memory, initialize_memory
+from src.agent.memory_manager import add_memory, get_relevant_memory, initialize_memory, is_memory_enabled
 
 
 def _format_conversation_history(conversation_history: List[dict]) -> str:
@@ -52,7 +51,7 @@ def _build_rag_prompt(prompt: str, memories: List[dict], conversation_history: O
 
 def plan_task(prompt: str, user_id: str = "default", llm: Optional[LLMAdapter] = None) -> List[str]:
     """将输入转换为待执行步骤；支持注入 LLMAdapter（若为空则使用默认行为）。"""
-    if ENABLE_MEMORY:
+    if is_memory_enabled():
         initialize_memory()
 
     mem = get_global_memory()
@@ -62,8 +61,8 @@ def plan_task(prompt: str, user_id: str = "default", llm: Optional[LLMAdapter] =
 
     wrapped_prompt = prompt
     relevant: List[dict] = []
-    if ENABLE_MEMORY:
-        relevant = get_relevant_memory(prompt, top_k=3)
+    if is_memory_enabled():
+        relevant = get_relevant_memory(prompt, top_k=3, user_id=user_id)
 
     if relevant or conversation_history:
         wrapped_prompt = _build_rag_prompt(prompt, relevant, conversation_history)
@@ -71,7 +70,7 @@ def plan_task(prompt: str, user_id: str = "default", llm: Optional[LLMAdapter] =
     if user_id != "default":
         mem.add(user_id, {"prompt": prompt})
 
-    if ENABLE_MEMORY:
+    if is_memory_enabled():
         add_memory(prompt, {"user_id": user_id})
 
     if llm is None:

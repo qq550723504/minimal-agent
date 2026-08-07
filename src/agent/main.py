@@ -16,17 +16,17 @@ from src.agent.executor import execute_tasks, enqueue_task_execution
 from src.agent.memory_manager import initialize_memory, save_memory
 
 
-def handle_input(prompt: str) -> str:
+def handle_input(prompt: str, user_id: str = "default") -> str:
     """对外接口：接收输入，规划并执行，返回合并后的结果字符串。"""
-    steps = plan_task(prompt)
+    steps = plan_task(prompt, user_id=user_id)
     results = execute_tasks(steps)
     return " | ".join(results)
 
 
-def enqueue_input(prompt: str):
+def enqueue_input(prompt: str, user_id: str = "default"):
     """对外接口：接收输入后将执行任务加入队列。"""
-    steps = plan_task(prompt)
-    return enqueue_task_execution(steps)
+    steps = plan_task(prompt, user_id=user_id)
+    return enqueue_task_execution(steps, owner_id=user_id)
 
 
 def main_loop():

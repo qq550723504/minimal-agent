@@ -1,12 +1,15 @@
 import logging
 from typing import Any, List, Optional
 
-from fastapi import FastAPI, HTTPException
+from fastapi import Depends, FastAPI, Header, HTTPException
+from fastapi.openapi.docs import get_redoc_html, get_swagger_ui_html
 from pydantic import BaseModel
+from fastapi.responses import JSONResponse
+from src.agent.auth import get_current_user
 from src.agent.main import handle_input, enqueue_input
 from src.agent.memory_manager import initialize_memory, save_memory
 from src.agent.observability import setup_metrics
-from src.agent.security import audit_log, sanitize_input
+from src.agent.security import ClientInputError, audit_log, sanitize_input
 from src.agent.task_queue import get_status, list_tasks, start_queue, stop_queue
 from src.agent.tool_registry import list_tool_metadata
 
@@ -15,8 +18,13 @@ logging.basicConfig(
     format="%(asctime)s %(levelname)s %(name)s %(message)s",
 )
 
-app = FastAPI()
+app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
 setup_metrics(app)
+
+
+@app.exception_handler(ClientInputError)
+async def client_input_error_handler(_request, exc: ClientInputError):
+    return JSONResponse(status_code=400, content={"detail": str(exc)})
 
 
 class PromptIn(BaseModel):
@@ -25,12 +33,14 @@ class PromptIn(BaseModel):
 
 class TaskStatusOut(BaseModel):
     task_id: str
+    owner_id: str
     status: str
     attempts: int
     max_retries: int
     retry_delay: float
     result: Optional[Any] = None
     error: str = ""
+    failed_step: Optional[int] = None
     created_at: float
     completed_at: Optional[float] = None
 
@@ -52,35 +62,62 @@ def root():
     return {"status": "ok", "message": "Minimal Agent is running"}
 
 
+@app.get("/openapi.json", include_in_schema=False)
+def openapi_route(_user_id: str = Depends(get_current_user)):
+    return JSONResponse(app.openapi())
+
+
+@app.get("/docs", include_in_schema=False)
+def docs_route(
+    api_key: Optional[str] = Header(default=None, alias="X-API-Key"),
+    _user_id: str = Depends(get_current_user),
+):
+    response = get_swagger_ui_html(openapi_url="/openapi.json", title="Minimal Agent - Swagger UI")
+    if api_key:
+        response.set_cookie("agent_session", api_key, httponly=True, samesite="lax")
+    return response
+
+
+@app.get("/redoc", include_in_schema=False)
+def redoc_route(
+    api_key: Optional[str] = Header(default=None, alias="X-API-Key"),
+    _user_id: str = Depends(get_current_user),
+):
+    response = get_redoc_html(openapi_url="/openapi.json", title="Minimal Agent - ReDoc")
+    if api_key:
+        response.set_cookie("agent_session", api_key, httponly=True, samesite="lax")
+    return response
+
+
 @app.post("/api/handle")
-def handle_route(payload: PromptIn):
+def handle_route(payload: PromptIn, user_id: str = Depends(get_current_user)):
     safe_prompt = sanitize_input(payload.prompt)
-    audit_log("anonymous", "request_received", safe_prompt)
-    result = handle_input(safe_prompt)
-    audit_log("anonymous", "request_completed", result)
+    audit_log(user_id, "request_received", safe_prompt)
+    result = handle_input(safe_prompt, user_id=user_id)
+    audit_log(user_id, "request_completed", result)
     return {"result": result}
 
 
 @app.post("/api/handle/queue")
-def handle_queue_route(payload: PromptIn):
+def handle_queue_route(payload: PromptIn, user_id: str = Depends(get_current_user)):
     safe_prompt = sanitize_input(payload.prompt)
-    audit_log("anonymous", "request_queued", safe_prompt)
-    status = enqueue_input(safe_prompt)
-    audit_log("anonymous", "request_queued_completed", status)
+    audit_log(user_id, "request_queued", safe_prompt)
+    status = enqueue_input(safe_prompt, user_id=user_id)
+    audit_log(user_id, "request_queued_completed", status)
     return status
 
 
 @app.get("/api/tasks/{task_id}")
-def get_task_route(task_id: str):
-    record = get_status(task_id)
+def get_task_route(task_id: str, user_id: str = Depends(get_current_user)):
+    record = get_status(task_id, owner_id=user_id)
     if record is None:
         raise HTTPException(status_code=404, detail="Task not found")
     return TaskStatusOut(**record.__dict__)
 
 
 @app.get("/api/tasks")
-def list_tasks_route(status: Optional[str] = None):
-    records = list_tasks(status)
+def list_tasks_route(status: Optional[str] = None, user_id: str = Depends(get_current_user)):
+    records = list_tasks(status, owner_id=user_id)
     return [TaskStatusOut(**record.__dict__) for record in records]
 
 
@@ -90,6 +127,6 @@ class ToolInfoOut(BaseModel):
 
 
 @app.get("/api/tools")
-def list_tools_route():
+def list_tools_route(_user_id: str = Depends(get_current_user)):
     tools = list_tool_metadata()
     return [ToolInfoOut(**tool) for tool in tools]

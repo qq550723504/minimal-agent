@@ -1,4 +1,3 @@
-import json
 import logging
 import threading
 import time
@@ -7,18 +6,22 @@ from dataclasses import dataclass, field
 from queue import Queue, Empty
 from typing import Callable, Any, Dict, Optional, List
 
+from src.agent.config import QUEUE_WORKER_COUNT
+
 logger = logging.getLogger(__name__)
 
 
 @dataclass
 class TaskRecord:
     task_id: str
+    owner_id: str = "default"
     status: str = "pending"
     attempts: int = 0
     max_retries: int = 0
     retry_delay: float = 0.0
     result: Any = None
     error: str = ""
+    failed_step: Optional[int] = None
     created_at: float = field(default_factory=time.time)
     completed_at: Optional[float] = None
 
@@ -27,6 +30,8 @@ class TaskQueue:
     """一个支持重试与状态查询的任务队列实现。"""
 
     def __init__(self, worker_count: int = 1, poll_interval: float = 0.1):
+        if worker_count <= 0:
+            raise ValueError("worker_count must be positive")
         self._queue: Queue[tuple[str, Callable[..., Any], tuple, dict, int, float]] = Queue()
         self._worker_count = worker_count
         self._poll_interval = poll_interval
@@ -52,6 +57,7 @@ class TaskQueue:
         self,
         func: Callable[..., Any],
         *args,
+        owner_id: str = "default",
         max_retries: int = 0,
         retry_delay: float = 0.0,
         **kwargs,
@@ -59,20 +65,27 @@ class TaskQueue:
         task_id = uuid.uuid4().hex
         self._records[task_id] = TaskRecord(
             task_id=task_id,
+            owner_id=owner_id,
             max_retries=max_retries,
             retry_delay=retry_delay,
         )
         self._queue.put((task_id, func, args, kwargs, max_retries, retry_delay))
         return task_id
 
-    def get_status(self, task_id: str) -> Optional[TaskRecord]:
-        return self._records.get(task_id)
+    def get_status(self, task_id: str, owner_id: Optional[str] = None) -> Optional[TaskRecord]:
+        record = self._records.get(task_id)
+        if record is None or (owner_id is not None and record.owner_id != owner_id):
+            return None
+        return record
 
-    def list_tasks(self, status: Optional[str] = None) -> List[TaskRecord]:
+    def list_tasks(self, status: Optional[str] = None, owner_id: Optional[str] = None) -> List[TaskRecord]:
         records = list(self._records.values())
-        if status is None:
-            return records
-        return [record for record in records if record.status == status]
+        return [
+            record
+            for record in records
+            if (status is None or record.status == status)
+            and (owner_id is None or record.owner_id == owner_id)
+        ]
 
     def _worker_loop(self):
         while self._running:
@@ -105,10 +118,12 @@ class TaskQueue:
             result = func(*args, **kwargs)
             record.result = result
             record.error = ""
+            record.failed_step = None
             record.status = "completed"
             record.completed_at = time.time()
         except Exception as exc:
             record.error = repr(exc)
+            record.failed_step = getattr(exc, "step_index", None)
             if record.attempts <= max_retries:
                 record.status = "retrying"
                 logger.warning(
@@ -128,7 +143,7 @@ class TaskQueue:
                 logger.exception("Task %s failed after %s attempts", task_id, record.attempts)
 
 
-QUEUE = TaskQueue(worker_count=2)
+QUEUE = TaskQueue(worker_count=QUEUE_WORKER_COUNT)
 
 
 def start_queue():
@@ -143,9 +158,9 @@ def enqueue_task(func: Callable[..., Any], *args, **kwargs) -> str:
     return QUEUE.enqueue(func, *args, **kwargs)
 
 
-def get_status(task_id: str) -> Optional[TaskRecord]:
-    return QUEUE.get_status(task_id)
+def get_status(task_id: str, owner_id: Optional[str] = None) -> Optional[TaskRecord]:
+    return QUEUE.get_status(task_id, owner_id=owner_id)
 
 
-def list_tasks(status: Optional[str] = None) -> List[TaskRecord]:
-    return QUEUE.list_tasks(status)
+def list_tasks(status: Optional[str] = None, owner_id: Optional[str] = None) -> List[TaskRecord]:
+    return QUEUE.list_tasks(status, owner_id=owner_id)

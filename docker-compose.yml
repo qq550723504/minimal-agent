@@ -1,4 +1,3 @@
-version: "3.9"
 services:
   agent:
     build: .
@@ -7,12 +6,18 @@ services:
     environment:
       - OPENAI_API_KEY=${OPENAI_API_KEY}
       - AGENT_ENABLE_MEMORY=true
-      - VECTOR_MEMORY_PATH=/app/vector_memory.json
+      - VECTOR_MEMORY_PATH=/app/data/vector_memory.json
+      - AGENT_AUDIT_LOG=/app/data/audit.log
+      - AGENT_AUTH_REQUIRED=${AGENT_AUTH_REQUIRED:-false}
+      - AGENT_API_KEYS=${AGENT_API_KEYS:-}
+      - AGENT_METRICS_API_KEY=${AGENT_METRICS_API_KEY:-local-dev-metrics}
+      - AGENT_HTTP_ALLOWED_HOSTS=${AGENT_HTTP_ALLOWED_HOSTS:-}
     volumes:
-      - ./vector_memory.json:/app/vector_memory.json
+      - ./data:/app/data
   prometheus:
     image: prom/prometheus:latest
     ports:
       - "9090:9090"
     volumes:
       - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./data:/etc/prometheus/data:ro
