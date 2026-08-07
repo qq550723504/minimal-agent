@@ -18,10 +18,10 @@ class VectorStore:
 
     def add(self, text: str, metadata: Optional[dict] = None) -> None:
         with self._lock:
-            metadata = metadata or {}
+            vector = self._adapter.embed(text)
             self._documents.append(text)
-            self._metadata.append(metadata)
-            self._vectors.append(self._adapter.embed(text))
+            self._metadata.append(metadata or {})
+            self._vectors.append(vector)
 
     def query(self, text: str, top_k: int = 3, user_id: Optional[str] = None) -> List[Dict[str, Any]]:
         with self._lock:
