@@ -22,7 +22,7 @@ def handle_input(prompt: str) -> str:
     return " | ".join(results)
 
 
-def enqueue_input(prompt: str) -> str:
+def enqueue_input(prompt: str):
     """对外接口：接收输入后将执行任务加入队列。"""
     steps = plan_task(prompt)
     return enqueue_task_execution(steps)

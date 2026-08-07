@@ -1,3 +1,5 @@
+import json
+from pathlib import Path
 from typing import List, Optional
 
 from sklearn.feature_extraction.text import TfidfVectorizer
@@ -29,3 +31,20 @@ class VectorMemory:
             {"text": self._documents[i], "score": float(similarities[i]), "metadata": self._metadata[i]}
             for i in top_idx
         ]
+
+    def save(self, path: str) -> None:
+        data = {
+            "documents": self._documents,
+            "metadata": self._metadata,
+        }
+        Path(path).write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    def load(self, path: str) -> None:
+        raw = Path(path).read_text(encoding="utf-8")
+        data = json.loads(raw)
+        self._documents = data.get("documents", [])
+        self._metadata = data.get("metadata", [])
+        if self._documents:
+            self._matrix = self._vectorizer.fit_transform(self._documents)
+        else:
+            self._matrix = None

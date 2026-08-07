@@ -15,8 +15,15 @@ def execute_tasks(steps: List[str]) -> List[str]:
     return [execute_step(step) for step in steps]
 
 
-def enqueue_task_execution(steps: List[str]) -> str:
-    """把步骤加入后台队列执行。"""
+def enqueue_task_execution(steps: List[str], max_retries: int = 0, retry_delay: float = 0.0):
+    """把步骤加入后台队列执行，并返回任务 ID 列表。"""
+    task_ids = []
     for step in steps:
-        enqueue_task(execute_step, step)
-    return "queued"
+        task_id = enqueue_task(
+            execute_step,
+            step,
+            max_retries=max_retries,
+            retry_delay=retry_delay,
+        )
+        task_ids.append(task_id)
+    return {"status": "queued", "task_ids": task_ids}

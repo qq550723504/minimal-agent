@@ -19,6 +19,17 @@ python src/agent/main.py
 ```bash
 docker build -t minimal-agent .
 docker run -it --rm minimal-agent
+```
+
+3. API 调用示例：
+
+```bash
+curl -X POST http://localhost:8000/api/handle -H "Content-Type: application/json" -d '{"prompt":"hello world"}'
+
+curl -X POST http://localhost:8000/api/handle/queue -H "Content-Type: application/json" -d '{"prompt":"hello world"}'
+
+curl http://localhost:8000/api/tasks
+```
 
 更多文档：请参见 `docs/AGENT_GUIDE.md`，其中包含架构设计、部署建议、安全与维护策略。
 

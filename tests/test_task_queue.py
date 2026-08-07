@@ -16,3 +16,28 @@ def test_enqueue_and_execute_task():
     queue.stop()
 
     assert results == ["hello"]
+
+
+def test_task_queue_retries_and_status():
+    states = {"attempts": 0, "executed": False}
+
+    def flaky(item):
+        states["attempts"] += 1
+        if states["attempts"] == 1:
+            raise ValueError("temporary failure")
+        states["executed"] = True
+        return item
+
+    queue = TaskQueue(worker_count=1, poll_interval=0.01)
+    queue.start()
+    task_id = queue.enqueue(flaky, "hello", max_retries=1, retry_delay=0.01)
+    time.sleep(0.3)
+    queue.stop()
+
+    record = queue.get_status(task_id)
+    assert record is not None
+    assert record.status == "completed"
+    assert record.attempts == 2
+    assert record.result == "hello"
+    assert record.error == ""
+    assert states["executed"] is True
