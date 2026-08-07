@@ -33,7 +33,16 @@ docker compose up --build
 curl http://localhost:8000/
 ```
 
-4. API 调用示例：
+4. 环境变量说明：
+
+- `AGENT_LLM_BACKEND`: 选择后端，默认 `mock`，可设置为 `openai`。
+- `OPENAI_MODEL`: OpenAI 模型名称，默认 `gpt-3.5-turbo`。
+- `OPENAI_API_KEY`: OpenAI API key（仅当 `AGENT_LLM_BACKEND=openai` 时需要）。
+- `AGENT_ENABLE_MEMORY`: 是否启用向量记忆，默认 `true`。
+- `VECTOR_MEMORY_PATH`: 向量记忆持久化文件路径，Docker 默认 `/app/vector_memory.json`。
+- `QUEUE_WORKER_COUNT`: 后台任务队列工作线程数，默认 `2`。
+
+5. API 调用示例：
 
 ```bash
 curl -X POST http://localhost:8000/api/handle -H "Content-Type: application/json" -d '{"prompt":"hello world"}'
