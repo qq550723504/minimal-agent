@@ -37,3 +37,12 @@ def test_invalid_prompt_returns_bad_request(monkeypatch):
     response = client.post("/api/handle", json={"prompt": "bad\x00input"})
 
     assert response.status_code == 400
+
+
+def test_metrics_requires_key_when_authentication_is_enabled(monkeypatch):
+    monkeypatch.setenv("AGENT_AUTH_REQUIRED", "true")
+    monkeypatch.setenv("AGENT_API_KEYS", "alice:secret")
+    client = TestClient(server.app)
+
+    assert client.get("/metrics").status_code == 401
+    assert client.get("/metrics", headers={"X-API-Key": "secret"}).status_code == 200
