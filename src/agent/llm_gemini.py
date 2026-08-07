@@ -26,6 +26,8 @@ class GeminiAdapter(LLMAdapter):
             contents=prompt,
         )
         text = response.text
+        if not text:
+            return []
         parsed = parse_plan_output(text)
         if parsed:
             if all(isinstance(item, str) for item in parsed):

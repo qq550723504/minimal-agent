@@ -7,6 +7,11 @@ class FakeGeminiModels:
         return type("Response", (), {"text": "第一句。第二句?"})()
 
 
+class EmptyGeminiModels:
+    def generate_content(self, **kwargs):
+        return type("Response", (), {"text": None})()
+
+
 class FakeGeminiClient:
     def __init__(self):
         self.models = FakeGeminiModels()
@@ -24,3 +29,14 @@ def test_gemini_adapter_uses_generate_content_contract(monkeypatch):
     assert client.models.calls == [
         {"model": "gemini-test", "contents": "任何提示"}
     ]
+
+
+def test_gemini_adapter_returns_empty_plan_without_text(monkeypatch):
+    monkeypatch.setenv("GEMINI_API_KEY", "dummy-key")
+    client = type("Client", (), {"models": EmptyGeminiModels()})()
+
+    from src.agent.llm_gemini import GeminiAdapter
+
+    adapter = GeminiAdapter(model="gemini-test", client=client)
+
+    assert adapter.plan("会被安全策略拦截的提示") == []
