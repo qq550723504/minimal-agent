@@ -49,6 +49,16 @@ def test_metrics_requires_key_when_authentication_is_enabled(monkeypatch):
     assert client.get("/metrics", headers={"Authorization": "Bearer secret"}).status_code == 200
 
 
+def test_generated_api_docs_require_authentication(monkeypatch):
+    monkeypatch.setenv("AGENT_AUTH_REQUIRED", "true")
+    monkeypatch.setenv("AGENT_API_KEYS", "alice:secret")
+    client = TestClient(server.app)
+
+    for path in ("/docs", "/redoc", "/openapi.json"):
+        assert client.get(path).status_code == 401
+        assert client.get(path, headers={"X-API-Key": "secret"}).status_code == 200
+
+
 def test_downstream_value_error_is_not_reported_as_client_input(monkeypatch):
     monkeypatch.setenv("AGENT_AUTH_REQUIRED", "false")
 

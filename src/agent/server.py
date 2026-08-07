@@ -2,6 +2,7 @@ import logging
 from typing import Any, List, Optional
 
 from fastapi import Depends, FastAPI, HTTPException
+from fastapi.openapi.docs import get_redoc_html, get_swagger_ui_html
 from pydantic import BaseModel
 from fastapi.responses import JSONResponse
 from src.agent.auth import get_current_user
@@ -17,7 +18,7 @@ logging.basicConfig(
     format="%(asctime)s %(levelname)s %(name)s %(message)s",
 )
 
-app = FastAPI()
+app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
 setup_metrics(app)
 
 
@@ -59,6 +60,21 @@ def on_shutdown():
 @app.get("/")
 def root():
     return {"status": "ok", "message": "Minimal Agent is running"}
+
+
+@app.get("/openapi.json", include_in_schema=False)
+def openapi_route(_user_id: str = Depends(get_current_user)):
+    return JSONResponse(app.openapi())
+
+
+@app.get("/docs", include_in_schema=False)
+def docs_route(_user_id: str = Depends(get_current_user)):
+    return get_swagger_ui_html(openapi_url="/openapi.json", title="Minimal Agent - Swagger UI")
+
+
+@app.get("/redoc", include_in_schema=False)
+def redoc_route(_user_id: str = Depends(get_current_user)):
+    return get_redoc_html(openapi_url="/openapi.json", title="Minimal Agent - ReDoc")
 
 
 @app.post("/api/handle")
