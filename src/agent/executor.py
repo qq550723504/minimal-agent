@@ -3,7 +3,7 @@ import re
 import uuid
 from typing import Any, List, Optional
 
-from src.agent.task_queue import enqueue_task
+from src.agent.task_queue import enqueue_task, get_workflow_store
 from src.agent.tool_registry import get_tool
 from src.agent.workflow_store import WorkflowStore
 
@@ -144,6 +144,8 @@ def enqueue_task_execution(
     workflow_store: Optional[WorkflowStore] = None,
 ):
     """把完整 workflow 加入后台队列，并返回单个任务 ID。"""
+    if workflow_store is None:
+        workflow_store = get_workflow_store()
     if workflow_store is None:
         runner = WorkflowRunner(steps)
     else:

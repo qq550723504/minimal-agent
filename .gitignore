@@ -50,3 +50,4 @@ prometheus.yml
 vector_memory.json
 data/*.json
 data/*.log
+data/*.sqlite3

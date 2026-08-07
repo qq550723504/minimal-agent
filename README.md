@@ -46,6 +46,7 @@ curl http://localhost:8000/
 - `GEMINI_EMBEDDING_MODEL`: Gemini Embeddings 模型名称，默认 `gemini-embedding-2`。
 - `VECTOR_MEMORY_PATH`: 向量记忆持久化文件路径，Docker 默认 `/app/data/vector_memory.json`。
 - `QUEUE_WORKER_COUNT`: 后台任务队列工作线程数，默认 `2`。
+- `WORKFLOW_STORE_PATH`: SQLite 工作流状态数据库路径，默认 `data/workflows.sqlite3`；Docker 默认 `/app/data/workflows.sqlite3`。
 - `AGENT_AUTH_REQUIRED`: 是否强制 API Key 鉴权，默认 `false`；生产环境建议设置为 `true`。
 - `AGENT_API_KEYS`: 用户和 API Key 映射，格式为 `user_id:key,user_id2:key2`。
 - `AGENT_METRICS_API_KEY`: Prometheus 访问 `/metrics` 的独立 Bearer token。
@@ -73,7 +74,9 @@ curl http://localhost:8000/api/tools
 - 生产部署至少应配置 `AGENT_AUTH_REQUIRED=true`、`AGENT_API_KEYS` 和 `AGENT_HTTP_ALLOWED_HOSTS`。
 - 切换 `AGENT_EMBEDDING_BACKEND` 或 Embeddings 模型后，向量空间可能不兼容；应删除并重建 `VECTOR_MEMORY_PATH` 中的旧向量数据。
 - Prometheus 使用 `./data/metrics-token` 作为 Bearer token；生产环境必须把它替换为与 `AGENT_METRICS_API_KEY` 相同的随机值。
-- Compose 会把 `./data` 挂载到容器的 `/app/data`，用于持久化向量记忆和审计日志。
+- Compose 会把 `./data` 挂载到容器的 `/app/data`，用于持久化向量记忆、审计日志和 SQLite 工作流状态。
+- 队列工作流会在每个步骤完成后保存状态；服务重启后会从第一个未完成步骤恢复。恢复语义是至少一次执行，服务在步骤执行中退出时该步骤可能再次执行。
+- 只有通过工作流入口创建的任务支持重启恢复；直接提交任意 Python callable 的内部队列任务不支持跨进程恢复。
 - 访问 `http://localhost:9090` 可查看 Prometheus UI。
 
 版本与变更记录：请参见 `CHANGELOG.md`。

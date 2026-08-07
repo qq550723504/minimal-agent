@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 from queue import Queue, Empty
 from typing import Callable, Any, Dict, Optional, List
 
-from src.agent.config import QUEUE_WORKER_COUNT
+from src.agent.config import QUEUE_WORKER_COUNT, WORKFLOW_STORE_PATH
 from src.agent.workflow_store import WorkflowStore
 
 logger = logging.getLogger(__name__)
@@ -281,7 +281,8 @@ class TaskQueue:
                 logger.exception("Task %s failed after %s attempts", task_id, record.attempts)
 
 
-QUEUE = TaskQueue(worker_count=QUEUE_WORKER_COUNT)
+WORKFLOW_STORE = WorkflowStore(WORKFLOW_STORE_PATH)
+QUEUE = TaskQueue(worker_count=QUEUE_WORKER_COUNT, workflow_store=WORKFLOW_STORE)
 
 
 def start_queue():
@@ -290,6 +291,10 @@ def start_queue():
 
 def stop_queue():
     QUEUE.stop()
+
+
+def get_workflow_store() -> WorkflowStore:
+    return WORKFLOW_STORE
 
 
 def enqueue_task(func: Callable[..., Any], *args, **kwargs) -> str:

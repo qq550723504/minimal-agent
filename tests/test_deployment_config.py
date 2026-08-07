@@ -53,3 +53,14 @@ def test_compose_forwards_gemini_configuration():
     assert "GEMINI_EMBEDDING_MODEL=${GEMINI_EMBEDDING_MODEL:-gemini-embedding-2}" in compose
     assert "AGENT_LLM_BACKEND=${AGENT_LLM_BACKEND:-mock}" in compose
     assert "AGENT_EMBEDDING_BACKEND=${AGENT_EMBEDDING_BACKEND:-mock}" in compose
+
+
+def test_compose_configures_persistent_workflow_store():
+    compose = (ROOT / "docker-compose.yml").read_text(encoding="utf-8")
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    guide = (ROOT / "docs" / "AGENT_GUIDE.md").read_text(encoding="utf-8")
+
+    assert "WORKFLOW_STORE_PATH=${WORKFLOW_STORE_PATH:-/app/data/workflows.sqlite3}" in compose
+    assert "WORKFLOW_STORE_PATH" in readme
+    assert "重启" in readme
+    assert "WORKFLOW_STORE_PATH" in guide
