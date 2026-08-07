@@ -8,6 +8,7 @@ from src.agent.memory_manager import initialize_memory, save_memory
 from src.agent.observability import setup_metrics
 from src.agent.security import audit_log, sanitize_input
 from src.agent.task_queue import get_status, list_tasks, start_queue, stop_queue
+from src.agent.tool_registry import list_tool_metadata
 
 logging.basicConfig(
     level=logging.INFO,
@@ -81,3 +82,14 @@ def get_task_route(task_id: str):
 def list_tasks_route(status: Optional[str] = None):
     records = list_tasks(status)
     return [TaskStatusOut(**record.__dict__) for record in records]
+
+
+class ToolInfoOut(BaseModel):
+    name: str
+    description: str = ""
+
+
+@app.get("/api/tools")
+def list_tools_route():
+    tools = list_tool_metadata()
+    return [ToolInfoOut(**tool) for tool in tools]

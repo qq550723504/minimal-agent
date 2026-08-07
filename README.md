@@ -52,6 +52,7 @@ curl -X POST http://localhost:8000/api/handle -H "Content-Type: application/json
 curl -X POST http://localhost:8000/api/handle/queue -H "Content-Type: application/json" -d '{"prompt":"hello world"}'
 
 curl http://localhost:8000/api/tasks
+curl http://localhost:8000/api/tools
 ```
 
 更多文档：请参见 `docs/AGENT_GUIDE.md`，其中包含架构设计、部署建议、安全与维护策略。
