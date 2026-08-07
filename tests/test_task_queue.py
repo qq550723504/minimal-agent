@@ -89,3 +89,13 @@ def test_task_queue_records_workflow_failed_step():
     assert record is not None
     assert record.status == "failed"
     assert record.failed_step == 1
+
+
+def test_task_queue_filters_status_by_owner():
+    queue = TaskQueue(worker_count=1, poll_interval=0.01)
+    alice_task = queue.enqueue(lambda: "alice", owner_id="alice")
+    bob_task = queue.enqueue(lambda: "bob", owner_id="bob")
+
+    assert queue.get_status(alice_task, owner_id="bob") is None
+    assert queue.get_status(alice_task, owner_id="alice").owner_id == "alice"
+    assert [record.task_id for record in queue.list_tasks(owner_id="bob")] == [bob_task]

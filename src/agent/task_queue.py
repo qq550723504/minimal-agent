@@ -70,14 +70,20 @@ class TaskQueue:
         self._queue.put((task_id, func, args, kwargs, max_retries, retry_delay))
         return task_id
 
-    def get_status(self, task_id: str) -> Optional[TaskRecord]:
-        return self._records.get(task_id)
+    def get_status(self, task_id: str, owner_id: Optional[str] = None) -> Optional[TaskRecord]:
+        record = self._records.get(task_id)
+        if record is None or (owner_id is not None and record.owner_id != owner_id):
+            return None
+        return record
 
-    def list_tasks(self, status: Optional[str] = None) -> List[TaskRecord]:
+    def list_tasks(self, status: Optional[str] = None, owner_id: Optional[str] = None) -> List[TaskRecord]:
         records = list(self._records.values())
-        if status is None:
-            return records
-        return [record for record in records if record.status == status]
+        return [
+            record
+            for record in records
+            if (status is None or record.status == status)
+            and (owner_id is None or record.owner_id == owner_id)
+        ]
 
     def _worker_loop(self):
         while self._running:
@@ -149,9 +155,9 @@ def enqueue_task(func: Callable[..., Any], *args, **kwargs) -> str:
     return QUEUE.enqueue(func, *args, **kwargs)
 
 
-def get_status(task_id: str) -> Optional[TaskRecord]:
-    return QUEUE.get_status(task_id)
+def get_status(task_id: str, owner_id: Optional[str] = None) -> Optional[TaskRecord]:
+    return QUEUE.get_status(task_id, owner_id=owner_id)
 
 
-def list_tasks(status: Optional[str] = None) -> List[TaskRecord]:
-    return QUEUE.list_tasks(status)
+def list_tasks(status: Optional[str] = None, owner_id: Optional[str] = None) -> List[TaskRecord]:
+    return QUEUE.list_tasks(status, owner_id=owner_id)
