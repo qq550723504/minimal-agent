@@ -31,6 +31,8 @@ class OpenAIAdapter(LLMAdapter):
         text = resp["choices"][0]["message"]["content"]
         parsed = parse_plan_output(text)
         if parsed:
+            if all(isinstance(item, str) for item in parsed):
+                return [item if item.startswith("echo: ") else f"echo: {item}" for item in parsed]
             return parsed
 
         parts = [p.strip() for p in re.split(r"[。.?!]", text) if p.strip()]

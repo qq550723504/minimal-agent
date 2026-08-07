@@ -58,7 +58,7 @@ class MockLLM(LLMAdapter):
                 task_text = task_text.split("Response format:", 1)[0]
             parts = [p.strip() for p in re.split(r"[。.!?\n]+", task_text) if p.strip()]
             if parts:
-                return parts
+                return [f"echo: {p}" for p in parts]
 
         if prompt.strip().startswith("["):
             try:
