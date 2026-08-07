@@ -43,6 +43,11 @@ curl http://localhost:8000/
 - `OPENAI_EMBEDDING_MODEL`: OpenAI Embedding 模型名称，默认 `text-embedding-3-small`。
 - `VECTOR_MEMORY_PATH`: 向量记忆持久化文件路径，Docker 默认 `/app/vector_memory.json`。
 - `QUEUE_WORKER_COUNT`: 后台任务队列工作线程数，默认 `2`。
+- `AGENT_AUTH_REQUIRED`: 是否强制 API Key 鉴权，默认 `false`；生产环境建议设置为 `true`。
+- `AGENT_API_KEYS`: 用户和 API Key 映射，格式为 `user_id:key,user_id2:key2`。
+- `AGENT_HTTP_ALLOWED_HOSTS`: HTTP 工具允许访问的域名，逗号分隔；为空时默认拒绝所有 HTTP 工具请求。
+- `AGENT_HTTP_TIMEOUT_SECONDS`: HTTP 工具连接和读取超时，默认 `5` 秒。
+- `AGENT_HTTP_MAX_RESPONSE_BYTES`: HTTP 工具最大响应体大小，默认 `1048576` 字节。
 
 5. API 调用示例：
 
@@ -59,7 +64,9 @@ curl http://localhost:8000/api/tools
 
 编排与监控：
 - `docker-compose.yml` 包含 `agent` 和 `prometheus` 服务。
-- `AGENT_ENABLE_MEMORY=true` 和 `VECTOR_MEMORY_PATH=/app/vector_memory.json` 已在 Docker 环境中启用。
+- `AGENT_ENABLE_MEMORY=true` 和 `VECTOR_MEMORY_PATH=/app/data/vector_memory.json` 已在 Docker 环境中启用。
+- 生产部署至少应配置 `AGENT_AUTH_REQUIRED=true`、`AGENT_API_KEYS` 和 `AGENT_HTTP_ALLOWED_HOSTS`。
+- Compose 会把 `./data` 挂载到容器的 `/app/data`，用于持久化向量记忆和审计日志。
 - 访问 `http://localhost:9090` 可查看 Prometheus UI。
 
 版本与变更记录：请参见 `CHANGELOG.md`。
