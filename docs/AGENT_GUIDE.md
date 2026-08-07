@@ -28,12 +28,38 @@ pip install -r requirements.txt
 - 设计点：模块化（便于替换模型与工具）、日志与 trace、错误补偿策略。
 
 ### 4.1 队列与任务状态
-项目提供 `/api/handle/queue` 和 `/api/tasks` 接口：
+项目提供 `/api/handle/queue`、`/api/tasks` 和 `/api/tools` 接口：
 - `/api/handle/queue`：接收请求并将执行任务加入后台队列。
 - `/api/tasks`：查询任务状态、重试次数和执行结果。
+- `/api/tools`：列出当前可用工具及其描述。
 
 ### 4.2 向量记忆持久化
 `src/agent/vector_memory.py` 提供 `save(path)` 和 `load(path)` 方法，适合用于简单的磁盘持久化或作为构建持久化记忆层的基础。
+
+### 4.3 RAG 提示构建
+Planner 会从向量记忆中检索与当前请求最相关的历史记忆，并将最近的对话历史一起注入到最终发送给 LLM 的提示中。
+
+检索增强生成（RAG）策略包括三个明确部分：
+- `System`: 系统指令，定义代理角色和行为。
+- `Conversation history`: 最近的用户交互历史，用于保持上下文连续性。
+- `Relevant memory`: 基于当前请求检索出的相关向量记忆。
+- `Task`: 当前需要完成的具体目标。
+- `Response format`: 规定输出结构，便于下游解析。
+
+当前示例使用 JSON 数组作为规划输出格式，利于后续执行引擎直接解析每一步。
+
+执行器当前支持以下工具调用示例：
+```text
+http_get: {"url": "https://api.example.com/data", "params": {"q": "test"}}
+http_post: {"url": "https://api.example.com/items", "json": {"name": "agent"}}
+```
+
+这种组合策略可增强：
+- 对长期记忆事实的访问能力
+- 对当前任务的上下文理解
+- 连贯的多轮交互体验
+
+如果没有检索到相关记忆或历史记录，Planner 会直接使用用户原始请求。
 
 ## 五、测试策略
 - 单元测试：模块内部逻辑。

@@ -37,8 +37,10 @@ curl http://localhost:8000/
 
 - `AGENT_LLM_BACKEND`: 选择后端，默认 `mock`，可设置为 `openai`。
 - `OPENAI_MODEL`: OpenAI 模型名称，默认 `gpt-3.5-turbo`。
-- `OPENAI_API_KEY`: OpenAI API key（仅当 `AGENT_LLM_BACKEND=openai` 时需要）。
+- `OPENAI_API_KEY`: OpenAI API key（仅当 `AGENT_LLM_BACKEND=openai` 或 `AGENT_EMBEDDING_BACKEND=openai` 时需要）。
 - `AGENT_ENABLE_MEMORY`: 是否启用向量记忆，默认 `true`。
+- `AGENT_EMBEDDING_BACKEND`: 嵌入后端，默认 `mock`，可设置为 `openai`。
+- `OPENAI_EMBEDDING_MODEL`: OpenAI Embedding 模型名称，默认 `text-embedding-3-small`。
 - `VECTOR_MEMORY_PATH`: 向量记忆持久化文件路径，Docker 默认 `/app/vector_memory.json`。
 - `QUEUE_WORKER_COUNT`: 后台任务队列工作线程数，默认 `2`。
 
@@ -50,6 +52,7 @@ curl -X POST http://localhost:8000/api/handle -H "Content-Type: application/json
 curl -X POST http://localhost:8000/api/handle/queue -H "Content-Type: application/json" -d '{"prompt":"hello world"}'
 
 curl http://localhost:8000/api/tasks
+curl http://localhost:8000/api/tools
 ```
 
 更多文档：请参见 `docs/AGENT_GUIDE.md`，其中包含架构设计、部署建议、安全与维护策略。

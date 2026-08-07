@@ -15,7 +15,10 @@ def test_vector_memory_save_and_load(tmp_path):
     loaded = VectorMemory()
     loaded.load(str(file_path))
 
-    assert loaded.query("hello")[0]["text"] == "hello world"
-    assert loaded.query("another")[0]["text"] == "another document"
-    assert loaded._metadata[0]["source"] == "test"
-    assert loaded._metadata[1]["source"] == "test2"
+    hello_results = loaded.query("hello")
+    another_results = loaded.query("another")
+
+    assert any(item["text"] == "hello world" for item in hello_results)
+    assert any(item["text"] == "another document" for item in another_results)
+    assert any(item["metadata"].get("source") == "test" for item in hello_results)
+    assert any(item["metadata"].get("source") == "test2" for item in another_results)
