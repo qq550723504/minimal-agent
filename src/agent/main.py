@@ -2,7 +2,14 @@
 
 提供 `handle_input()` 供测试调用，以及 CLI 主循环用于手工运行。
 """
+import os
+import sys
 from typing import List
+
+if __package__ is None and __name__ == "__main__":
+    root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    if root not in sys.path:
+        sys.path.insert(0, root)
 
 from src.agent.planner import plan_task
 from src.agent.executor import execute_tasks, enqueue_task_execution
