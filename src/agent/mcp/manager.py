@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import os
 from collections.abc import Callable, Iterable
 from contextlib import AsyncExitStack
@@ -16,7 +17,7 @@ from src.agent.plugins.catalog import LoadedPlugin, PluginCatalog
 from src.agent.plugins.loader import RequiredPluginError
 from src.agent.plugins.models import HTTPMCPServerManifest, MCPServerManifest, StdioMCPServerManifest
 
-from .adapter import MCPToolDiscoveryError, prepare_server_tools
+from .adapter import ClientResolver, MCPToolDiscoveryError, prepare_server_tools
 from .security import (
     MCPSecurityError,
     ResolvedHTTPConfig,
@@ -35,6 +36,7 @@ ResolvedMCPConfig = ResolvedStdioConfig | ResolvedHTTPConfig
 ClientFactory = Callable[[Any], AsyncContextManager[Any]]
 HTTPConfigResolver = Callable[[ResolvedHTTPConfig], ResolvedHTTPConfig]
 ServerConfigResolver = Callable[[LoadedPlugin, MCPServerManifest], ResolvedMCPConfig]
+ConfigRevalidator = Callable[[], ResolvedMCPConfig]
 
 
 class MCPClientManager:
@@ -46,6 +48,9 @@ class MCPClientManager:
         client_factory: ClientFactory | None = None,
         http_config_resolver: HTTPConfigResolver | None = None,
         server_config_resolver: ServerConfigResolver | None = None,
+        startup_timeout_seconds: float | None = None,
+        discovery_timeout_seconds: float | None = None,
+        shutdown_timeout_seconds: float | None = None,
     ) -> None:
         self._client_factory = Client if client_factory is None else client_factory
         self._http_config_resolver = http_config_resolver
@@ -54,13 +59,43 @@ class MCPClientManager:
             if server_config_resolver is None
             else server_config_resolver
         )
+        self._startup_timeout_seconds = (
+            config.MCP_STARTUP_TIMEOUT_SECONDS
+            if startup_timeout_seconds is None
+            else startup_timeout_seconds
+        )
+        self._discovery_timeout_seconds = (
+            config.MCP_DISCOVERY_TIMEOUT_SECONDS
+            if discovery_timeout_seconds is None
+            else discovery_timeout_seconds
+        )
+        self._shutdown_timeout_seconds = (
+            config.MCP_SHUTDOWN_TIMEOUT_SECONDS
+            if shutdown_timeout_seconds is None
+            else shutdown_timeout_seconds
+        )
+        if min(
+            self._startup_timeout_seconds,
+            self._discovery_timeout_seconds,
+            self._shutdown_timeout_seconds,
+        ) <= 0:
+            raise ValueError("MCP lifecycle timeouts must be positive")
         self._clients: dict[str, Any] = {}
         self._stacks: dict[str, AsyncExitStack] = {}
         self._configs: dict[str, ResolvedMCPConfig] = {}
+        self._revalidators: dict[str, ConfigRevalidator] = {}
 
     async def start_server(self, server_id: str, config: ResolvedMCPConfig) -> Any:
         """Enter one SDK client, cleaning every started client if setup fails."""
-        return await self._start_server(server_id, config, cleanup_active_on_failure=True)
+        revalidator = None
+        if isinstance(config, ResolvedHTTPConfig) and self._http_config_resolver is not None:
+            revalidator = lambda: self._http_config_resolver(config)
+        return await self._start_server(
+            server_id,
+            config,
+            cleanup_active_on_failure=True,
+            revalidator=revalidator,
+        )
 
     async def start_catalog(
         self, catalog: PluginCatalog, registry: CapabilityRegistry
@@ -74,9 +109,17 @@ class MCPClientManager:
             try:
                 for server in sorted(plugin.manifest.mcp_servers, key=lambda item: item.id):
                     server_key = f"{plugin_id}.{server.id}"
-                    server_config = self._server_config_resolver(plugin, server)
+                    server_config = await self._resolve_catalog_config(plugin, server)
+                    revalidator = (
+                        lambda plugin=plugin, server=server: self._server_config_resolver(
+                            plugin, server
+                        )
+                    )
                     client = await self._start_server(
-                        server_key, server_config, cleanup_active_on_failure=False
+                        server_key,
+                        server_config,
+                        cleanup_active_on_failure=False,
+                        revalidator=revalidator,
                     )
                     started_server_ids.append(server_key)
                     registrations.extend(
@@ -85,6 +128,8 @@ class MCPClientManager:
                             server.id,
                             client,
                             server.allowed_tools,
+                            discovery_timeout_seconds=self._discovery_timeout_seconds,
+                            client_resolver=self.client_resolver(server_key),
                         )
                     )
                 registry.register_many(registrations)
@@ -106,6 +151,7 @@ class MCPClientManager:
         config: ResolvedMCPConfig,
         *,
         cleanup_active_on_failure: bool,
+        revalidator: ConfigRevalidator | None,
     ) -> Any:
         """Enter a server, optionally retaining independently started clients on failure."""
         if server_id in self._clients:
@@ -113,18 +159,37 @@ class MCPClientManager:
 
         stack = AsyncExitStack()
         try:
-            transport = await self._build_transport(config, stack)
-            client = await stack.enter_async_context(self._client_factory(transport))
+            async with asyncio.timeout(self._startup_timeout_seconds):
+                transport = await self._build_transport(config, stack)
+                client = await stack.enter_async_context(self._client_factory(transport))
+        except TimeoutError:
+            failures = await self._close_stacks([stack])
+            if cleanup_active_on_failure:
+                failures.extend(await self._close_active_servers())
+            self._raise_startup_error("mcp_startup_timeout", failures)
         except Exception:
             failures = await self._close_stacks([stack])
             if cleanup_active_on_failure:
                 failures.extend(await self._close_active_servers())
-            self._raise_startup_error(failures)
+            self._raise_startup_error("mcp_connection_failed", failures)
 
         self._stacks[server_id] = stack
         self._clients[server_id] = client
         self._configs[server_id] = config
+        if revalidator is not None:
+            self._revalidators[server_id] = revalidator
         return client
+
+    async def _resolve_catalog_config(
+        self, plugin: LoadedPlugin, server: MCPServerManifest
+    ) -> ResolvedMCPConfig:
+        try:
+            async with asyncio.timeout(self._startup_timeout_seconds):
+                return await asyncio.to_thread(
+                    self._server_config_resolver, plugin, server
+                )
+        except TimeoutError:
+            raise MCPConnectionError("mcp_startup_timeout") from None
 
     async def _stop_catalog_servers(self, server_ids: Iterable[str]) -> None:
         """Best-effort cleanup for one failed plugin without touching other plugins."""
@@ -179,6 +244,11 @@ class MCPClientManager:
         except KeyError as error:
             raise MCPConnectionError("mcp_server_not_started") from error
 
+    def client_resolver(self, server_id: str) -> ClientResolver:
+        """Return a handler-safe lookup that follows reconnect replacements."""
+
+        return lambda: self.get_client(server_id)
+
     async def stop_server(self, server_id: str) -> None:
         """Close and forget one entered client and all its transport resources."""
         stack = self._stacks.get(server_id)
@@ -187,7 +257,8 @@ class MCPClientManager:
             self._stacks.pop(server_id, None)
             self._clients.pop(server_id, None)
             self._configs.pop(server_id, None)
-            self._raise_sanitized_error("mcp_cleanup_failed", failures)
+            self._revalidators.pop(server_id, None)
+            self._raise_cleanup_error(failures)
 
     async def reconnect_server(self, server_id: str) -> Any:
         """Re-enter a server only after its HTTP configuration is freshly validated."""
@@ -198,22 +269,29 @@ class MCPClientManager:
 
         config = current_config
         if isinstance(current_config, ResolvedHTTPConfig):
-            if self._http_config_resolver is None:
+            revalidator = self._revalidators.get(server_id)
+            if revalidator is None:
                 raise MCPConnectionError("mcp_http_revalidation_required")
             try:
-                config = self._http_config_resolver(current_config)
+                async with asyncio.timeout(self._startup_timeout_seconds):
+                    config = await asyncio.to_thread(revalidator)
             except Exception:
                 raise MCPConnectionError("mcp_http_revalidation_failed") from None
             if not isinstance(config, ResolvedHTTPConfig):
                 raise MCPConnectionError("mcp_http_revalidation_failed")
 
         await self.stop_server(server_id)
-        return await self.start_server(server_id, config)
+        return await self._start_server(
+            server_id,
+            config,
+            cleanup_active_on_failure=True,
+            revalidator=revalidator if isinstance(config, ResolvedHTTPConfig) else None,
+        )
 
     async def close(self) -> None:
         """Close all active clients in reverse start order; safe to call repeatedly."""
         failures = await self._close_active_servers()
-        self._raise_sanitized_error("mcp_cleanup_failed", failures)
+        self._raise_cleanup_error(failures)
 
     async def _close_active_servers(self) -> list[Exception]:
         """Attempt every active stack before forgetting their registration state."""
@@ -221,18 +299,28 @@ class MCPClientManager:
         self._stacks.clear()
         self._clients.clear()
         self._configs.clear()
+        self._revalidators.clear()
         return failures
 
-    @staticmethod
-    async def _close_stacks(stacks: Iterable[AsyncExitStack]) -> list[Exception]:
+    async def _close_stacks(self, stacks: Iterable[AsyncExitStack]) -> list[Exception]:
         """Run every cleanup stack, retaining only sanitized failure cardinality."""
         failures: list[Exception] = []
         for stack in stacks:
             try:
-                await stack.aclose()
+                async with asyncio.timeout(self._shutdown_timeout_seconds):
+                    await stack.aclose()
             except Exception as error:
                 failures.append(error)
         return failures
+
+    @classmethod
+    def _raise_cleanup_error(cls, failures: list[Exception]) -> None:
+        code = (
+            "mcp_cleanup_timeout"
+            if any(isinstance(error, TimeoutError) for error in failures)
+            else "mcp_cleanup_failed"
+        )
+        cls._raise_sanitized_error(code, failures)
 
     @staticmethod
     def _raise_sanitized_error(code: str, failures: list[Exception]) -> None:
@@ -245,10 +333,10 @@ class MCPClientManager:
         raise MCPConnectionError(code) from sanitized
 
     @classmethod
-    def _raise_startup_error(cls, failures: list[Exception]) -> None:
+    def _raise_startup_error(cls, code: str, failures: list[Exception]) -> None:
         if failures:
-            cls._raise_sanitized_error("mcp_connection_failed", failures)
-        raise MCPConnectionError("mcp_connection_failed") from None
+            cls._raise_sanitized_error(code, failures)
+        raise MCPConnectionError(code) from None
 
     def server_ids(self) -> list[str]:
         """Return active server IDs in their startup order."""

@@ -11,7 +11,7 @@
 - 接口：统一的请求/响应契约（JSON）、请求ID、超时与重试策略。
 
 ## 三、开发与依赖
-- 推荐语言：Python 3.10+（示例基于 Python）。
+- 推荐语言：Python 3.11+（示例基于 Python）。
 - 依赖管理：使用 `requirements.txt` 或 `pyproject.toml`。
 
 示例：

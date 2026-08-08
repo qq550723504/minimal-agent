@@ -1,5 +1,6 @@
 from pathlib import Path
 from types import SimpleNamespace
+import asyncio
 
 import pytest
 from mcp.types import TextContent, Tool
@@ -122,6 +123,91 @@ async def test_discovery_paginates_and_registers_only_allowlist() -> None:
     assert registered[0].source is ToolSource.MCP
     assert client.cursors == [None, "next"]
     assert [spec.name for spec in registry.list_specs()] == ["demo.remote.second"]
+
+
+@pytest.mark.anyio
+async def test_discovery_rejects_repeating_cursor() -> None:
+    from src.agent.mcp.adapter import MCPToolDiscoveryError, discover_tools
+
+    client = FakeMCPClient(
+        {
+            None: page([], "repeat"),
+            "repeat": page([], "repeat"),
+        }
+    )
+
+    with pytest.raises(MCPToolDiscoveryError, match="mcp_tool_cursor_cycle"):
+        await discover_tools(client)
+
+    assert client.cursors == [None, "repeat"]
+
+
+@pytest.mark.anyio
+async def test_discovery_has_a_total_timeout() -> None:
+    from src.agent.mcp.adapter import MCPToolDiscoveryError, discover_tools
+
+    class HangingClient:
+        async def list_tools(self, *, cursor=None):
+            await asyncio.Event().wait()
+
+    with pytest.raises(MCPToolDiscoveryError, match="mcp_tool_discovery_timeout"):
+        await discover_tools(HangingClient(), timeout_seconds=0.01)
+
+
+@pytest.mark.anyio
+async def test_remote_names_are_reversibly_encoded_but_invoked_raw() -> None:
+    from src.agent.mcp.adapter import decode_remote_tool_name, register_server_tools
+
+    client = FakeMCPClient({None: page([remote_tool("GetWeather/foo/bar")])})
+    registry = CapabilityRegistry()
+
+    registered = await register_server_tools(
+        "demo",
+        "remote",
+        client,
+        [
+            AllowedToolManifest(
+                name="GetWeather/foo/bar", side_effects=False, idempotent=True
+            )
+        ],
+        registry,
+    )
+    encoded_segment = registered[0].name.removeprefix("demo.remote.")
+    result = await registry.invoke(
+        ToolCall(call_id="case-slash", tool=registered[0].name, arguments={}),
+        ToolInvocationContext(),
+    )
+
+    assert decode_remote_tool_name(encoded_segment) == "GetWeather/foo/bar"
+    assert result.status == "success"
+    assert client.calls == [("GetWeather/foo/bar", {})]
+
+
+@pytest.mark.anyio
+async def test_remote_name_encoding_cannot_collide_with_reserved_prefix() -> None:
+    from src.agent.mcp.adapter import register_server_tools
+
+    unsafe = "GetWeather"
+    prefix_lookalike = f"mcp-encoded-{unsafe.encode('utf-8').hex()}"
+    client = FakeMCPClient(
+        {None: page([remote_tool(unsafe), remote_tool(prefix_lookalike)])}
+    )
+    registry = CapabilityRegistry()
+
+    registered = await register_server_tools(
+        "demo",
+        "remote",
+        client,
+        [
+            AllowedToolManifest(name=unsafe, side_effects=False, idempotent=True),
+            AllowedToolManifest(
+                name=prefix_lookalike, side_effects=False, idempotent=True
+            ),
+        ],
+        registry,
+    )
+
+    assert len({spec.name for spec in registered}) == 2
 
 
 @pytest.mark.anyio
@@ -397,3 +483,101 @@ async def test_required_failure_rolls_back_earlier_plugins_but_keeps_preexisting
     assert first_client.exit_count == required_client.exit_count == 1
     assert manager.server_ids() == []
     assert [spec.name for spec in registry.list_specs()] == ["preexisting.local"]
+
+
+@pytest.mark.anyio
+async def test_registered_handler_uses_manager_client_after_reconnect() -> None:
+    catalog = catalog_with_plugin(
+        required=True,
+        servers=[
+            {
+                "id": "remote",
+                "transport": "streamable_http",
+                "url_env": "REMOTE_URL",
+                "allowed_tools": [
+                    {"name": "search", "side_effects": False, "idempotent": True}
+                ],
+            }
+        ],
+    )
+    first = CatalogClient({None: page([remote_tool("search")])})
+    second = CatalogClient({None: page([remote_tool("search")])})
+    second.call_result = SimpleNamespace(
+        is_error=False,
+        structured_content={"client": "fresh"},
+        content=[],
+    )
+    resolutions = 0
+
+    def resolve(_plugin, _server):
+        nonlocal resolutions
+        resolutions += 1
+        return resolved_config()
+
+    manager = MCPClientManager(
+        client_factory=CatalogClientFactory([first, second]),
+        server_config_resolver=resolve,
+    )
+    registry = CapabilityRegistry()
+    await manager.start_catalog(catalog, registry)
+
+    await manager.reconnect_server("demo.remote")
+    result = await registry.invoke(
+        ToolCall(call_id="fresh", tool="demo.remote.search", arguments={}),
+        ToolInvocationContext(),
+    )
+
+    assert resolutions == 2
+    assert result.content == {"client": "fresh"}
+    assert first.calls == []
+    assert second.calls == [("search", {})]
+
+
+@pytest.mark.anyio
+async def test_catalog_reconnect_uses_default_production_revalidation(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    catalog = catalog_with_plugin(
+        required=True,
+        servers=[
+            {
+                "id": "remote",
+                "transport": "streamable_http",
+                "url_env": "REMOTE_URL",
+                "allowed_tools": [],
+            }
+        ],
+    )
+    first = CatalogClient({None: page([])})
+    second = CatalogClient({None: page([])})
+    resolved = [
+        resolved_config(),
+        ResolvedHTTPConfig(
+            url="https://mcp.example.test/tools",
+            hostname="mcp.example.test",
+            port=443,
+            headers={},
+            addresses=("127.0.0.2",),
+        ),
+    ]
+    validation_count = 0
+
+    def validate(_server, _environ, _allowed_hosts, *, production):
+        nonlocal validation_count
+        assert production is True
+        value = resolved[validation_count]
+        validation_count += 1
+        return value
+
+    monkeypatch.setattr("src.agent.mcp.manager.validate_http_config", validate)
+    manager = MCPClientManager(
+        client_factory=CatalogClientFactory([first, second]),
+    )
+
+    await manager.start_catalog(catalog, CapabilityRegistry())
+    await manager.reconnect_server("demo.remote")
+
+    assert validation_count == 2
+    assert first.exit_count == 1
+    assert second.exit_count == 0
+    await manager.close()

@@ -34,7 +34,11 @@ def test_invalid_structured_name_keeps_legacy_registration_callable(name):
     assert tool is not None
     assert tool("hello") == "legacy:hello"
     assert get_capability_registry().get_spec(expected) is None
-    assert expected not in list_tools()
+    assert expected in list_tools()
+    assert any(
+        item["name"] == expected and item["description"] == "Legacy-only tool"
+        for item in list_tool_metadata()
+    )
 
 
 @pytest.mark.anyio

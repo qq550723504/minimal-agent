@@ -3,10 +3,16 @@
 from collections.abc import Iterable
 from typing import Annotated, Literal, TypeAlias
 
-from pydantic import BaseModel, ConfigDict, Field, StrictBool, model_validator
+from pydantic import BaseModel, ConfigDict, Field, StrictBool, field_validator, model_validator
 
 
 _IDENTIFIER_PATTERN = r"^[a-z0-9][a-z0-9_.-]*$"
+_SEMVER_PATTERN = (
+    r"^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)"
+    r"(?:-(?:0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*)"
+    r"(?:\.(?:0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*))*)?"
+    r"(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$"
+)
 
 
 class SkillManifest(BaseModel):
@@ -15,6 +21,18 @@ class SkillManifest(BaseModel):
     id: str = Field(pattern=_IDENTIFIER_PATTERN)
     path: str
     triggers: list[str] = Field(default_factory=list)
+
+    @field_validator("triggers", mode="after")
+    @classmethod
+    def normalize_triggers(cls, values: list[str]) -> list[str]:
+        normalized: list[str] = []
+        seen: set[str] = set()
+        for value in values:
+            trigger = " ".join(value.casefold().strip().split())
+            if trigger and trigger not in seen:
+                normalized.append(trigger)
+                seen.add(trigger)
+        return normalized
 
 
 class AllowedToolManifest(BaseModel):
@@ -74,7 +92,7 @@ class PluginManifest(BaseModel):
 
     api_version: Literal["minimal-agent/v1"]
     id: str = Field(pattern=_IDENTIFIER_PATTERN)
-    version: str
+    version: str = Field(pattern=_SEMVER_PATTERN)
     enabled: StrictBool = True
     required: StrictBool = False
     skills: list[SkillManifest] = Field(default_factory=list)

@@ -20,7 +20,7 @@ class SkillResolver:
     def resolve(
         self, prompt: str, explicit_ids: list[str] | None
     ) -> list[SkillDefinition]:
-        if explicit_ids:
+        if explicit_ids is not None:
             return self._resolve_explicit(explicit_ids)
 
         normalized = normalize_trigger(prompt)

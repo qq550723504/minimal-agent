@@ -198,6 +198,37 @@ skills:
     assert catalog.statuses["demo"].error_code == "plugin_path_escape"
 
 
+def test_loader_rejects_junction_plugin_installation_before_reading_manifest(tmp_path):
+    plugin_root = tmp_path / "plugins"
+    outside = tmp_path / "outside"
+    plugin_root.mkdir()
+    outside.mkdir()
+    outside.joinpath("plugin.yaml").write_text(
+        """api_version: minimal-agent/v1
+id: escaped
+version: 1.0.0
+""",
+        encoding="utf-8",
+    )
+    installation = plugin_root / "escaped-install"
+    try:
+        os.symlink(outside, installation, target_is_directory=True)
+    except OSError as error:
+        junction = subprocess.run(
+            ["cmd", "/c", "mklink", "/J", str(installation), str(outside)],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if junction.returncode:
+            pytest.skip(f"symlink and junction creation unavailable: {error}")
+
+    catalog = PluginLoader(plugin_root).load_all()
+
+    assert catalog.plugins == {}
+    assert catalog.statuses["escaped-install"].error_code == "plugin_path_escape"
+
+
 def test_loader_rejects_non_utf8_skill_file(tmp_path):
     write_plugin(tmp_path, "demo", skill_contents=b"\xff\xfe")
 

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import asyncio
 import socket
 
 import httpx2
@@ -113,6 +114,55 @@ async def test_partial_startup_failure_closes_prior_clients() -> None:
 
     await manager.close()
     assert factory.clients[0].exit_count == 1
+    assert manager.server_ids() == []
+
+
+@pytest.mark.anyio
+async def test_startup_handshake_has_an_explicit_timeout() -> None:
+    class HangingClient:
+        async def __aenter__(self):
+            await asyncio.Event().wait()
+
+        async def __aexit__(self, *_args):
+            return None
+
+    manager = MCPClientManager(
+        client_factory=lambda _transport: HangingClient(),
+        startup_timeout_seconds=0.01,
+        shutdown_timeout_seconds=0.01,
+    )
+
+    with pytest.raises(MCPConnectionError, match="mcp_startup_timeout"):
+        await manager.start_server("demo.remote", resolved_http_config())
+
+    assert manager.server_ids() == []
+
+
+@pytest.mark.anyio
+async def test_shutdown_timeout_still_attempts_other_servers() -> None:
+    class HangingExitClient(FakeClient):
+        async def __aexit__(self, *_args):
+            self.exit_count += 1
+            await asyncio.Event().wait()
+
+    first = HangingExitClient()
+    second = FakeClient()
+    clients = [first, second]
+
+    def factory(_transport):
+        return clients.pop(0)
+
+    manager = MCPClientManager(
+        client_factory=factory,
+        shutdown_timeout_seconds=0.01,
+    )
+    await manager.start_server("demo.one", resolved_http_config())
+    await manager.start_server("demo.two", resolved_http_config())
+
+    with pytest.raises(MCPConnectionError, match="mcp_cleanup_timeout"):
+        await manager.close()
+
+    assert [first.exit_count, second.exit_count] == [1, 1]
     assert manager.server_ids() == []
 
 

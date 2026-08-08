@@ -60,12 +60,12 @@ def get_tool(name: str) -> Optional[Callable[[str], str]]:
 
 
 def list_tools() -> List[str]:
-    return [spec.name for spec in CAPABILITY_REGISTRY.list_specs()]
+    return sorted(set(_TOOL_REGISTRY) | {spec.name for spec in CAPABILITY_REGISTRY.list_specs()})
 
 
 def list_tool_metadata() -> List[dict]:
-    return [
-        {
+    structured = {
+        spec.name: {
             "name": spec.name,
             "description": spec.description,
             "source": spec.source.value,
@@ -75,7 +75,26 @@ def list_tool_metadata() -> List[dict]:
             "idempotent": spec.idempotent,
         }
         for spec in CAPABILITY_REGISTRY.list_specs()
-    ]
+    }
+    for name, entry in _TOOL_REGISTRY.items():
+        structured.setdefault(
+            name,
+            {
+                "name": name,
+                "description": entry.description,
+                "source": ToolSource.LOCAL.value,
+                "plugin_id": None,
+                "input_schema": {
+                    "type": "object",
+                    "properties": {"payload": {"type": "string"}},
+                    "required": ["payload"],
+                    "additionalProperties": False,
+                },
+                "side_effects": True,
+                "idempotent": False,
+            },
+        )
+    return [structured[name] for name in sorted(structured)]
 
 
 __all__ = [

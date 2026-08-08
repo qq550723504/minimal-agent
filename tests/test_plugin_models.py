@@ -137,3 +137,34 @@ def test_manifest_rejects_duplicate_ids_triggers_and_tool_names():
                 ],
             }
         )
+
+
+def test_manifest_normalizes_deduplicates_and_ignores_blank_triggers():
+    manifest = PluginManifest.model_validate(
+        {
+            "api_version": "minimal-agent/v1",
+            "id": "demo",
+            "version": "1.0.0",
+            "skills": [
+                {
+                    "id": "review",
+                    "path": "skills/review/SKILL.md",
+                    "triggers": ["  Review   PR  ", "review pr", "   "],
+                }
+            ],
+        }
+    )
+
+    assert manifest.skills[0].triggers == ["review pr"]
+
+
+@pytest.mark.parametrize("version", ["", "1", "1.0", "v1.0.0", "1.0.0.0"])
+def test_manifest_rejects_non_semantic_versions(version):
+    with pytest.raises(ValidationError):
+        PluginManifest.model_validate(
+            {
+                "api_version": "minimal-agent/v1",
+                "id": "demo",
+                "version": version,
+            }
+        )

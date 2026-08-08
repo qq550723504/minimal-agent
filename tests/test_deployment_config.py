@@ -71,3 +71,18 @@ def test_compose_mounts_plugins_read_only():
 
     assert "./plugins:/app/plugins:ro" in compose
     assert "AGENT_CAPABILITY_RUNTIME_ENABLED=${AGENT_CAPABILITY_RUNTIME_ENABLED:-false}" in compose
+
+
+def test_compose_forwards_and_documents_mcp_security_allowlists():
+    compose = (ROOT / "docker-compose.yml").read_text(encoding="utf-8")
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    guide = (ROOT / "docs" / "AGENT_GUIDE.md").read_text(encoding="utf-8")
+
+    assert "AGENT_MCP_ALLOWED_HOSTS=${AGENT_MCP_ALLOWED_HOSTS:-}" in compose
+    assert (
+        "AGENT_MCP_STDIO_ALLOWED_COMMANDS=${AGENT_MCP_STDIO_ALLOWED_COMMANDS:-}"
+        in compose
+    )
+    assert "AGENT_MCP_ALLOWED_HOSTS" in readme
+    assert "AGENT_MCP_STDIO_ALLOWED_COMMANDS" in readme
+    assert "Python 3.11+" in guide

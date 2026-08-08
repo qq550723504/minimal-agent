@@ -41,6 +41,7 @@ class PluginLoader:
             installation_name = manifest_path.parent.name
             raw_manifest: dict[str, Any] | None = None
             try:
+                _validate_manifest_location(self.plugin_root, manifest_path)
                 raw_manifest = _read_yaml_manifest(manifest_path)
                 try:
                     manifest = PluginManifest.model_validate(raw_manifest)
@@ -123,6 +124,24 @@ def _read_yaml_manifest(path: Path) -> dict[str, Any]:
     if not isinstance(raw, dict):
         raise PluginLoadError("plugin_manifest_invalid")
     return raw
+
+
+def _validate_manifest_location(configured_root: Path, manifest_path: Path) -> None:
+    """Establish trust in an installation before reading its manifest."""
+
+    installation = manifest_path.parent
+    if _is_link_or_junction(installation) or _is_link_or_junction(manifest_path):
+        raise PluginLoadError("plugin_path_escape")
+    try:
+        root_resolved = configured_root.resolve(strict=True)
+        installation_resolved = installation.resolve(strict=True)
+        manifest_resolved = manifest_path.resolve(strict=True)
+        installation_resolved.relative_to(root_resolved)
+        manifest_resolved.relative_to(installation_resolved)
+    except (OSError, ValueError) as error:
+        raise PluginLoadError("plugin_path_escape") from error
+    if not manifest_resolved.is_file():
+        raise PluginLoadError("plugin_manifest_invalid")
 
 
 def _validate_skill(plugin_root: Path, relative_path: str) -> Path:

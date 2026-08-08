@@ -167,14 +167,10 @@ def _resolve_addresses(hostname: str, port: int) -> tuple[ipaddress._BaseAddress
 
 
 def _unsafe_address(address: ipaddress._BaseAddress) -> bool:
-    return (
-        address.is_loopback
-        or address.is_private
-        or address.is_link_local
-        or address.is_multicast
-        or address.is_reserved
-        or address.is_unspecified
-    )
+    # ``is_private`` excludes shared CGNAT space (100.64.0.0/10). Production
+    # targets must instead be globally routable; development mode bypasses
+    # this check explicitly at the caller.
+    return not address.is_global
 
 
 def _normalize_hostname(hostname: str) -> str:

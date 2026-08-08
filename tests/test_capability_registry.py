@@ -75,6 +75,35 @@ async def test_timeout_has_stable_error_code():
     result = await registry.invoke(ToolCall(call_id="1", tool="demo.slow"), ToolInvocationContext())
 
     assert (result.status, result.error_code) == ("error", "tool_timeout")
+    assert result.retryable is True
+
+
+@pytest.mark.anyio
+async def test_non_idempotent_side_effect_timeout_has_unknown_outcome():
+    async def slow(arguments, context):
+        await asyncio.sleep(0.05)
+
+    registry = CapabilityRegistry()
+    registry.register(
+        make_spec(
+            "demo.unsafe_timeout",
+            timeout_seconds=0.001,
+            side_effects=True,
+            idempotent=False,
+        ),
+        slow,
+    )
+
+    result = await registry.invoke(
+        ToolCall(call_id="unsafe-1", tool="demo.unsafe_timeout"),
+        ToolInvocationContext(),
+    )
+
+    assert (result.status, result.error_code, result.retryable) == (
+        "unknown_outcome",
+        "tool_timeout",
+        False,
+    )
 
 
 @pytest.mark.anyio

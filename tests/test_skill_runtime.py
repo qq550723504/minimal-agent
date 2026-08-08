@@ -55,6 +55,14 @@ def test_explicit_skills_suppress_trigger_additions(skill_catalog):
     assert [skill.id for skill in selected] == ["demo.manual"]
 
 
+def test_explicit_empty_skill_list_suppresses_trigger_additions(skill_catalog):
+    selected = SkillResolver(skill_catalog, max_active=3).resolve(
+        "please review pull request", []
+    )
+
+    assert selected == []
+
+
 def test_trigger_matching_normalizes_full_phrases_and_applies_stable_limit(skill_catalog):
     selected = SkillResolver(skill_catalog, max_active=2).resolve(
         "Please  REVIEW\nPULL request before RELEASE", None

@@ -104,7 +104,16 @@ class CapabilityRegistry:
                         content=value,
                     )
             except asyncio.TimeoutError:
-                result = self._error_result(call, "tool_timeout", retryable=True)
+                if entry.spec.side_effects and not entry.spec.idempotent:
+                    result = ToolResult(
+                        call_id=call.call_id,
+                        tool=call.tool,
+                        status=ToolResultStatus.UNKNOWN_OUTCOME,
+                        error_code="tool_timeout",
+                        retryable=False,
+                    )
+                else:
+                    result = self._error_result(call, "tool_timeout", retryable=True)
             except ToolExecutionError as error:
                 status = (
                     ToolResultStatus.UNKNOWN_OUTCOME

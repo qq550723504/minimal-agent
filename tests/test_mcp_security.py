@@ -131,7 +131,10 @@ def test_http_normalizes_host_and_retains_all_validated_addresses(
     assert resolved.headers == {"Authorization": "Bearer test-token"}
 
 
-@pytest.mark.parametrize("address", ["127.0.0.1", "10.0.0.1", "169.254.1.1", "0.0.0.0"])
+@pytest.mark.parametrize(
+    "address",
+    ["127.0.0.1", "10.0.0.1", "100.64.0.1", "169.254.1.1", "0.0.0.0"],
+)
 def test_http_rejects_every_unsafe_resolved_address(http_manifest, monkeypatch, address):
     """One unsafe DNS answer must reject the whole connection target."""
     monkeypatch.setenv("DEMO_URL", "https://mcp.example.com/mcp")
@@ -146,6 +149,17 @@ def test_http_rejects_every_unsafe_resolved_address(http_manifest, monkeypatch, 
 
     with pytest.raises(MCPSecurityError, match="mcp_http_unsafe_address"):
         validate_http_config(http_manifest, os.environ, {"mcp.example.com"}, production=True)
+
+
+def test_http_dev_override_allows_non_global_loopback(http_manifest, monkeypatch):
+    monkeypatch.setenv("DEMO_URL", "http://127.0.0.1/mcp")
+    monkeypatch.setenv("DEMO_TOKEN", "test")
+
+    resolved = validate_http_config(
+        http_manifest, os.environ, {"127.0.0.1"}, production=False
+    )
+
+    assert resolved.addresses == ("127.0.0.1",)
 
 
 @pytest.mark.parametrize("url", ["https://user:pass@mcp.example.com", "https://mcp.example.com/#fragment"])
