@@ -8,7 +8,10 @@ from src.agent.capabilities.registry import CapabilityRegistry
 from src.agent.plugins.catalog import LoadedPlugin, PluginCatalog
 from src.agent.plugins.models import PluginManifest
 from src.agent.skills.loader import SkillCatalog
-from src.agent.skills.reference_tool import register_skill_reference_tool
+from src.agent.skills.reference_tool import (
+    _is_absolute_reference_path,
+    register_skill_reference_tool,
+)
 from src.agent.skills.resolver import SkillResolver
 
 
@@ -53,6 +56,11 @@ def test_explicit_skills_suppress_trigger_additions(skill_catalog):
     )
 
     assert [skill.id for skill in selected] == ["demo.manual"]
+
+
+@pytest.mark.parametrize("path", ["C:/Windows/win.ini", "C:\\Windows\\win.ini", "\\\\server\\share\\file.md"])
+def test_reference_path_detection_is_cross_platform(path):
+    assert _is_absolute_reference_path(path) is True
 
 
 def test_explicit_empty_skill_list_suppresses_trigger_additions(skill_catalog):

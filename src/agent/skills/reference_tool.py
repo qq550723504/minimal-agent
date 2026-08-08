@@ -1,7 +1,7 @@
 """Read the bounded, non-executable references of an active Skill."""
 
 import os
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 from typing import Any
 
 from src.agent.capabilities.errors import ToolExecutionError
@@ -78,7 +78,7 @@ def _max_reference_bytes() -> int:
 
 def _reference_path(references_root: Path, relative_path: str) -> Path:
     candidate_relative = Path(relative_path)
-    if candidate_relative.is_absolute() or _is_link_or_junction(references_root):
+    if _is_absolute_reference_path(relative_path) or _is_link_or_junction(references_root):
         raise ToolExecutionError("reference_path_escape")
 
     current = references_root
@@ -99,6 +99,16 @@ def _reference_path(references_root: Path, relative_path: str) -> Path:
     if not candidate.is_file():
         raise ToolExecutionError("reference_not_file")
     return candidate
+
+
+def _is_absolute_reference_path(value: str) -> bool:
+    """Recognize absolute paths using both POSIX and Windows semantics."""
+
+    return (
+        Path(value).is_absolute()
+        or PureWindowsPath(value).is_absolute()
+        or value.startswith(("/", "\\"))
+    )
 
 
 def _is_link_or_junction(path: Path) -> bool:
