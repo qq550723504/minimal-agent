@@ -7,6 +7,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) 
 ## [Unreleased]
 
 ### Added
+- Skills、Plugins 和 MCP 运行时：插件清单校验、Skill 目录与安全参考读取、MCP stdio/Streamable HTTP 客户端生命周期，以及 `/api/plugins`、`/api/skills` 目录接口。
+- MCP 工具 allowlist、DNS 地址固定、结果大小限制、未知结果状态和生命周期超时边界。
 - Ordered workflow execution for asynchronous plans.
 - SQLite persistence for queued workflow definitions, per-step results, retries, and lifecycle events.
 - Startup recovery from the first incomplete workflow step with owner-scoped task status reads.
@@ -17,6 +19,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) 
 ### Changed
 - Vector memory queries are isolated by user and persisted atomically.
 - CI now fails when dependency installation fails.
+- Compose now forwards capability and MCP runtime limits; plugin runtime remains opt-in and plugin directories are mounted read-only.
 
 ### Fixed
 - Multi-step queued requests no longer execute as unrelated concurrent tasks.
@@ -29,7 +32,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) 
 -
 
 ### Security
--
+- MCP stdio 精确命令 allowlist、shell 包装器拒绝、HTTP HTTPS/主机 allowlist、SSRF 地址校验、DNS rebinding 防护和 Skill 参考路径 containment。
 
 ## [0.0.1] - YYYY-MM-DD
 

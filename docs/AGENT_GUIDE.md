@@ -28,7 +28,8 @@ pip install -r requirements.txt
 - 设计点：模块化（便于替换模型与工具）、日志与 trace、错误补偿策略。
 
 ### 4.1 队列与任务状态
-项目提供 `/api/handle/queue`、`/api/tasks`、`/api/tools`、`/api/plugins` 和 `/api/skills` 接口：
+项目提供 `/api/handle`、`/api/handle/queue`、`/api/tasks`、`/api/tools`、`/api/plugins` 和 `/api/skills` 接口：
+- `/api/handle`：同步执行一次规划与工具调用。
 - `/api/handle/queue`：接收请求并将执行任务加入后台队列。
 - `/api/tasks`：查询任务状态、重试次数和执行结果。
 - `/api/tools`：列出当前可用工具及其描述。
@@ -36,6 +37,14 @@ pip install -r requirements.txt
 - `/api/skills`：列出已加载 Skill 的全局标识、所属插件和触发词。
 
 插件与 Skill 运行时默认由 `AGENT_CAPABILITY_RUNTIME_ENABLED=false` 关闭；关闭时服务不会访问 `AGENT_PLUGIN_DIR`，两个目录接口返回空列表。启用后，服务启动时读取已验证的插件清单、建立 Skill 目录并注册内部参考读取工具；必需插件的加载错误会阻止启动。生产 Compose 将 `./plugins` 以只读方式挂载到 `/app/plugins`。目录接口不会泄露插件命令、环境变量值、Skill 指令或参考文件内容。
+
+插件清单位于 `<AGENT_PLUGIN_DIR>/<installation>/plugin.yaml`，使用 `minimal-agent/v1` 契约。清单字段包括插件版本、启用/必需标志、Skill 声明和 MCP Server 声明；未知字段、重复 ID/触发词、非严格布尔值和非有限 timeout 都会被拒绝。Skill ID 会按插件 ID 做全局命名空间编码，MCP Server 与工具名同样避免点号分段碰撞。
+
+MCP Server 支持两种传输：
+- `stdio`：命令必须命中精确 allowlist，cwd 必须位于插件目录内，环境变量只允许从显式映射注入；shell 包装器和 Windows 批处理包装器拒绝。
+- `streamable_http`：生产环境要求 HTTPS 和精确主机 allowlist；DNS 返回地址会在连接前校验并固定，禁止重定向和代理环境变量。MCP 生命周期、工具发现、工具执行和结果大小均有独立边界。
+
+建议至少配置：`AGENT_MCP_ALLOWED_HOSTS`、`AGENT_MCP_STDIO_ALLOWED_COMMANDS`、`AGENT_MAX_TOOL_RESULT_BYTES`、`AGENT_MAX_ACTIVE_SKILLS` 和三个 `AGENT_MCP_*_TIMEOUT_SECONDS` 变量。所有 MCP allowlist 默认拒绝，超时必须是有限正数。
 
 队列工作流使用 `WORKFLOW_STORE_PATH` 指定的 SQLite 数据库保存工作流定义、步骤结果、重试状态和生命周期事件。每个步骤完成后立即提交状态；服务重启时会把中断中的工作流恢复为待执行，并从第一个未完成步骤继续。该机制提供至少一次执行语义，步骤执行期间进程退出可能导致该步骤再次执行。任意 Python callable 直接提交到内部队列仍仅支持进程内执行，不支持跨进程恢复。
 
@@ -69,7 +78,8 @@ http_post: {"url": "https://api.example.com/items", "json": {"name": "agent"}}
 
 ## 五、测试策略
 - 单元测试：模块内部逻辑。
-- 集成测试：模拟工具/API（stub/mocks）。
+- 集成测试：模拟工具/API（stub/mocks），覆盖插件加载、Skill 参考读取、MCP stdio/Streamable HTTP 生命周期和安全边界。
+- 回归测试：验证 allowlist、SSRF/DNS 固定、跨平台路径、命名空间碰撞、unknown outcome、结果大小和非有限 timeout。
 - 场景回放：保存对话与事件用于回放验证。
 
 ## 六、部署与运维
