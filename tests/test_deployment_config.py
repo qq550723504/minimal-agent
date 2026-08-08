@@ -136,8 +136,9 @@ def test_compose_forwards_global_tool_result_limit():
 def test_docker_build_context_excludes_local_runtime_data():
     dockerignore = (ROOT / ".dockerignore").read_text(encoding="utf-8").splitlines()
 
-    for entry in (".git", ".worktrees", "data", "tests", "docs", "*.log", "*.sqlite3", "*.json"):
+    for entry in (".git", ".worktrees", "data", "tests", "docs", "*.log", "*.sqlite3", "vector_memory.json"):
         assert entry in dockerignore
+    assert "*.json" not in dockerignore
 
 
 def test_dockerfile_copies_only_runtime_inputs():
@@ -225,6 +226,14 @@ def test_production_compose_requires_security_variables():
     assert "${AGENT_API_KEYS:?" in compose
     assert "${AGENT_METRICS_API_KEY:?" in compose
     assert "${AGENT_HTTP_ALLOWED_HOSTS:?" in compose
+
+
+def test_prometheus_ui_binds_only_to_localhost():
+    compose = (ROOT / "docker-compose.yml").read_text(encoding="utf-8")
+    production = (ROOT / "docker-compose.production.yml").read_text(encoding="utf-8")
+
+    assert '127.0.0.1:9090:9090' in compose
+    assert "ports: []" not in production
 
 
 def test_ci_and_release_install_development_dependencies_and_check_them():

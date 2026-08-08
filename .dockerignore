@@ -12,5 +12,5 @@ tests
 docs
 *.log
 *.sqlite3
-*.json
+vector_memory.json
 audit.log
