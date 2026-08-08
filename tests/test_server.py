@@ -1,6 +1,10 @@
+import asyncio
+
 from fastapi.testclient import TestClient
 from src.agent import server
+from src.agent.capabilities.models import ToolCall, ToolInvocationContext
 from src.agent.task_queue import enqueue_task
+from src.agent.tool_registry import get_capability_registry
 
 
 def test_handle_endpoint():
@@ -47,6 +51,36 @@ def test_metrics_requires_key_when_authentication_is_enabled(monkeypatch):
 
     assert client.get("/metrics").status_code == 401
     assert client.get("/metrics", headers={"Authorization": "Bearer secret"}).status_code == 200
+
+
+def test_mcp_and_tool_metrics_use_only_bounded_non_sensitive_labels(monkeypatch):
+    """Metrics must expose runtime outcomes without call IDs or tool arguments."""
+    monkeypatch.setenv("AGENT_AUTH_REQUIRED", "false")
+    monkeypatch.setenv("AGENT_ENABLE_MEMORY", "false")
+    call_id = "metric-call-id"
+    secret_argument = "metric-secret-argument"
+
+    with TestClient(server.app) as client:
+        asyncio.run(
+            get_capability_registry().invoke(
+                ToolCall(
+                    call_id=call_id,
+                    tool="missing.metric.tool",
+                    arguments={"secret": secret_argument},
+                ),
+                ToolInvocationContext(owner_id="sensitive-owner"),
+            )
+        )
+        metrics = client.get("/metrics").text
+
+    assert "agent_plugin_load_total" in metrics
+    assert "agent_mcp_connection_status" in metrics
+    assert "agent_tool_calls_total" in metrics
+    assert "agent_tool_call_duration_seconds" in metrics
+    assert "agent_tool_unknown_outcome_total" in metrics
+    assert call_id not in metrics
+    assert secret_argument not in metrics
+    assert "sensitive-owner" not in metrics
 
 
 def test_generated_api_docs_require_authentication(monkeypatch):

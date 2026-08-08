@@ -1,4 +1,5 @@
 import logging
+from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any, List, Optional
 
@@ -10,7 +11,9 @@ from src.agent import config
 from src.agent.auth import get_current_user
 from src.agent.main import handle_input, enqueue_input
 from src.agent.memory_manager import initialize_memory, save_memory
-from src.agent.observability import setup_metrics
+from src.agent.capabilities.models import ToolSource
+from src.agent.mcp.manager import MCPClientManager
+from src.agent.observability import record_catalog_startup, setup_metrics
 from src.agent.plugins.catalog import PluginCatalog, PluginStatus
 from src.agent.plugins.loader import PluginLoader
 from src.agent.security import ClientInputError, audit_log, sanitize_input
@@ -24,18 +27,7 @@ logging.basicConfig(
     format="%(asctime)s %(levelname)s %(name)s %(message)s",
 )
 
-app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
-app.state.plugin_catalog = PluginCatalog()
-app.state.skill_catalog = SkillCatalog()
-setup_metrics(app)
-
-
 _CAPABILITY_RUNTIME_TOOL_NAMES = ("internal.skill_read_reference",)
-
-
-@app.exception_handler(ClientInputError)
-async def client_input_error_handler(_request, exc: ClientInputError):
-    return JSONResponse(status_code=400, content={"detail": str(exc)})
 
 
 class PromptIn(BaseModel):
@@ -71,35 +63,63 @@ class SkillCatalogOut(BaseModel):
     triggers: List[str] = []
 
 
-@app.on_event("startup")
-def on_startup():
-    _clear_capability_runtime()
-    if config.CAPABILITY_RUNTIME_ENABLED:
-        plugin_catalog = PluginLoader(Path(config.PLUGIN_DIR)).load_all()
-        skill_catalog = SkillCatalog.from_plugins(plugin_catalog)
-        register_skill_reference_tool(get_capability_registry(), skill_catalog)
-    else:
-        plugin_catalog = PluginCatalog()
-        skill_catalog = SkillCatalog()
-    app.state.plugin_catalog = plugin_catalog
-    app.state.skill_catalog = skill_catalog
+@asynccontextmanager
+async def lifespan(application: FastAPI):
+    """Own the capability runtime and its MCP transports for one app lifetime."""
+    manager = MCPClientManager()
+    queue_started = False
     initialize_memory()
-    start_queue()
+    try:
+        _clear_capability_runtime()
+        if config.CAPABILITY_RUNTIME_ENABLED:
+            plugin_catalog = PluginLoader(Path(config.PLUGIN_DIR)).load_all()
+            await manager.start_catalog(plugin_catalog, get_capability_registry())
+            skill_catalog = SkillCatalog.from_plugins(plugin_catalog)
+            register_skill_reference_tool(get_capability_registry(), skill_catalog)
+        else:
+            plugin_catalog = PluginCatalog()
+            skill_catalog = SkillCatalog()
+
+        application.state.plugin_catalog = plugin_catalog
+        application.state.skill_catalog = skill_catalog
+        application.state.mcp_manager = manager
+        record_catalog_startup(plugin_catalog, len(manager.server_ids()))
+        start_queue()
+        queue_started = True
+        yield
+    finally:
+        if queue_started:
+            stop_queue()
+        try:
+            await manager.close()
+        except Exception:
+            logging.exception("MCP client cleanup failed")
+        _clear_capability_runtime()
+        save_memory()
 
 
-@app.on_event("shutdown")
-def on_shutdown():
-    _clear_capability_runtime()
-    save_memory()
-    stop_queue()
+app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None, lifespan=lifespan)
+app.state.plugin_catalog = PluginCatalog()
+app.state.skill_catalog = SkillCatalog()
+app.state.mcp_manager = None
+setup_metrics(app)
+
+
+@app.exception_handler(ClientInputError)
+async def client_input_error_handler(_request, exc: ClientInputError):
+    return JSONResponse(status_code=400, content={"detail": str(exc)})
 
 
 def _clear_capability_runtime() -> None:
     registry = get_capability_registry()
     for tool_name in _CAPABILITY_RUNTIME_TOOL_NAMES:
         registry.unregister(tool_name)
+    for spec in registry.list_specs():
+        if spec.source is ToolSource.MCP:
+            registry.unregister(spec.name)
     app.state.plugin_catalog = PluginCatalog()
     app.state.skill_catalog = SkillCatalog()
+    app.state.mcp_manager = None
 
 
 @app.get("/")
@@ -169,6 +189,11 @@ def list_tasks_route(status: Optional[str] = None, user_id: str = Depends(get_cu
 class ToolInfoOut(BaseModel):
     name: str
     description: str = ""
+    source: str
+    plugin_id: Optional[str] = None
+    input_schema: dict[str, Any]
+    side_effects: bool
+    idempotent: bool
 
 
 @app.get("/api/tools")

@@ -3,11 +3,13 @@ import inspect
 import json
 from collections.abc import Awaitable, Callable, Iterable
 from dataclasses import dataclass
+from time import perf_counter
 from typing import Any
 
 from jsonschema import Draft202012Validator
 
 from src.agent.config import MAX_TOOL_RESULT_BYTES
+from src.agent.observability import observe_tool_call
 
 from .errors import ToolExecutionError
 from .models import ToolCall, ToolInvocationContext, ToolResult, ToolResultStatus, ToolSpec
@@ -79,45 +81,48 @@ class CapabilityRegistry:
 
     async def invoke(self, call: ToolCall, context: ToolInvocationContext) -> ToolResult:
         entry = self._entries.get(call.tool)
+        started = perf_counter()
         if entry is None:
-            return self._error_result(call, "unknown_tool")
+            result = self._error_result(call, "unknown_tool")
+        elif not entry.validator.is_valid(call.arguments):
+            result = self._error_result(call, "invalid_tool_arguments")
+        else:
+            try:
+                value = entry.handler(call.arguments, context)
+                if inspect.isawaitable(value):
+                    value = await asyncio.wait_for(value, timeout=entry.spec.timeout_seconds)
+                serialized = json.dumps(value, ensure_ascii=False, default=str)
+                if len(serialized.encode("utf-8")) > min(
+                    entry.spec.result_size_limit, self._max_result_bytes
+                ):
+                    result = self._error_result(call, "tool_result_too_large")
+                else:
+                    result = ToolResult(
+                        call_id=call.call_id,
+                        tool=call.tool,
+                        status=ToolResultStatus.SUCCESS,
+                        content=value,
+                    )
+            except asyncio.TimeoutError:
+                result = self._error_result(call, "tool_timeout", retryable=True)
+            except ToolExecutionError as error:
+                status = (
+                    ToolResultStatus.UNKNOWN_OUTCOME
+                    if error.unknown_outcome
+                    else ToolResultStatus.ERROR
+                )
+                result = ToolResult(
+                    call_id=call.call_id,
+                    tool=call.tool,
+                    status=status,
+                    error_code=error.error_code,
+                    retryable=error.retryable,
+                )
+            except Exception:
+                result = self._error_result(call, "tool_execution_failed")
 
-        if not entry.validator.is_valid(call.arguments):
-            return self._error_result(call, "invalid_tool_arguments")
-
-        try:
-            value = entry.handler(call.arguments, context)
-            if inspect.isawaitable(value):
-                value = await asyncio.wait_for(value, timeout=entry.spec.timeout_seconds)
-            serialized = json.dumps(value, ensure_ascii=False, default=str)
-            if len(serialized.encode("utf-8")) > min(
-                entry.spec.result_size_limit, self._max_result_bytes
-            ):
-                return self._error_result(call, "tool_result_too_large")
-        except asyncio.TimeoutError:
-            return self._error_result(call, "tool_timeout", retryable=True)
-        except ToolExecutionError as error:
-            status = (
-                ToolResultStatus.UNKNOWN_OUTCOME
-                if error.unknown_outcome
-                else ToolResultStatus.ERROR
-            )
-            return ToolResult(
-                call_id=call.call_id,
-                tool=call.tool,
-                status=status,
-                error_code=error.error_code,
-                retryable=error.retryable,
-            )
-        except Exception:
-            return self._error_result(call, "tool_execution_failed")
-
-        return ToolResult(
-            call_id=call.call_id,
-            tool=call.tool,
-            status=ToolResultStatus.SUCCESS,
-            content=value,
-        )
+        observe_tool_call(entry.spec if entry is not None else None, result, perf_counter() - started)
+        return result
 
     @staticmethod
     def _error_result(

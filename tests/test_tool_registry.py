@@ -70,4 +70,12 @@ def test_list_tools_includes_sorted_structured_capabilities():
 
     assert list_tools() == sorted(list_tools())
     assert "structured.catalog" in list_tools()
-    assert {"name": "structured.catalog", "description": "A structured capability"} in list_tool_metadata()
+    assert {
+        "name": "structured.catalog",
+        "description": "A structured capability",
+        "source": "local",
+        "plugin_id": None,
+        "input_schema": {"type": "object"},
+        "side_effects": False,
+        "idempotent": True,
+    } in list_tool_metadata()

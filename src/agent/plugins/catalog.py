@@ -28,10 +28,12 @@ class LoadedPlugin:
 class PluginCatalog:
     plugins: dict[str, LoadedPlugin] = field(default_factory=dict)
     statuses: dict[str, PluginStatus] = field(default_factory=dict)
+    mcp_failure_count: int = 0
 
     def disable_plugin(self, plugin_id: str, error_code: str) -> None:
         """Remove a failed runtime plugin while preserving its safe status record."""
         plugin = self.plugins.pop(plugin_id)
+        self.mcp_failure_count += 1
         self.statuses[plugin.installation_name] = PluginStatus(
             plugin.installation_name,
             "disabled",

@@ -65,7 +65,15 @@ def list_tools() -> List[str]:
 
 def list_tool_metadata() -> List[dict]:
     return [
-        {"name": spec.name, "description": spec.description}
+        {
+            "name": spec.name,
+            "description": spec.description,
+            "source": spec.source.value,
+            "plugin_id": spec.plugin_id,
+            "input_schema": spec.input_schema,
+            "side_effects": spec.side_effects,
+            "idempotent": spec.idempotent,
+        }
         for spec in CAPABILITY_REGISTRY.list_specs()
     ]
 

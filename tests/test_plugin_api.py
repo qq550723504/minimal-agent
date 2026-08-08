@@ -1,4 +1,5 @@
 from pathlib import Path
+import sys
 
 import pytest
 from fastapi.testclient import TestClient
@@ -8,6 +9,9 @@ from src.agent.plugins.loader import RequiredPluginError
 from src.agent.tool_registry import get_capability_registry
 
 
+MCP_FIXTURE = Path(__file__).parent / "fixtures" / "mcp_echo_server.py"
+
+
 def _write_plugin(root: Path) -> None:
     skill = root / "demo" / "skills" / "review" / "SKILL.md"
     skill.parent.mkdir(parents=True)
@@ -15,7 +19,7 @@ def _write_plugin(root: Path) -> None:
     (skill.parent / "references").mkdir()
     (skill.parent / "references" / "secret.md").write_text("private reference", encoding="utf-8")
     (root / "demo" / "plugin.yaml").write_text(
-        """api_version: minimal-agent/v1
+        f"""api_version: minimal-agent/v1
 id: demo
 version: 1.2.3
 skills:
@@ -25,11 +29,12 @@ skills:
 mcp_servers:
   - id: local
     transport: stdio
-    command: private-command
+    command: {sys.executable}
+    args: [{MCP_FIXTURE.as_posix()}]
     env_vars:
-      TOKEN: private-token
+      TOKEN: PLUGIN_TEST_TOKEN
     allowed_tools:
-      - name: read_issue
+      - name: echo
         side_effects: false
         idempotent: true
 """,
@@ -39,8 +44,32 @@ mcp_servers:
 
 def _configure_runtime(monkeypatch, plugin_dir: Path, *, enabled: bool) -> None:
     monkeypatch.setenv("AGENT_ENABLE_MEMORY", "false")
+    monkeypatch.setenv("PLUGIN_TEST_TOKEN", "private-token")
     monkeypatch.setattr(server.config, "CAPABILITY_RUNTIME_ENABLED", enabled)
     monkeypatch.setattr(server.config, "PLUGIN_DIR", str(plugin_dir))
+    monkeypatch.setattr(server.config, "MCP_STDIO_ALLOWED_COMMANDS", frozenset({sys.executable}))
+
+
+def _write_missing_mcp_plugin(root: Path, *, required: bool) -> None:
+    plugin = root / "demo"
+    plugin.mkdir(parents=True)
+    (plugin / "plugin.yaml").write_text(
+        f"""api_version: minimal-agent/v1
+id: demo
+version: 1.0.0
+required: {str(required).lower()}
+mcp_servers:
+  - id: echo
+    transport: stdio
+    command: {sys.executable}
+    args: [{MCP_FIXTURE.as_posix()}]
+    allowed_tools:
+      - name: missing
+        side_effects: false
+        idempotent: true
+""",
+        encoding="utf-8",
+    )
 
 
 def test_plugin_and_skill_catalogs_require_auth(monkeypatch):
@@ -70,7 +99,7 @@ def test_catalog_endpoints_expose_only_safe_declarations(monkeypatch, tmp_path):
             "plugin_id": "demo",
             "version": "1.2.3",
             "error_code": None,
-            "capabilities": ["read_issue"],
+            "capabilities": ["echo"],
         }
     ]
     assert skills == [
@@ -143,5 +172,40 @@ skills:
     _configure_runtime(monkeypatch, plugin_dir, enabled=True)
 
     with pytest.raises(RequiredPluginError, match="plugin_skill_missing"):
+        with TestClient(server.app):
+            pass
+
+
+def test_optional_mcp_plugin_failure_leaves_api_healthy_and_reports_safe_status(
+    monkeypatch, tmp_path
+):
+    """Fails if lifespan stops treating optional MCP discovery errors as catalog state."""
+    plugin_dir = tmp_path / "plugins"
+    _write_missing_mcp_plugin(plugin_dir, required=False)
+    _configure_runtime(monkeypatch, plugin_dir, enabled=True)
+    monkeypatch.setattr(server.config, "MCP_STDIO_ALLOWED_COMMANDS", frozenset({sys.executable}))
+
+    with TestClient(server.app) as client:
+        assert client.get("/").status_code == 200
+        assert client.get("/api/plugins").json() == [
+            {
+                "installation_name": "demo",
+                "state": "disabled",
+                "plugin_id": "demo",
+                "version": "1.0.0",
+                "error_code": "declared_tool_missing",
+                "capabilities": [],
+            }
+        ]
+
+
+def test_required_mcp_plugin_failure_prevents_application_startup(monkeypatch, tmp_path):
+    """Fails if required MCP discovery errors no longer abort TestClient startup."""
+    plugin_dir = tmp_path / "plugins"
+    _write_missing_mcp_plugin(plugin_dir, required=True)
+    _configure_runtime(monkeypatch, plugin_dir, enabled=True)
+    monkeypatch.setattr(server.config, "MCP_STDIO_ALLOWED_COMMANDS", frozenset({sys.executable}))
+
+    with pytest.raises(RequiredPluginError, match="declared_tool_missing"):
         with TestClient(server.app):
             pass
