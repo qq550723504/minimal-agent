@@ -15,3 +15,6 @@ VECTOR_MEMORY_PATH = os.getenv("VECTOR_MEMORY_PATH", "vector_memory.json").strip
 ENABLE_MEMORY = _bool_env("AGENT_ENABLE_MEMORY", "true")
 QUEUE_WORKER_COUNT = int(os.getenv("QUEUE_WORKER_COUNT", "2"))
 WORKFLOW_STORE_PATH = os.getenv("WORKFLOW_STORE_PATH", "data/workflows.sqlite3").strip()
+MAX_TOOL_RESULT_BYTES = int(os.getenv("AGENT_MAX_TOOL_RESULT_BYTES", "1048576"))
+if MAX_TOOL_RESULT_BYTES <= 0:
+    raise ValueError("AGENT_MAX_TOOL_RESULT_BYTES must be positive")
