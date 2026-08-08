@@ -62,6 +62,20 @@ class RecordingTransport(httpx2.AsyncBaseTransport):
         return None
 
 
+class FailoverTransport(httpx2.AsyncBaseTransport):
+    def __init__(self) -> None:
+        self.hosts: list[str] = []
+
+    async def handle_async_request(self, request: httpx2.Request) -> httpx2.Response:
+        self.hosts.append(request.url.host)
+        if len(self.hosts) == 1:
+            raise httpx2.ConnectError("first address unavailable", request=request)
+        return httpx2.Response(200, request=request, content=b"ok")
+
+    async def aclose(self) -> None:
+        return None
+
+
 def resolved_http_config(*, address: str = "127.0.0.1") -> ResolvedHTTPConfig:
     return ResolvedHTTPConfig(
         url="https://mcp.example.test/tools",
@@ -244,6 +258,25 @@ async def test_reconnect_uses_freshly_revalidated_http_config(
 
 
 @pytest.mark.anyio
+async def test_failed_reconnect_keeps_unrelated_clients_alive() -> None:
+    factory = FakeClientFactory(fail_at=2)
+    manager = MCPClientManager(
+        client_factory=factory,
+        http_config_resolver=lambda config: config,
+    )
+    await manager.start_server("demo.one", resolved_http_config())
+    await manager.start_server("demo.two", resolved_http_config())
+
+    with pytest.raises(MCPConnectionError, match="mcp_connection_failed"):
+        await manager.reconnect_server("demo.one")
+
+    assert manager.server_ids() == ["demo.two"]
+    assert factory.clients[1].connected is True
+    assert factory.clients[1].exit_count == 0
+    await manager.close()
+
+
+@pytest.mark.anyio
 async def test_reconnect_rejects_changed_dns_before_closing_current_client(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -318,6 +351,25 @@ async def test_pinned_transport_uses_validated_address_after_dns_changes(
     assert request.url.host == "127.0.0.1"
     assert request.headers["Host"] == "mcp.example.test"
     assert request.extensions["sni_hostname"] == "mcp.example.test"
+
+
+@pytest.mark.anyio
+async def test_pinned_transport_fails_over_across_validated_addresses() -> None:
+    config = ResolvedHTTPConfig(
+        url="https://mcp.example.test/tools",
+        hostname="mcp.example.test",
+        port=443,
+        headers={},
+        addresses=("2001:db8::1", "192.0.2.10"),
+    )
+    delegate = FailoverTransport()
+    transport = PinnedHostAsyncTransport(config, delegate=delegate)
+
+    async with httpx2.AsyncClient(transport=transport) as client:
+        response = await client.get(config.url)
+
+    assert response.status_code == 200
+    assert delegate.hosts == ["2001:db8::1", "192.0.2.10"]
 
 
 @pytest.mark.anyio

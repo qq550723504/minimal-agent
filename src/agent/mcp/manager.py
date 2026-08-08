@@ -288,7 +288,7 @@ class MCPClientManager:
         return await self._start_server(
             server_id,
             config,
-            cleanup_active_on_failure=True,
+            cleanup_active_on_failure=False,
             revalidator=revalidator if isinstance(config, ResolvedHTTPConfig) else None,
         )
 

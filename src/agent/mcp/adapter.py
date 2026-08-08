@@ -146,14 +146,39 @@ async def prepare_server_tools(
             idempotent=manifest_tool.idempotent,
             result_size_limit=manifest_tool.result_size_limit,
         )
-        registrations.append((spec, _remote_handler(resolve_client, remote_tool.name)))
+        registrations.append(
+            (
+                spec,
+                _remote_handler(
+                    resolve_client,
+                    remote_tool.name,
+                    side_effects=manifest_tool.side_effects,
+                    idempotent=manifest_tool.idempotent,
+                ),
+            )
+        )
     return registrations
 
 
-def _remote_handler(resolve_client: ClientResolver, remote_name: str) -> CapabilityHandler:
+def _remote_handler(
+    resolve_client: ClientResolver,
+    remote_name: str,
+    *,
+    side_effects: bool,
+    idempotent: bool,
+) -> CapabilityHandler:
     async def invoke(arguments: dict[str, Any], _context: ToolInvocationContext) -> Any:
         client = resolve_client()
-        result = await client.call_tool(remote_name, arguments)
+        try:
+            result = await client.call_tool(remote_name, arguments)
+        except Exception:
+            if side_effects and not idempotent:
+                raise ToolExecutionError(
+                    "mcp_tool_unknown_outcome",
+                    retryable=False,
+                    unknown_outcome=True,
+                ) from None
+            raise
         if result.is_error:
             raise ToolExecutionError("mcp_tool_error", retryable=False)
         if result.structured_content is not None:

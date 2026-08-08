@@ -7,6 +7,8 @@ from time import perf_counter
 from typing import Any
 
 from jsonschema import Draft202012Validator
+from referencing import Registry
+from referencing.exceptions import Unresolvable
 
 from src.agent.config import MAX_TOOL_RESULT_BYTES
 from src.agent.observability import observe_tool_call
@@ -23,6 +25,19 @@ class _RegistryEntry:
     spec: ToolSpec
     handler: CapabilityHandler
     validator: Draft202012Validator
+
+
+def _reject_remote_schema(uri: str):
+    """Never retrieve schemas from a URI advertised by a tool server."""
+
+    raise Unresolvable(ref=uri)
+
+
+_NO_REMOTE_SCHEMA_REGISTRY = Registry(retrieve=_reject_remote_schema)
+
+
+def _build_validator(schema: dict[str, Any]) -> Draft202012Validator:
+    return Draft202012Validator(schema, registry=_NO_REMOTE_SCHEMA_REGISTRY)
 
 
 class CapabilityRegistry:
@@ -43,7 +58,7 @@ class CapabilityRegistry:
         self._entries[spec.name] = _RegistryEntry(
             spec=spec,
             handler=handler,
-            validator=Draft202012Validator(spec.input_schema),
+            validator=_build_validator(spec.input_schema),
         )
 
     def register_many(self, items: Iterable[tuple[ToolSpec, CapabilityHandler]]) -> None:
@@ -61,7 +76,7 @@ class CapabilityRegistry:
             spec.name: _RegistryEntry(
                 spec=spec,
                 handler=handler,
-                validator=Draft202012Validator(spec.input_schema),
+                validator=_build_validator(spec.input_schema),
             )
             for spec, handler in pending
         }
@@ -84,25 +99,38 @@ class CapabilityRegistry:
         started = perf_counter()
         if entry is None:
             result = self._error_result(call, "unknown_tool")
-        elif not entry.validator.is_valid(call.arguments):
-            result = self._error_result(call, "invalid_tool_arguments")
         else:
             try:
-                value = entry.handler(call.arguments, context)
-                if inspect.isawaitable(value):
-                    value = await asyncio.wait_for(value, timeout=entry.spec.timeout_seconds)
-                serialized = json.dumps(value, ensure_ascii=False, default=str)
-                if len(serialized.encode("utf-8")) > min(
-                    entry.spec.result_size_limit, self._max_result_bytes
-                ):
-                    result = self._error_result(call, "tool_result_too_large")
+                try:
+                    valid_arguments = entry.validator.is_valid(call.arguments)
+                except Exception:
+                    # Unresolvable refs (including all remote refs) are invalid
+                    # arguments, never an execution failure or network request.
+                    valid_arguments = False
+                if not valid_arguments:
+                    result = self._error_result(call, "invalid_tool_arguments")
                 else:
-                    result = ToolResult(
-                        call_id=call.call_id,
-                        tool=call.tool,
-                        status=ToolResultStatus.SUCCESS,
-                        content=value,
-                    )
+                    async with asyncio.timeout(entry.spec.timeout_seconds):
+                        if _is_async_callable(entry.handler):
+                            value = entry.handler(call.arguments, context)
+                        else:
+                            value = await asyncio.to_thread(
+                                entry.handler, call.arguments, context
+                            )
+                        if inspect.isawaitable(value):
+                            value = await value
+                    serialized = json.dumps(value, ensure_ascii=False, default=str)
+                    if len(serialized.encode("utf-8")) > min(
+                        entry.spec.result_size_limit, self._max_result_bytes
+                    ):
+                        result = self._error_result(call, "tool_result_too_large")
+                    else:
+                        result = ToolResult(
+                            call_id=call.call_id,
+                            tool=call.tool,
+                            status=ToolResultStatus.SUCCESS,
+                            content=value,
+                        )
             except asyncio.TimeoutError:
                 if entry.spec.side_effects and not entry.spec.idempotent:
                     result = ToolResult(
@@ -147,3 +175,9 @@ class CapabilityRegistry:
             error_code=error_code,
             retryable=retryable,
         )
+
+
+def _is_async_callable(handler: CapabilityHandler) -> bool:
+    return inspect.iscoroutinefunction(handler) or inspect.iscoroutinefunction(
+        getattr(handler, "__call__", None)
+    )

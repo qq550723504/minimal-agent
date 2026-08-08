@@ -1,5 +1,6 @@
 """Strict contracts for administrator-provided plugin manifests."""
 
+import math
 from collections.abc import Iterable
 from typing import Annotated, Literal, TypeAlias
 
@@ -43,6 +44,13 @@ class AllowedToolManifest(BaseModel):
     idempotent: bool
     timeout_seconds: float = Field(default=30.0, gt=0)
     result_size_limit: int = Field(default=1_048_576, gt=0)
+
+    @field_validator("timeout_seconds")
+    @classmethod
+    def reject_non_finite_timeout(cls, value: float) -> float:
+        if not math.isfinite(value):
+            raise ValueError("timeout_seconds must be finite")
+        return value
 
 
 class StdioMCPServerManifest(BaseModel):

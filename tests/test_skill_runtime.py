@@ -84,6 +84,35 @@ def test_unknown_explicit_skill_is_rejected(skill_catalog):
         SkillResolver(skill_catalog).resolve("anything", ["demo.missing"])
 
 
+def test_skill_namespace_escapes_dots_without_collisions(tmp_path):
+    def loaded(plugin_id: str, skill_id: str, name: str) -> LoadedPlugin:
+        root = tmp_path / name
+        path = root / "SKILL.md"
+        path.parent.mkdir(parents=True)
+        path.write_text("# skill\n", encoding="utf-8")
+        manifest = PluginManifest.model_validate(
+            {
+                "api_version": "minimal-agent/v1",
+                "id": plugin_id,
+                "version": "1.0.0",
+                "skills": [{"id": skill_id, "path": "SKILL.md"}],
+            }
+        )
+        return LoadedPlugin(name, root, manifest, {skill_id: path})
+
+    catalog = PluginCatalog(
+        plugins={
+            "a.b": loaded("a.b", "c", "one"),
+            "a": loaded("a", "b.c", "two"),
+        }
+    )
+
+    skills = SkillCatalog.from_plugins(catalog)
+
+    assert len(skills.skills) == 2
+    assert "a.b.c" not in skills.skills
+
+
 @pytest.fixture
 def reference_registry(tmp_path, monkeypatch):
     monkeypatch.setenv("AGENT_MAX_SKILL_REFERENCE_BYTES", "64")

@@ -1,4 +1,5 @@
 import asyncio
+import time
 
 import pytest
 
@@ -76,6 +77,55 @@ async def test_timeout_has_stable_error_code():
 
     assert (result.status, result.error_code) == ("error", "tool_timeout")
     assert result.retryable is True
+
+
+@pytest.mark.anyio
+async def test_timeout_applies_to_blocking_sync_handler():
+    def slow(arguments, context):
+        time.sleep(0.05)
+
+    registry = CapabilityRegistry()
+    registry.register(make_spec("demo.sync_slow", timeout_seconds=0.001), slow)
+
+    started = time.perf_counter()
+    result = await registry.invoke(
+        ToolCall(call_id="sync-1", tool="demo.sync_slow"), ToolInvocationContext()
+    )
+
+    assert result.error_code == "tool_timeout"
+    assert time.perf_counter() - started < 0.04
+
+
+@pytest.mark.anyio
+async def test_remote_schema_refs_are_rejected_without_retrieval():
+    called = False
+
+    def handler(arguments, context):
+        nonlocal called
+        called = True
+        return "unexpected"
+
+    registry = CapabilityRegistry()
+    registry.register(
+        make_spec(
+            "demo.remote_schema",
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "value": {"$ref": "https://metadata.internal/schema.json"}
+                },
+            },
+        ),
+        handler,
+    )
+
+    result = await registry.invoke(
+        ToolCall(call_id="schema-1", tool="demo.remote_schema", arguments={"value": 1}),
+        ToolInvocationContext(),
+    )
+
+    assert result.error_code == "invalid_tool_arguments"
+    assert called is False
 
 
 @pytest.mark.anyio

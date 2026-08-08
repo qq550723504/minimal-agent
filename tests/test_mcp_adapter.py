@@ -269,6 +269,36 @@ async def test_remote_error_is_not_treated_as_success() -> None:
 
 
 @pytest.mark.anyio
+async def test_non_idempotent_transport_failure_is_unknown_outcome() -> None:
+    from src.agent.mcp.adapter import register_server_tools
+
+    class DroppedConnectionClient(FakeMCPClient):
+        async def call_tool(self, name: str, arguments: dict | None = None):
+            raise ConnectionError("connection dropped after commit")
+
+    client = DroppedConnectionClient({None: page([remote_tool("write")])})
+    registry = CapabilityRegistry()
+    await register_server_tools(
+        "demo",
+        "remote",
+        client,
+        [AllowedToolManifest(name="write", side_effects=True, idempotent=False)],
+        registry,
+    )
+
+    result = await registry.invoke(
+        ToolCall(call_id="write-1", tool="demo.remote.write", arguments={}),
+        ToolInvocationContext(),
+    )
+
+    assert (result.status, result.error_code, result.retryable) == (
+        "unknown_outcome",
+        "mcp_tool_unknown_outcome",
+        False,
+    )
+
+
+@pytest.mark.anyio
 async def test_structured_content_is_preserved() -> None:
     from src.agent.mcp.adapter import register_server_tools
 

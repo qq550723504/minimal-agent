@@ -1,7 +1,8 @@
+import math
 from enum import StrEnum
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class ToolSource(StrEnum):
@@ -28,6 +29,13 @@ class ToolSpec(BaseModel):
     side_effects: bool
     idempotent: bool
     result_size_limit: int = Field(default=1_048_576, gt=0)
+
+    @field_validator("timeout_seconds")
+    @classmethod
+    def reject_non_finite_timeout(cls, value: float) -> float:
+        if not math.isfinite(value):
+            raise ValueError("timeout_seconds must be finite")
+        return value
 
 
 class ToolCall(BaseModel):

@@ -4,6 +4,33 @@ from pydantic import ValidationError
 from src.agent.plugins.models import PluginManifest
 
 
+@pytest.mark.parametrize("timeout", [float("nan"), float("inf")])
+def test_allowed_tool_rejects_non_finite_timeout(timeout):
+    with pytest.raises(ValidationError, match="timeout_seconds"):
+        PluginManifest.model_validate(
+            {
+                "api_version": "minimal-agent/v1",
+                "id": "demo",
+                "version": "1.0.0",
+                "mcp_servers": [
+                    {
+                        "id": "remote",
+                        "transport": "streamable_http",
+                        "url_env": "DEMO_URL",
+                        "allowed_tools": [
+                            {
+                                "name": "search",
+                                "side_effects": False,
+                                "idempotent": True,
+                                "timeout_seconds": timeout,
+                            }
+                        ],
+                    }
+                ],
+            }
+        )
+
+
 def test_manifest_rejects_unknown_fields():
     with pytest.raises(ValidationError):
         PluginManifest.model_validate(

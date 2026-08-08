@@ -47,7 +47,7 @@ class PinnedHostAsyncTransport(httpx2.AsyncBaseTransport):
         if not config.addresses:
             raise ValueError("mcp_http_dns_failed")
         self._config = config
-        self._address = config.addresses[0]
+        self._addresses = tuple(config.addresses)
         self._scheme = urlsplit(config.url).scheme
         self._delegate = delegate or httpx2.AsyncHTTPTransport(
             trust_env=False,
@@ -82,14 +82,21 @@ class PinnedHostAsyncTransport(httpx2.AsyncBaseTransport):
         headers.append(("Host", self._host_header))
         extensions = dict(request.extensions)
         extensions["sni_hostname"] = self._config.hostname
-        pinned_request = httpx2.Request(
-            request.method,
-            request.url.copy_with(host=self._address),
-            headers=headers,
-            stream=request.stream,
-            extensions=extensions,
-        )
-        return await self._delegate.handle_async_request(pinned_request)
+        last_error: httpx2.RequestError | None = None
+        for address in self._addresses:
+            pinned_request = httpx2.Request(
+                request.method,
+                request.url.copy_with(host=address),
+                headers=headers,
+                stream=request.stream,
+                extensions=extensions,
+            )
+            try:
+                return await self._delegate.handle_async_request(pinned_request)
+            except (httpx2.ConnectError, httpx2.ConnectTimeout) as error:
+                last_error = error
+        assert last_error is not None
+        raise last_error
 
     async def aclose(self) -> None:
         await self._delegate.aclose()
