@@ -130,5 +130,5 @@ curl http://localhost:8000/api/skills
 - 当前队列由单个进程内工作线程和 SQLite 文件组成，生产部署应保持单实例；多副本需要迁移到外部队列和共享数据库。
 - 访问 `http://localhost:9090` 可查看 Prometheus UI。
 
-版本与变更记录：请参见 `CHANGELOG.md`。
+当前未发布服务版本为 `0.1.0`；`v0.0.1` 是历史 Git tag。版本与变更记录请参见 `CHANGELOG.md`。
 ```
