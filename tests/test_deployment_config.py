@@ -86,3 +86,17 @@ def test_compose_forwards_and_documents_mcp_security_allowlists():
     assert "AGENT_MCP_ALLOWED_HOSTS" in readme
     assert "AGENT_MCP_STDIO_ALLOWED_COMMANDS" in readme
     assert "Python 3.11+" in guide
+
+
+def test_compose_forwards_and_documents_mcp_lifecycle_timeouts():
+    compose = (ROOT / "docker-compose.yml").read_text(encoding="utf-8")
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    defaults = {
+        "AGENT_MCP_STARTUP_TIMEOUT_SECONDS": "30",
+        "AGENT_MCP_DISCOVERY_TIMEOUT_SECONDS": "30",
+        "AGENT_MCP_SHUTDOWN_TIMEOUT_SECONDS": "10",
+    }
+
+    for variable, default in defaults.items():
+        assert f"{variable}=${{{variable}:-{default}}}" in compose
+        assert variable in readme

@@ -72,6 +72,22 @@ def resolved_http_config(*, address: str = "127.0.0.1") -> ResolvedHTTPConfig:
     )
 
 
+@pytest.mark.parametrize(
+    "argument",
+    [
+        "startup_timeout_seconds",
+        "discovery_timeout_seconds",
+        "shutdown_timeout_seconds",
+    ],
+)
+@pytest.mark.parametrize("value", [float("nan"), float("inf")])
+def test_manager_rejects_non_finite_lifecycle_timeouts(argument, value) -> None:
+    with pytest.raises(
+        ValueError, match="MCP lifecycle timeouts must be finite and positive"
+    ):
+        MCPClientManager(**{argument: value})
+
+
 @pytest.mark.anyio
 async def test_manager_enters_and_closes_each_client_once() -> None:
     factory = FakeClientFactory()

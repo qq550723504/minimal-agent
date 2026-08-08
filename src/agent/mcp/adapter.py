@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import math
 import re
 from collections.abc import Iterable
 from collections.abc import Callable
@@ -60,8 +61,8 @@ async def discover_tools(
     client: Any, *, timeout_seconds: float = _DEFAULT_DISCOVERY_TIMEOUT_SECONDS
 ) -> list[Tool]:
     """Read every SDK tool page in server-provided cursor order."""
-    if timeout_seconds <= 0:
-        raise ValueError("discovery timeout must be positive")
+    if not math.isfinite(timeout_seconds) or timeout_seconds <= 0:
+        raise ValueError("discovery timeout must be finite and positive")
     cursor: str | None = None
     seen_cursors: set[str | None] = {None}
     tools: list[Tool] = []

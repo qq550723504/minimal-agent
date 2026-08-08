@@ -1,3 +1,4 @@
+import math
 import os
 
 
@@ -35,9 +36,12 @@ if MAX_ACTIVE_SKILLS <= 0:
     raise ValueError("AGENT_MAX_ACTIVE_SKILLS must be positive")
 if MAX_SKILL_REFERENCE_BYTES <= 0:
     raise ValueError("AGENT_MAX_SKILL_REFERENCE_BYTES must be positive")
-if min(
-    MCP_STARTUP_TIMEOUT_SECONDS,
-    MCP_DISCOVERY_TIMEOUT_SECONDS,
-    MCP_SHUTDOWN_TIMEOUT_SECONDS,
-) <= 0:
-    raise ValueError("MCP lifecycle timeouts must be positive")
+if any(
+    not math.isfinite(value) or value <= 0
+    for value in (
+        MCP_STARTUP_TIMEOUT_SECONDS,
+        MCP_DISCOVERY_TIMEOUT_SECONDS,
+        MCP_SHUTDOWN_TIMEOUT_SECONDS,
+    )
+):
+    raise ValueError("MCP lifecycle timeouts must be finite and positive")

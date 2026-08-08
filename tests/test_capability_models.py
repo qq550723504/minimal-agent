@@ -51,3 +51,27 @@ def test_config_rejects_non_positive_tool_result_limit():
 
     assert result.returncode != 0
     assert "AGENT_MAX_TOOL_RESULT_BYTES must be positive" in result.stderr
+
+
+@pytest.mark.parametrize(
+    "variable",
+    [
+        "AGENT_MCP_STARTUP_TIMEOUT_SECONDS",
+        "AGENT_MCP_DISCOVERY_TIMEOUT_SECONDS",
+        "AGENT_MCP_SHUTDOWN_TIMEOUT_SECONDS",
+    ],
+)
+@pytest.mark.parametrize("value", ["NaN", "Infinity"])
+def test_config_rejects_non_finite_mcp_lifecycle_timeouts(variable, value):
+    environment = os.environ | {variable: value}
+
+    result = subprocess.run(
+        [sys.executable, "-c", "import src.agent.config"],
+        capture_output=True,
+        env=environment,
+        text=True,
+        check=False,
+    )
+
+    assert result.returncode != 0
+    assert "MCP lifecycle timeouts must be finite and positive" in result.stderr

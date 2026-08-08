@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import math
 import os
 from collections.abc import Callable, Iterable
 from contextlib import AsyncExitStack
@@ -74,12 +75,15 @@ class MCPClientManager:
             if shutdown_timeout_seconds is None
             else shutdown_timeout_seconds
         )
-        if min(
-            self._startup_timeout_seconds,
-            self._discovery_timeout_seconds,
-            self._shutdown_timeout_seconds,
-        ) <= 0:
-            raise ValueError("MCP lifecycle timeouts must be positive")
+        if any(
+            not math.isfinite(value) or value <= 0
+            for value in (
+                self._startup_timeout_seconds,
+                self._discovery_timeout_seconds,
+                self._shutdown_timeout_seconds,
+            )
+        ):
+            raise ValueError("MCP lifecycle timeouts must be finite and positive")
         self._clients: dict[str, Any] = {}
         self._stacks: dict[str, AsyncExitStack] = {}
         self._configs: dict[str, ResolvedMCPConfig] = {}

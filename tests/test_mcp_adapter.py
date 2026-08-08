@@ -155,6 +155,17 @@ async def test_discovery_has_a_total_timeout() -> None:
 
 
 @pytest.mark.anyio
+@pytest.mark.parametrize("timeout", [float("nan"), float("inf")])
+async def test_discovery_rejects_non_finite_timeout(timeout) -> None:
+    from src.agent.mcp.adapter import discover_tools
+
+    with pytest.raises(
+        ValueError, match="discovery timeout must be finite and positive"
+    ):
+        await discover_tools(FakeMCPClient({None: page([])}), timeout_seconds=timeout)
+
+
+@pytest.mark.anyio
 async def test_remote_names_are_reversibly_encoded_but_invoked_raw() -> None:
     from src.agent.mcp.adapter import decode_remote_tool_name, register_server_tools
 

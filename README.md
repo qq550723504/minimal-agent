@@ -57,6 +57,9 @@ curl http://localhost:8000/
 - `AGENT_PLUGIN_DIR`: 插件根目录，默认 `plugins`；Compose 将项目的 `./plugins` 以只读方式挂载到 `/app/plugins`。
 - `AGENT_MCP_ALLOWED_HOSTS`: 生产环境 Streamable HTTP MCP Server 的精确主机名 allowlist，逗号分隔；为空时不允许远程 MCP 连接。
 - `AGENT_MCP_STDIO_ALLOWED_COMMANDS`: 允许启动的 MCP stdio 可执行文件路径 allowlist，逗号分隔；必须填写解析后的实际可执行文件，shell 包装器始终拒绝。
+- `AGENT_MCP_STARTUP_TIMEOUT_SECONDS`: MCP 配置解析与连接握手总超时，默认 `30` 秒；必须是有限正数。
+- `AGENT_MCP_DISCOVERY_TIMEOUT_SECONDS`: MCP 全部分页工具发现的总超时，默认 `30` 秒；必须是有限正数。
+- `AGENT_MCP_SHUTDOWN_TIMEOUT_SECONDS`: 每个 MCP 客户端关闭清理的超时，默认 `10` 秒；必须是有限正数。
 - `AGENT_MAX_ACTIVE_SKILLS`: 单次请求最多激活的 Skill 数，默认 `3`。
 - `AGENT_MAX_SKILL_REFERENCE_BYTES`: 单个 Skill 参考文件的最大读取字节数，默认 `262144`。
 
