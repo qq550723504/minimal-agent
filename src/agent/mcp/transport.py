@@ -55,8 +55,10 @@ class PinnedHostAsyncTransport(httpx2.AsyncBaseTransport):
             http2=True,
         )
         default_port = 443 if self._scheme == "https" else 80
-        parsed_hostname = urlsplit(config.url).hostname or config.hostname
-        host = _format_host(parsed_hostname)
+        parsed_hostname = urlsplit(config.url).hostname
+        host = _format_host(config.hostname)
+        if parsed_hostname and parsed_hostname.endswith(".") and not host.startswith("["):
+            host = f"{host}."
         self._host_header = (
             host
             if config.port == default_port

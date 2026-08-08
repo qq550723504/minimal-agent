@@ -298,3 +298,21 @@ async def test_pinned_transport_accepts_trailing_dot_hostname() -> None:
 
     assert delegate.requests[0].url.host == "127.0.0.1"
     assert delegate.requests[0].headers["Host"] == "mcp.example.test."
+
+
+@pytest.mark.anyio
+async def test_pinned_transport_uses_ascii_idn_authority_with_trailing_dot() -> None:
+    config = ResolvedHTTPConfig(
+        url="https://täst.example./tools",
+        hostname="xn--tst-qla.example",
+        port=443,
+        headers={},
+        addresses=("127.0.0.1",),
+    )
+    delegate = RecordingTransport()
+    transport = PinnedHostAsyncTransport(config, delegate=delegate)
+
+    async with httpx2.AsyncClient(transport=transport) as client:
+        await client.get(config.url)
+
+    assert delegate.requests[0].headers["Host"] == "xn--tst-qla.example."
