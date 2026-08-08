@@ -1,4 +1,5 @@
 import logging
+import sys
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any, List, Optional
@@ -67,7 +68,6 @@ class SkillCatalogOut(BaseModel):
 async def lifespan(application: FastAPI):
     """Own the capability runtime and its MCP transports for one app lifetime."""
     manager = MCPClientManager()
-    queue_started = False
     initialize_memory()
     try:
         _clear_capability_runtime()
@@ -85,17 +85,31 @@ async def lifespan(application: FastAPI):
         application.state.mcp_manager = manager
         record_catalog_startup(plugin_catalog, len(manager.server_ids()))
         start_queue()
-        queue_started = True
         yield
     finally:
-        if queue_started:
+        cleanup_errors: list[RuntimeError] = []
+        try:
             stop_queue()
+        except Exception:
+            cleanup_errors.append(RuntimeError("queue_cleanup_failed"))
         try:
             await manager.close()
         except Exception:
-            logging.exception("MCP client cleanup failed")
-        _clear_capability_runtime()
-        save_memory()
+            cleanup_errors.append(RuntimeError("mcp_cleanup_failed"))
+        try:
+            _clear_capability_runtime()
+        except Exception:
+            cleanup_errors.append(RuntimeError("capability_runtime_cleanup_failed"))
+        try:
+            save_memory()
+        except Exception:
+            cleanup_errors.append(RuntimeError("memory_cleanup_failed"))
+
+        if cleanup_errors:
+            cleanup_failure = ExceptionGroup("lifespan_cleanup_failed", cleanup_errors)
+            if sys.exception() is None:
+                raise cleanup_failure
+            logging.error("Agent lifecycle cleanup failed: %s", cleanup_failure)
 
 
 app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None, lifespan=lifespan)

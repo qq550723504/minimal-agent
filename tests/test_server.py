@@ -1,8 +1,9 @@
 import asyncio
 
+import pytest
 from fastapi.testclient import TestClient
 from src.agent import server
-from src.agent.capabilities.models import ToolCall, ToolInvocationContext
+from src.agent.capabilities.models import ToolCall, ToolInvocationContext, ToolSource, ToolSpec
 from src.agent.task_queue import enqueue_task
 from src.agent.tool_registry import get_capability_registry
 
@@ -81,6 +82,54 @@ def test_mcp_and_tool_metrics_use_only_bounded_non_sensitive_labels(monkeypatch)
     assert call_id not in metrics
     assert secret_argument not in metrics
     assert "sensitive-owner" not in metrics
+
+
+def test_shutdown_queue_failure_still_cleans_mcp_runtime_and_memory(monkeypatch):
+    """Fails if a queue shutdown error skips later lifecycle cleanup steps."""
+    class RecordingManager:
+        def __init__(self):
+            self.closed = False
+
+        async def close(self):
+            self.closed = True
+
+        def server_ids(self):
+            return []
+
+    manager = RecordingManager()
+    saved = []
+
+    def fail_stop_queue():
+        raise RuntimeError("queue_stop_failure")
+
+    monkeypatch.setenv("AGENT_ENABLE_MEMORY", "false")
+    monkeypatch.setattr(server.config, "CAPABILITY_RUNTIME_ENABLED", False)
+    monkeypatch.setattr(server, "MCPClientManager", lambda: manager)
+    monkeypatch.setattr(server, "start_queue", lambda: None)
+    monkeypatch.setattr(server, "stop_queue", fail_stop_queue)
+    monkeypatch.setattr(server, "save_memory", lambda: saved.append(True))
+
+    registry = get_capability_registry()
+    with pytest.raises(ExceptionGroup, match="lifespan_cleanup_failed"):
+        with TestClient(server.app):
+            registry.register(
+                ToolSpec(
+                    name="test.shutdown.cleanup",
+                    input_schema={"type": "object"},
+                    source=ToolSource.MCP,
+                    side_effects=False,
+                    idempotent=True,
+                ),
+                lambda _arguments, _context: None,
+                replace=True,
+            )
+
+    assert manager.closed is True
+    assert registry.get_spec("test.shutdown.cleanup") is None
+    assert server.app.state.plugin_catalog.plugins == {}
+    assert server.app.state.skill_catalog.sorted() == []
+    assert server.app.state.mcp_manager is None
+    assert saved == [True]
 
 
 def test_generated_api_docs_require_authentication(monkeypatch):
