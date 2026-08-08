@@ -106,3 +106,19 @@ def test_compose_forwards_global_tool_result_limit():
     compose = (ROOT / "docker-compose.yml").read_text(encoding="utf-8")
 
     assert "AGENT_MAX_TOOL_RESULT_BYTES=${AGENT_MAX_TOOL_RESULT_BYTES:-1048576}" in compose
+
+
+def test_docker_build_context_excludes_local_runtime_data():
+    dockerignore = (ROOT / ".dockerignore").read_text(encoding="utf-8").splitlines()
+
+    for entry in (".git", ".worktrees", "data", "tests", "docs", "*.log", "*.sqlite3", "*.json"):
+        assert entry in dockerignore
+
+
+def test_dockerfile_copies_only_runtime_inputs():
+    dockerfile = (ROOT / "Dockerfile").read_text(encoding="utf-8")
+
+    assert "COPY . /app" not in dockerfile
+    assert "COPY requirements.txt /app/requirements.txt" in dockerfile
+    assert "COPY src /app/src" in dockerfile
+    assert "COPY plugins /app/plugins" in dockerfile
