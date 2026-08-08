@@ -16,6 +16,19 @@ def test_manifest_rejects_unknown_fields():
         )
 
 
+@pytest.mark.parametrize("required_value", ["true", "yes", 1])
+def test_manifest_requires_a_real_boolean_for_required(required_value):
+    with pytest.raises(ValidationError):
+        PluginManifest.model_validate(
+            {
+                "api_version": "minimal-agent/v1",
+                "id": "demo",
+                "version": "1.0.0",
+                "required": required_value,
+            }
+        )
+
+
 def test_allowed_tool_requires_retry_semantics():
     with pytest.raises(ValidationError):
         PluginManifest.model_validate(

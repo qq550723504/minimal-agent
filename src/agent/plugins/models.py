@@ -3,7 +3,7 @@
 from collections.abc import Iterable
 from typing import Annotated, Literal, TypeAlias
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, StrictBool, model_validator
 
 
 _IDENTIFIER_PATTERN = r"^[a-z0-9][a-z0-9_.-]*$"
@@ -75,8 +75,8 @@ class PluginManifest(BaseModel):
     api_version: Literal["minimal-agent/v1"]
     id: str = Field(pattern=_IDENTIFIER_PATTERN)
     version: str
-    enabled: bool = True
-    required: bool = False
+    enabled: StrictBool = True
+    required: StrictBool = False
     skills: list[SkillManifest] = Field(default_factory=list)
     mcp_servers: list[MCPServerManifest] = Field(default_factory=list)
 

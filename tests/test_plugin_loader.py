@@ -81,6 +81,44 @@ def test_duplicate_plugin_id_disables_second_plugin(tmp_path):
     assert list(catalog.plugins) == ["same"]
 
 
+def test_duplicate_disabled_plugin_id_disables_later_enabled_plugin(tmp_path):
+    first = write_plugin(tmp_path, "one", plugin_id="same")
+    first.joinpath("plugin.yaml").write_text(
+        first.joinpath("plugin.yaml").read_text(encoding="utf-8").replace(
+            "required: false", "enabled: false\nrequired: false"
+        ),
+        encoding="utf-8",
+    )
+    write_plugin(tmp_path, "two", plugin_id="same")
+
+    catalog = PluginLoader(tmp_path).load_all()
+
+    assert catalog.statuses["one"].state == "disabled"
+    assert catalog.statuses["two"].error_code == "duplicate_plugin_id"
+    assert catalog.plugins == {}
+
+
+@pytest.mark.parametrize("required_value", ['"true"', '"yes"', "1"])
+def test_loader_rejects_coerced_required_values(tmp_path, required_value):
+    plugin = tmp_path / "required"
+    plugin.mkdir()
+    plugin.joinpath("plugin.yaml").write_text(
+        f"""api_version: minimal-agent/v1
+id: required
+version: 1.0.0
+required: {required_value}
+skills:
+  - id: demo
+    path: missing/SKILL.md
+""",
+        encoding="utf-8",
+    )
+
+    catalog = PluginLoader(tmp_path).load_all()
+
+    assert catalog.statuses["required"].error_code == "plugin_manifest_invalid"
+
+
 def test_loader_reports_malformed_yaml_without_parser_details(tmp_path):
     plugin = tmp_path / "broken"
     plugin.mkdir()

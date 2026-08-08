@@ -36,6 +36,7 @@ class PluginLoader:
         manifests = sorted(
             self.plugin_root.glob("*/plugin.yaml"), key=lambda path: path.parent.name
         )
+        seen_plugin_ids: set[str] = set()
         for manifest_path in manifests:
             installation_name = manifest_path.parent.name
             raw_manifest: dict[str, Any] | None = None
@@ -45,14 +46,14 @@ class PluginLoader:
                     manifest = PluginManifest.model_validate(raw_manifest)
                 except ValidationError as error:
                     raise PluginLoadError("plugin_manifest_invalid") from error
+                if manifest.id in seen_plugin_ids:
+                    raise PluginLoadError("duplicate_plugin_id")
+                seen_plugin_ids.add(manifest.id)
                 if not manifest.enabled:
                     catalog.statuses[installation_name] = PluginStatus(
                         installation_name, "disabled", manifest.id, manifest.version
                     )
                     continue
-                if manifest.id in catalog.plugins:
-                    raise PluginLoadError("duplicate_plugin_id")
-
                 skill_paths = {
                     skill.id: _validate_skill(manifest_path.parent, skill.path)
                     for skill in manifest.skills
