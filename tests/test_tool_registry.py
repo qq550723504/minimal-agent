@@ -24,6 +24,19 @@ def test_get_unknown_tool():
     assert get_tool("unknown_tool") is None
 
 
+@pytest.mark.parametrize("name", ["legacy tool", "   "])
+def test_invalid_structured_name_keeps_legacy_registration_callable(name):
+    expected = name.strip().lower()
+    register_tool(name, lambda payload: f"legacy:{payload}", "Legacy-only tool")
+
+    tool = get_tool(name)
+
+    assert tool is not None
+    assert tool("hello") == "legacy:hello"
+    assert get_capability_registry().get_spec(expected) is None
+    assert expected not in list_tools()
+
+
 @pytest.mark.anyio
 async def test_legacy_registration_is_invokable_as_capability():
     register_tool("legacy_upper", lambda payload: payload.upper(), "Uppercase text")

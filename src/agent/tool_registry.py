@@ -1,3 +1,4 @@
+import re
 from dataclasses import dataclass
 from typing import Callable, Dict, List, Optional
 
@@ -13,36 +14,39 @@ class ToolEntry:
 
 _TOOL_REGISTRY: Dict[str, ToolEntry] = {}
 CAPABILITY_REGISTRY = CapabilityRegistry()
+_CAPABILITY_NAME_PATTERN = re.compile(r"^[a-z0-9][a-z0-9_.-]*$")
 
 
 def register_tool(name: str, func: Callable[[str], str], description: str = "") -> None:
     """注册一个工具函数，用于执行器的工具步骤调用。"""
     normalized_name = name.strip().lower()
     normalized_description = description.strip()
+
+    if _CAPABILITY_NAME_PATTERN.fullmatch(normalized_name):
+        async def legacy_handler(arguments, _context):
+            return func(arguments.get("payload", ""))
+
+        CAPABILITY_REGISTRY.register(
+            ToolSpec(
+                name=normalized_name,
+                description=normalized_description,
+                input_schema={
+                    "type": "object",
+                    "properties": {"payload": {"type": "string"}},
+                    "required": ["payload"],
+                    "additionalProperties": False,
+                },
+                source=ToolSource.LOCAL,
+                side_effects=True,
+                idempotent=False,
+            ),
+            legacy_handler,
+            replace=True,
+        )
+
     _TOOL_REGISTRY[normalized_name] = ToolEntry(
         func=func,
         description=normalized_description,
-    )
-
-    async def legacy_handler(arguments, _context):
-        return func(arguments.get("payload", ""))
-
-    CAPABILITY_REGISTRY.register(
-        ToolSpec(
-            name=normalized_name,
-            description=normalized_description,
-            input_schema={
-                "type": "object",
-                "properties": {"payload": {"type": "string"}},
-                "required": ["payload"],
-                "additionalProperties": False,
-            },
-            source=ToolSource.LOCAL,
-            side_effects=True,
-            idempotent=False,
-        ),
-        legacy_handler,
-        replace=True,
     )
 
 
