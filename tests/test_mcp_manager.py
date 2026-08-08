@@ -17,6 +17,7 @@ class FakeClient:
     connected: bool = False
     exit_count: int = 0
     fail_on_enter: bool = False
+    fail_on_exit: bool = False
 
     async def __aenter__(self) -> "FakeClient":
         if self.fail_on_enter:
@@ -27,15 +28,23 @@ class FakeClient:
     async def __aexit__(self, *_: object) -> None:
         self.connected = False
         self.exit_count += 1
+        if self.fail_on_exit:
+            raise RuntimeError("client close failed")
 
 
 class FakeClientFactory:
-    def __init__(self, *, fail_at: int | None = None) -> None:
+    def __init__(
+        self, *, fail_at: int | None = None, fail_exit_at: int | None = None
+    ) -> None:
         self.clients: list[FakeClient] = []
         self.fail_at = fail_at
+        self.fail_exit_at = fail_exit_at
 
     def __call__(self, _: object) -> FakeClient:
-        client = FakeClient(fail_on_enter=len(self.clients) == self.fail_at)
+        client = FakeClient(
+            fail_on_enter=len(self.clients) == self.fail_at,
+            fail_on_exit=len(self.clients) == self.fail_exit_at,
+        )
         self.clients.append(client)
         return client
 
@@ -108,6 +117,107 @@ async def test_partial_startup_failure_closes_prior_clients() -> None:
 
 
 @pytest.mark.anyio
+async def test_close_attempts_all_servers_when_one_client_exit_fails() -> None:
+    factory = FakeClientFactory(fail_exit_at=0)
+    manager = MCPClientManager(client_factory=factory)
+    await manager.start_server("demo.one", resolved_http_config())
+    await manager.start_server("demo.two", resolved_http_config())
+
+    with pytest.raises(MCPConnectionError, match="mcp_cleanup_failed"):
+        await manager.close()
+
+    assert [client.exit_count for client in factory.clients] == [1, 1]
+    assert manager.server_ids() == []
+
+
+@pytest.mark.anyio
+async def test_failed_startup_cleans_prior_clients_when_their_exit_fails() -> None:
+    factory = FakeClientFactory(fail_at=1, fail_exit_at=0)
+    manager = MCPClientManager(client_factory=factory)
+    await manager.start_server("demo.one", resolved_http_config())
+
+    with pytest.raises(MCPConnectionError, match="mcp_connection_failed"):
+        await manager.start_server("demo.two", resolved_http_config())
+
+    assert factory.clients[0].exit_count == 1
+    assert manager.server_ids() == []
+
+
+@pytest.mark.anyio
+async def test_reconnect_uses_freshly_revalidated_http_config(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class CapturingPinnedTransport(httpx2.AsyncBaseTransport):
+        configs: list[ResolvedHTTPConfig] = []
+
+        def __init__(self, config: ResolvedHTTPConfig) -> None:
+            self.configs.append(config)
+
+        async def handle_async_request(self, request: httpx2.Request) -> httpx2.Response:
+            raise AssertionError("the fake lifecycle client must not send requests")
+
+        async def aclose(self) -> None:
+            return None
+
+    fresh_config = resolved_http_config(address="127.0.0.2")
+    monkeypatch.setattr(
+        "src.agent.mcp.manager.PinnedHostAsyncTransport", CapturingPinnedTransport
+    )
+    manager = MCPClientManager(
+        client_factory=FakeClientFactory(),
+        http_config_resolver=lambda _: fresh_config,
+    )
+    await manager.start_server("demo.remote", resolved_http_config())
+
+    await manager.reconnect_server("demo.remote")
+
+    assert [config.addresses for config in CapturingPinnedTransport.configs] == [
+        ("127.0.0.1",),
+        ("127.0.0.2",),
+    ]
+
+
+@pytest.mark.anyio
+async def test_reconnect_rejects_changed_dns_before_closing_current_client(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    manifest = HTTPMCPServerManifest(
+        id="remote",
+        transport="streamable_http",
+        url_env="DEMO_URL",
+        allowed_tools=[],
+    )
+    factory = FakeClientFactory()
+
+    def refresh(_: ResolvedHTTPConfig) -> ResolvedHTTPConfig:
+        monkeypatch.setattr(
+            "src.agent.mcp.security.socket.getaddrinfo",
+            lambda *_args, **_kwargs: [
+                (socket.AF_INET, socket.SOCK_STREAM, 6, "", ("169.254.169.254", 443))
+            ],
+        )
+        return validate_http_config(
+            manifest,
+            {"DEMO_URL": "https://mcp.example.test/tools"},
+            {"mcp.example.test"},
+            production=True,
+        )
+
+    manager = MCPClientManager(
+        client_factory=factory,
+        http_config_resolver=refresh,
+    )
+    await manager.start_server("demo.remote", resolved_http_config())
+
+    with pytest.raises(MCPConnectionError, match="mcp_http_revalidation_failed"):
+        await manager.reconnect_server("demo.remote")
+
+    assert factory.clients[0].connected is True
+    assert factory.clients[0].exit_count == 0
+    assert manager.server_ids() == ["demo.remote"]
+
+
+@pytest.mark.anyio
 async def test_pinned_transport_uses_validated_address_after_dns_changes(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -142,3 +252,49 @@ async def test_pinned_transport_uses_validated_address_after_dns_changes(
     assert request.url.host == "127.0.0.1"
     assert request.headers["Host"] == "mcp.example.test"
     assert request.extensions["sni_hostname"] == "mcp.example.test"
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize(
+    ("url", "port", "expected_host"),
+    [
+        ("https://[::1]/tools", 443, "[::1]"),
+        ("https://[::1]:8443/tools", 8443, "[::1]:8443"),
+    ],
+)
+async def test_pinned_transport_preserves_bracketed_ipv6_host_header(
+    url: str, port: int, expected_host: str
+) -> None:
+    config = ResolvedHTTPConfig(
+        url=url,
+        hostname="::1",
+        port=port,
+        headers={},
+        addresses=("::1",),
+    )
+    delegate = RecordingTransport()
+    transport = PinnedHostAsyncTransport(config, delegate=delegate)
+
+    async with httpx2.AsyncClient(transport=transport) as client:
+        await client.get(url)
+
+    assert delegate.requests[0].headers["Host"] == expected_host
+
+
+@pytest.mark.anyio
+async def test_pinned_transport_accepts_trailing_dot_hostname() -> None:
+    config = ResolvedHTTPConfig(
+        url="https://mcp.example.test./tools",
+        hostname="mcp.example.test",
+        port=443,
+        headers={},
+        addresses=("127.0.0.1",),
+    )
+    delegate = RecordingTransport()
+    transport = PinnedHostAsyncTransport(config, delegate=delegate)
+
+    async with httpx2.AsyncClient(transport=transport) as client:
+        await client.get(config.url)
+
+    assert delegate.requests[0].url.host == "127.0.0.1"
+    assert delegate.requests[0].headers["Host"] == "mcp.example.test."

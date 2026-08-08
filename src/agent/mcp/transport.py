@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import ipaddress
 from typing import Any, AsyncContextManager
 from urllib.parse import urlsplit
 
@@ -47,24 +48,26 @@ class PinnedHostAsyncTransport(httpx2.AsyncBaseTransport):
             raise ValueError("mcp_http_dns_failed")
         self._config = config
         self._address = config.addresses[0]
+        self._scheme = urlsplit(config.url).scheme
         self._delegate = delegate or httpx2.AsyncHTTPTransport(
             trust_env=False,
             http1=True,
             http2=True,
         )
-        parsed = urlsplit(config.url)
-        default_port = 443 if parsed.scheme == "https" else 80
+        default_port = 443 if self._scheme == "https" else 80
+        parsed_hostname = urlsplit(config.url).hostname or config.hostname
+        host = _format_host(parsed_hostname)
         self._host_header = (
-            config.hostname
+            host
             if config.port == default_port
-            else f"{config.hostname}:{config.port}"
+            else f"{host}:{config.port}"
         )
 
     async def handle_async_request(self, request: httpx2.Request) -> httpx2.Response:
         """Pin the origin while leaving framing, pooling, and streaming to httpx2."""
         if (
-            request.url.scheme != urlsplit(self._config.url).scheme
-            or request.url.host != self._config.hostname
+            request.url.scheme != self._scheme
+            or _normalize_hostname(request.url.host) != self._config.hostname
             or _effective_port(request.url.scheme, request.url.port) != self._config.port
         ):
             raise httpx2.RequestError("mcp_http_pinned_origin_required", request=request)
@@ -94,3 +97,18 @@ def _effective_port(scheme: str, port: int | None) -> int | None:
     if port is not None:
         return port
     return {"http": 80, "https": 443}.get(scheme)
+
+
+def _format_host(hostname: str) -> str:
+    try:
+        address = ipaddress.ip_address(hostname)
+    except ValueError:
+        return hostname
+    return f"[{address}]" if address.version == 6 else str(address)
+
+
+def _normalize_hostname(hostname: str) -> str:
+    try:
+        return str(ipaddress.ip_address(hostname))
+    except ValueError:
+        return hostname.rstrip(".").lower().encode("idna").decode("ascii")
