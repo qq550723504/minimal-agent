@@ -47,6 +47,7 @@ class TaskQueue:
         self._lock = threading.RLock()
         self._workflow_store = workflow_store
         self._queued_workflows: set[str] = set()
+        self._retry_timers: Dict[str, threading.Timer] = {}
 
     @property
     def workflow_store(self) -> Optional[WorkflowStore]:
@@ -65,6 +66,11 @@ class TaskQueue:
 
     def stop(self):
         self._running = False
+        with self._lock:
+            timers = list(self._retry_timers.values())
+            self._retry_timers.clear()
+        for timer in timers:
+            timer.cancel()
         for worker in self._workers:
             worker.join(timeout=1)
 
@@ -99,6 +105,12 @@ class TaskQueue:
                 raise KeyError(f"workflow not found: {workflow_id}")
             if record["status"] in ("completed", "failed"):
                 return
+            if (
+                record["status"] == "retrying"
+                and record["retry_at"] is not None
+                and record["retry_at"] > time.time()
+            ):
+                return
             if workflow_id in self._queued_workflows:
                 return
             self._queued_workflows.add(workflow_id)
@@ -110,12 +122,44 @@ class TaskQueue:
         self._workflow_store.mark_interrupted_workflows_pending()
         queued = 0
         for workflow_id in self._workflow_store.list_recoverable_workflows():
+            workflow = self._workflow_store.get_workflow(workflow_id)
+            if workflow is None:
+                continue
+            retry_at = workflow["retry_at"]
+            if (
+                workflow["status"] == "retrying"
+                and retry_at is not None
+                and retry_at > time.time()
+            ):
+                self._schedule_retry(workflow_id, retry_at - time.time())
+                continue
             with self._lock:
                 already_queued = workflow_id in self._queued_workflows
             self.enqueue_workflow(workflow_id)
             if not already_queued:
                 queued += 1
         return queued
+
+    def _schedule_retry(self, workflow_id: str, delay: float) -> None:
+        with self._lock:
+            if workflow_id in self._queued_workflows or workflow_id in self._retry_timers:
+                return
+            timer = threading.Timer(
+                max(0.0, delay),
+                self._enqueue_scheduled_workflow,
+                args=(workflow_id,),
+            )
+            timer.daemon = True
+            self._retry_timers[workflow_id] = timer
+            timer.start()
+
+    def _enqueue_scheduled_workflow(self, workflow_id: str) -> None:
+        with self._lock:
+            self._retry_timers.pop(workflow_id, None)
+        try:
+            self.enqueue_workflow(workflow_id)
+        except KeyError:
+            logger.warning("Scheduled workflow %s no longer exists", workflow_id)
 
     def _release_workflow(self, workflow_id: str) -> None:
         with self._lock:

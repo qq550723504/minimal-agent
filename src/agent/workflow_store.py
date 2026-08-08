@@ -41,6 +41,7 @@ class WorkflowStore:
                 results_json TEXT NOT NULL DEFAULT '[]',
                 error TEXT NOT NULL DEFAULT '',
                 failed_step INTEGER,
+                retry_at REAL,
                 created_at REAL NOT NULL,
                 completed_at REAL,
                 updated_at REAL NOT NULL
@@ -73,6 +74,12 @@ class WorkflowStore:
             );
             """
         )
+        columns = {
+            row["name"]
+            for row in self._connection.execute("PRAGMA table_info(workflows)").fetchall()
+        }
+        if "retry_at" not in columns:
+            self._connection.execute("ALTER TABLE workflows ADD COLUMN retry_at REAL")
         self._connection.commit()
 
     @staticmethod
@@ -173,6 +180,7 @@ class WorkflowStore:
             "results": self._decode(row["results_json"], []),
             "error": row["error"],
             "failed_step": row["failed_step"],
+            "retry_at": row["retry_at"],
             "created_at": row["created_at"],
             "completed_at": row["completed_at"],
             "updated_at": row["updated_at"],
@@ -213,6 +221,7 @@ class WorkflowStore:
             "results": json.loads(row["results_json"]),
             "error": row["error"],
             "failed_step": row["failed_step"],
+            "retry_at": row["retry_at"],
             "created_at": row["created_at"],
             "completed_at": row["completed_at"],
             "updated_at": row["updated_at"],
@@ -255,7 +264,7 @@ class WorkflowStore:
                 self._connection.execute(
                     """
                     UPDATE workflows
-                    SET status = 'pending', updated_at = ?
+                    SET status = 'pending', retry_at = NULL, updated_at = ?
                     WHERE workflow_id = ?
                     """,
                     (now, workflow_id),
@@ -288,7 +297,7 @@ class WorkflowStore:
                 """
                 UPDATE workflows
                 SET status = 'running', attempts = attempts + 1,
-                    error = '', failed_step = NULL, updated_at = ?
+                    error = '', failed_step = NULL, retry_at = NULL, updated_at = ?
                 WHERE workflow_id = ?
                 """,
                 (now, workflow_id),
@@ -353,15 +362,16 @@ class WorkflowStore:
         failed_step: Optional[int],
     ) -> None:
         with self._lock, self._connection:
-            self._require_workflow(workflow_id)
+            workflow = self._require_workflow(workflow_id)
             now = time.time()
+            retry_at = now + workflow["retry_delay"]
             self._connection.execute(
                 """
                 UPDATE workflows
-                SET status = 'retrying', error = ?, failed_step = ?, updated_at = ?
+                SET status = 'retrying', error = ?, failed_step = ?, retry_at = ?, updated_at = ?
                 WHERE workflow_id = ?
                 """,
-                (error, failed_step, now, workflow_id),
+                (error, failed_step, retry_at, now, workflow_id),
             )
             if failed_step is not None:
                 cursor = self._connection.execute(
@@ -391,7 +401,7 @@ class WorkflowStore:
                 """
                 UPDATE workflows
                 SET status = 'failed', error = ?, failed_step = ?, results_json = ?,
-                    completed_at = ?, updated_at = ?
+                    retry_at = NULL, completed_at = ?, updated_at = ?
                 WHERE workflow_id = ?
                 """,
                 (error, failed_step, self._encode(results), now, now, workflow_id),
@@ -417,7 +427,7 @@ class WorkflowStore:
                 """
                 UPDATE workflows
                 SET status = 'completed', results_json = ?, error = '', failed_step = NULL,
-                    completed_at = ?, updated_at = ?
+                    retry_at = NULL, completed_at = ?, updated_at = ?
                 WHERE workflow_id = ?
                 """,
                 (self._encode(results), now, now, workflow_id),

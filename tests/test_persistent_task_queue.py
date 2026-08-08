@@ -74,3 +74,35 @@ def test_new_queue_reads_persisted_workflow_status(tmp_path):
     assert record.status == "completed"
     assert record.result == ["first"]
     assert reopened_queue.get_status("wf-1", owner_id="bob") is None
+
+
+def test_recovery_preserves_retry_delay(tmp_path):
+    calls = []
+
+    def record(payload):
+        calls.append(payload)
+        return payload
+
+    register_tool("test_retry_delay_recovery", record)
+    store = WorkflowStore(str(tmp_path / "workflows.sqlite3"))
+    store.create_workflow(
+        "wf-1",
+        "alice",
+        ["test_retry_delay_recovery: first"],
+        1,
+        0.2,
+    )
+    store.start_workflow("wf-1")
+    store.start_step("wf-1", 0)
+    store.retry_workflow("wf-1", "rate limited", 0)
+
+    queue = TaskQueue(worker_count=1, poll_interval=0.01, workflow_store=store)
+    queue.start()
+    time.sleep(0.05)
+    assert calls == []
+
+    record = _wait_for_workflow(store, "wf-1", "completed", timeout=1.0)
+    queue.stop()
+
+    assert record["status"] == "completed"
+    assert calls == ["first"]
