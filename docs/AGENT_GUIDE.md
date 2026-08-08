@@ -11,7 +11,7 @@
 - 接口：统一的请求/响应契约（JSON）、请求ID、超时与重试策略。
 
 ## 三、开发与依赖
-- 推荐语言：Python 3.10+（示例基于 Python）。
+- 推荐语言：Python 3.11+（示例基于 Python）。
 - 依赖管理：使用 `requirements.txt` 或 `pyproject.toml`。
 
 示例：
@@ -28,10 +28,14 @@ pip install -r requirements.txt
 - 设计点：模块化（便于替换模型与工具）、日志与 trace、错误补偿策略。
 
 ### 4.1 队列与任务状态
-项目提供 `/api/handle/queue`、`/api/tasks` 和 `/api/tools` 接口：
+项目提供 `/api/handle/queue`、`/api/tasks`、`/api/tools`、`/api/plugins` 和 `/api/skills` 接口：
 - `/api/handle/queue`：接收请求并将执行任务加入后台队列。
 - `/api/tasks`：查询任务状态、重试次数和执行结果。
 - `/api/tools`：列出当前可用工具及其描述。
+- `/api/plugins`：列出管理员安装插件的安装名、标识、版本、启用状态、稳定错误码及声明能力名。
+- `/api/skills`：列出已加载 Skill 的全局标识、所属插件和触发词。
+
+插件与 Skill 运行时默认由 `AGENT_CAPABILITY_RUNTIME_ENABLED=false` 关闭；关闭时服务不会访问 `AGENT_PLUGIN_DIR`，两个目录接口返回空列表。启用后，服务启动时读取已验证的插件清单、建立 Skill 目录并注册内部参考读取工具；必需插件的加载错误会阻止启动。生产 Compose 将 `./plugins` 以只读方式挂载到 `/app/plugins`。目录接口不会泄露插件命令、环境变量值、Skill 指令或参考文件内容。
 
 队列工作流使用 `WORKFLOW_STORE_PATH` 指定的 SQLite 数据库保存工作流定义、步骤结果、重试状态和生命周期事件。每个步骤完成后立即提交状态；服务重启时会把中断中的工作流恢复为待执行，并从第一个未完成步骤继续。该机制提供至少一次执行语义，步骤执行期间进程退出可能导致该步骤再次执行。任意 Python callable 直接提交到内部队列仍仅支持进程内执行，不支持跨进程恢复。
 

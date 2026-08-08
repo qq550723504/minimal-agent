@@ -22,6 +22,29 @@ def test_tools_endpoint_uses_default_user_when_authentication_is_disabled(monkey
     assert response.status_code == 200
 
 
+def test_tools_endpoint_exposes_only_safe_tool_spec_metadata():
+    """Fails if the API omits ToolSpec safety flags or leaks runtime handlers/config."""
+    response = TestClient(server.app).get("/api/tools")
+
+    http_get = next(tool for tool in response.json() if tool["name"] == "http_get")
+    assert http_get == {
+        "name": "http_get",
+        "description": "Send an HTTP GET request with optional query parameters.",
+        "source": "local",
+        "plugin_id": None,
+        "input_schema": {
+            "type": "object",
+            "properties": {"payload": {"type": "string"}},
+            "required": ["payload"],
+            "additionalProperties": False,
+        },
+        "side_effects": True,
+        "idempotent": False,
+    }
+    assert "handler" not in http_get
+    assert "transport" not in http_get
+
+
 def test_unicode_api_key_is_authenticated_without_server_error(monkeypatch):
     monkeypatch.setenv("AGENT_AUTH_REQUIRED", "true")
     monkeypatch.setenv("AGENT_API_KEYS", "alice:秘密")

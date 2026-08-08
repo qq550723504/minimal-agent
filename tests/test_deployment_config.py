@@ -64,3 +64,45 @@ def test_compose_configures_persistent_workflow_store():
     assert "WORKFLOW_STORE_PATH" in readme
     assert "重启" in readme
     assert "WORKFLOW_STORE_PATH" in guide
+
+
+def test_compose_mounts_plugins_read_only():
+    compose = (ROOT / "docker-compose.yml").read_text(encoding="utf-8")
+
+    assert "./plugins:/app/plugins:ro" in compose
+    assert "AGENT_CAPABILITY_RUNTIME_ENABLED=${AGENT_CAPABILITY_RUNTIME_ENABLED:-false}" in compose
+
+
+def test_compose_forwards_and_documents_mcp_security_allowlists():
+    compose = (ROOT / "docker-compose.yml").read_text(encoding="utf-8")
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    guide = (ROOT / "docs" / "AGENT_GUIDE.md").read_text(encoding="utf-8")
+
+    assert "AGENT_MCP_ALLOWED_HOSTS=${AGENT_MCP_ALLOWED_HOSTS:-}" in compose
+    assert (
+        "AGENT_MCP_STDIO_ALLOWED_COMMANDS=${AGENT_MCP_STDIO_ALLOWED_COMMANDS:-}"
+        in compose
+    )
+    assert "AGENT_MCP_ALLOWED_HOSTS" in readme
+    assert "AGENT_MCP_STDIO_ALLOWED_COMMANDS" in readme
+    assert "Python 3.11+" in guide
+
+
+def test_compose_forwards_and_documents_mcp_lifecycle_timeouts():
+    compose = (ROOT / "docker-compose.yml").read_text(encoding="utf-8")
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    defaults = {
+        "AGENT_MCP_STARTUP_TIMEOUT_SECONDS": "30",
+        "AGENT_MCP_DISCOVERY_TIMEOUT_SECONDS": "30",
+        "AGENT_MCP_SHUTDOWN_TIMEOUT_SECONDS": "10",
+    }
+
+    for variable, default in defaults.items():
+        assert f"{variable}=${{{variable}:-{default}}}" in compose
+        assert variable in readme
+
+
+def test_compose_forwards_global_tool_result_limit():
+    compose = (ROOT / "docker-compose.yml").read_text(encoding="utf-8")
+
+    assert "AGENT_MAX_TOOL_RESULT_BYTES=${AGENT_MAX_TOOL_RESULT_BYTES:-1048576}" in compose

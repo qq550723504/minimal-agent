@@ -1,8 +1,18 @@
 import json
 import socket
 import requests
+import pytest
 
-from src.agent.executor import WorkflowExecutionError, WorkflowRunner, execute_step, execute_tasks, execute_workflow, enqueue_task_execution
+from src.agent.capabilities.models import ToolCall, ToolInvocationContext
+from src.agent.executor import (
+    WorkflowExecutionError,
+    WorkflowRunner,
+    enqueue_task_execution,
+    execute_step,
+    execute_structured_calls,
+    execute_tasks,
+    execute_workflow,
+)
 from src.agent.tool_registry import register_tool
 
 
@@ -96,6 +106,19 @@ def test_execute_step_structured_tool_step(monkeypatch):
 
 def test_execute_tasks_batch():
     assert execute_tasks(["echo: a", "b"]) == ["a", "b"]
+
+
+@pytest.mark.anyio
+async def test_execute_structured_calls_preserves_order():
+    register_tool("test_record_order", lambda payload: payload)
+    calls = [
+        ToolCall(call_id="1", tool="test_record_order", arguments={"payload": "first"}),
+        ToolCall(call_id="2", tool="test_record_order", arguments={"payload": "second"}),
+    ]
+
+    results = await execute_structured_calls(calls, ToolInvocationContext())
+
+    assert [result.content for result in results] == ["first", "second"]
 
 
 def test_execute_workflow_preserves_step_order():

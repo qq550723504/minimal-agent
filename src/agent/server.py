@@ -1,30 +1,34 @@
 import logging
+import sys
+from contextlib import asynccontextmanager
+from pathlib import Path
 from typing import Any, List, Optional
 
 from fastapi import Depends, FastAPI, Header, HTTPException
 from fastapi.openapi.docs import get_redoc_html, get_swagger_ui_html
 from pydantic import BaseModel
 from fastapi.responses import JSONResponse
+from src.agent import config
 from src.agent.auth import get_current_user
 from src.agent.main import handle_input, enqueue_input
 from src.agent.memory_manager import initialize_memory, save_memory
-from src.agent.observability import setup_metrics
+from src.agent.capabilities.models import ToolSource
+from src.agent.mcp.manager import MCPClientManager
+from src.agent.observability import record_catalog_startup, setup_metrics
+from src.agent.plugins.catalog import PluginCatalog, PluginStatus
+from src.agent.plugins.loader import PluginLoader
 from src.agent.security import ClientInputError, audit_log, sanitize_input
+from src.agent.skills.loader import SkillCatalog
+from src.agent.skills.reference_tool import register_skill_reference_tool
 from src.agent.task_queue import get_status, list_tasks, start_queue, stop_queue
-from src.agent.tool_registry import list_tool_metadata
+from src.agent.tool_registry import get_capability_registry, list_tool_metadata
 
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s %(levelname)s %(name)s %(message)s",
 )
 
-app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
-setup_metrics(app)
-
-
-@app.exception_handler(ClientInputError)
-async def client_input_error_handler(_request, exc: ClientInputError):
-    return JSONResponse(status_code=400, content={"detail": str(exc)})
+_CAPABILITY_RUNTIME_TOOL_NAMES = ("internal.skill_read_reference",)
 
 
 class PromptIn(BaseModel):
@@ -45,16 +49,91 @@ class TaskStatusOut(BaseModel):
     completed_at: Optional[float] = None
 
 
-@app.on_event("startup")
-def on_startup():
+class PluginCatalogOut(BaseModel):
+    installation_name: str
+    state: str
+    plugin_id: Optional[str] = None
+    version: Optional[str] = None
+    error_code: Optional[str] = None
+    capabilities: List[str] = []
+
+
+class SkillCatalogOut(BaseModel):
+    id: str
+    plugin_id: str
+    triggers: List[str] = []
+
+
+@asynccontextmanager
+async def lifespan(application: FastAPI):
+    """Own the capability runtime and its MCP transports for one app lifetime."""
+    manager = MCPClientManager()
     initialize_memory()
-    start_queue()
+    try:
+        _clear_capability_runtime()
+        if config.CAPABILITY_RUNTIME_ENABLED:
+            plugin_catalog = PluginLoader(Path(config.PLUGIN_DIR)).load_all()
+            await manager.start_catalog(plugin_catalog, get_capability_registry())
+            skill_catalog = SkillCatalog.from_plugins(plugin_catalog)
+            register_skill_reference_tool(get_capability_registry(), skill_catalog)
+        else:
+            plugin_catalog = PluginCatalog()
+            skill_catalog = SkillCatalog()
+
+        application.state.plugin_catalog = plugin_catalog
+        application.state.skill_catalog = skill_catalog
+        application.state.mcp_manager = manager
+        record_catalog_startup(plugin_catalog, len(manager.server_ids()))
+        start_queue()
+        yield
+    finally:
+        cleanup_errors: list[RuntimeError] = []
+        try:
+            stop_queue()
+        except Exception:
+            cleanup_errors.append(RuntimeError("queue_cleanup_failed"))
+        try:
+            await manager.close()
+        except Exception:
+            cleanup_errors.append(RuntimeError("mcp_cleanup_failed"))
+        try:
+            _clear_capability_runtime()
+        except Exception:
+            cleanup_errors.append(RuntimeError("capability_runtime_cleanup_failed"))
+        try:
+            save_memory()
+        except Exception:
+            cleanup_errors.append(RuntimeError("memory_cleanup_failed"))
+
+        if cleanup_errors:
+            cleanup_failure = ExceptionGroup("lifespan_cleanup_failed", cleanup_errors)
+            if sys.exception() is None:
+                raise cleanup_failure
+            logging.error("Agent lifecycle cleanup failed: %s", cleanup_failure)
 
 
-@app.on_event("shutdown")
-def on_shutdown():
-    save_memory()
-    stop_queue()
+app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None, lifespan=lifespan)
+app.state.plugin_catalog = PluginCatalog()
+app.state.skill_catalog = SkillCatalog()
+app.state.mcp_manager = None
+setup_metrics(app)
+
+
+@app.exception_handler(ClientInputError)
+async def client_input_error_handler(_request, exc: ClientInputError):
+    return JSONResponse(status_code=400, content={"detail": str(exc)})
+
+
+def _clear_capability_runtime() -> None:
+    registry = get_capability_registry()
+    for tool_name in _CAPABILITY_RUNTIME_TOOL_NAMES:
+        registry.unregister(tool_name)
+    for spec in registry.list_specs():
+        if spec.source is ToolSource.MCP:
+            registry.unregister(spec.name)
+    app.state.plugin_catalog = PluginCatalog()
+    app.state.skill_catalog = SkillCatalog()
+    app.state.mcp_manager = None
 
 
 @app.get("/")
@@ -124,9 +203,54 @@ def list_tasks_route(status: Optional[str] = None, user_id: str = Depends(get_cu
 class ToolInfoOut(BaseModel):
     name: str
     description: str = ""
+    source: str
+    plugin_id: Optional[str] = None
+    input_schema: dict[str, Any]
+    side_effects: bool
+    idempotent: bool
 
 
 @app.get("/api/tools")
 def list_tools_route(_user_id: str = Depends(get_current_user)):
     tools = list_tool_metadata()
     return [ToolInfoOut(**tool) for tool in tools]
+
+
+@app.get("/api/plugins")
+def list_plugins_route(_user_id: str = Depends(get_current_user)):
+    catalog: PluginCatalog = app.state.plugin_catalog
+    return [_plugin_catalog_out(catalog, status) for status in catalog.statuses.values()]
+
+
+@app.get("/api/skills")
+def list_skills_route(_user_id: str = Depends(get_current_user)):
+    catalog: SkillCatalog = app.state.skill_catalog
+    return [
+        SkillCatalogOut(
+            id=skill.id,
+            plugin_id=skill.plugin_id,
+            triggers=list(skill.triggers),
+        )
+        for skill in catalog.sorted()
+    ]
+
+
+def _plugin_catalog_out(catalog: PluginCatalog, status: PluginStatus) -> PluginCatalogOut:
+    plugin = catalog.plugins.get(status.plugin_id) if status.plugin_id else None
+    capabilities = []
+    if plugin is not None:
+        capabilities = sorted(
+            {
+                tool.name
+                for server in plugin.manifest.mcp_servers
+                for tool in server.allowed_tools
+            }
+        )
+    return PluginCatalogOut(
+        installation_name=status.installation_name,
+        state=status.state,
+        plugin_id=status.plugin_id,
+        version=status.version,
+        error_code=status.error_code,
+        capabilities=capabilities,
+    )
