@@ -225,3 +225,21 @@ def test_production_compose_requires_security_variables():
     assert "${AGENT_API_KEYS:?" in compose
     assert "${AGENT_METRICS_API_KEY:?" in compose
     assert "${AGENT_HTTP_ALLOWED_HOSTS:?" in compose
+
+
+def test_ci_and_release_install_development_dependencies_and_check_them():
+    workflows = [
+        (ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8"),
+        (ROOT / ".github" / "workflows" / "release.yml").read_text(encoding="utf-8"),
+    ]
+
+    for workflow in workflows:
+        assert "pip install -r requirements-dev.txt" in workflow
+        assert "python -m pip check" in workflow
+
+
+def test_ci_validates_compose_and_builds_the_image():
+    ci = (ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
+
+    assert "docker compose config --quiet" in ci
+    assert "docker build --tag minimal-agent:ci ." in ci

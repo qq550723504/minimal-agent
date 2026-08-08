@@ -18,7 +18,13 @@ jobs:
       - name: Install deps
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt
+          pip install -r requirements-dev.txt
+      - name: Check dependencies
+        run: python -m pip check
       - name: Run tests
         run: |
           python -m pytest -q
+      - name: Validate Compose configuration
+        run: docker compose config --quiet
+      - name: Build Docker image
+        run: docker build --tag minimal-agent:ci .
