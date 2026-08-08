@@ -2,7 +2,7 @@
 
 日期：2026-08-08
 
-状态：已确认设计，等待书面规格复核
+状态：已确认，实施计划已拆分
 
 ## 1. 背景
 
@@ -315,6 +315,10 @@ LLM Adapter 优先使用对应后端可用的结构化输出能力；不支持�
 
 动态 Agent 运行使用独立的持久化模型，不把现有固定步骤 Workflow 表扩展成通用状态机。
 
+运行内容使用 `cryptography` 提供的 AEAD 原语做应用层加密。部署环境通过 `AGENT_RUN_ENCRYPTION_KEY` 提供 URL-safe Base64 编码的 32 字节密钥；数据库只保存随机 nonce 和密文。Prompt、已选 Skill、模型决策、工具参数、工具结果和最终答案都必须加密，状态、轮次、工具全名和时间戳可作为非敏感索引元数据保存。加解密使用记录身份和字段名作为 associated data，防止密文被移动到另一条记录或字段。
+
+持久化 Agent 运行由独立开关 `AGENT_DURABLE_RUNS_ENABLED` 控制。开关启用但密钥缺失、格式错误或长度不是 32 字节时，服务启动失败；不得回退到明文。同步的非持久化 Agent 运行不要求该密钥。
+
 新增逻辑表：
 
 ```text
@@ -346,7 +350,7 @@ agent_tool_calls
 - 禁止 `cmd /c`、PowerShell、`bash -c` 等 shell 包装器。
 - 可执行文件必须匹配部署级 allowlist。
 - 工作目录限制在插件目录或明确批准的目录。
-- 子进程只继承显式允许的环境变量。
+- 子进程只继承官方 MCP SDK 的平台安全 allowlist，以及插件清单显式映射的额外环境变量；不得继承完整宿主环境。
 - 设置启动、调用和关闭超时，服务关闭时清理子进程。
 
 ### 12.2 Streamable HTTP
@@ -385,6 +389,8 @@ GET  /api/skills
 
 ```text
 AGENT_CAPABILITY_RUNTIME_ENABLED
+AGENT_DURABLE_RUNS_ENABLED
+AGENT_RUN_ENCRYPTION_KEY
 AGENT_PLUGIN_DIR
 AGENT_MCP_ALLOWED_HOSTS
 AGENT_MCP_STDIO_ALLOWED_COMMANDS
@@ -447,6 +453,7 @@ agent_run_budget_exhausted_total
 - 拒绝 shell 包装命令和未批准可执行文件；
 - 拒绝插件目录外路径、链接逃逸和未允许的 MCP Host；
 - 验证密钥不会出现在 API、日志或数据库中；
+- 验证持久化内容不含 Prompt、决策、参数、结果或答案的明文，错误密钥和篡改密文都会被拒绝；
 - 验证远程新增工具不会绕过 allowlist。
 
 ## 16. 实施分解
@@ -473,11 +480,13 @@ agent_run_budget_exhausted_total
 7. 非幂等调用在崩溃后的不确定状态不会被自动重复执行。
 8. 插件、Skill、工具和运行状态可通过鉴权 API 与指标观察。
 9. 密钥不出现在插件文件、API 响应、日志或 SQLite 中。
-10. 原同步接口、旧字符串步骤和固定工作流测试继续通过。
+10. 持久化运行的 Prompt、决策、工具参数、结果和最终答案在 SQLite 中全部为认证加密密文；缺少有效加密密钥时不能启用持久化运行。
+11. 原同步接口、旧字符串步骤和固定工作流测试继续通过。
 
 ## 18. 参考实现
 
 - 官方 MCP Python SDK：https://github.com/modelcontextprotocol/python-sdk
 - MCP Server transport 指南：https://github.com/modelcontextprotocol/python-sdk/blob/main/docs/run/index.md
+- Cryptography AEAD 指南：https://cryptography.io/en/stable/hazmat/primitives/aead/
 
 官方 SDK 已提供客户端、Server、schema、会话生命周期以及标准 transport，本项目只实现适配、策略和业务运行时，不重复实现 MCP 协议栈。
