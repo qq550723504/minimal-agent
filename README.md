@@ -53,6 +53,7 @@ curl http://localhost:8000/
 - `AGENT_HTTP_ALLOWED_HOSTS`: HTTP 工具允许访问的域名，逗号分隔；为空时默认拒绝所有 HTTP 工具请求。
 - `AGENT_HTTP_TIMEOUT_SECONDS`: HTTP 工具连接和读取超时，默认 `5` 秒。
 - `AGENT_HTTP_MAX_RESPONSE_BYTES`: HTTP 工具最大响应体大小，默认 `1048576` 字节。
+- `AGENT_MAX_TOOL_RESULT_BYTES`: 所有能力结果的全局最大 JSON 大小，默认 `1048576` 字节；必须为正数。
 - `AGENT_CAPABILITY_RUNTIME_ENABLED`: 是否加载管理员安装的插件与 Skill 目录，默认 `false`。
 - `AGENT_PLUGIN_DIR`: 插件根目录，默认 `plugins`；Compose 将项目的 `./plugins` 以只读方式挂载到 `/app/plugins`。
 - `AGENT_MCP_ALLOWED_HOSTS`: 生产环境 Streamable HTTP MCP Server 的精确主机名 allowlist，逗号分隔；为空时不允许远程 MCP 连接。
@@ -62,6 +63,37 @@ curl http://localhost:8000/
 - `AGENT_MCP_SHUTDOWN_TIMEOUT_SECONDS`: 每个 MCP 客户端关闭清理的超时，默认 `10` 秒；必须是有限正数。
 - `AGENT_MAX_ACTIVE_SKILLS`: 单次请求最多激活的 Skill 数，默认 `3`。
 - `AGENT_MAX_SKILL_REFERENCE_BYTES`: 单个 Skill 参考文件的最大读取字节数，默认 `262144`。
+
+插件、Skill 与 MCP 运行时：
+
+- 默认关闭。设置 `AGENT_CAPABILITY_RUNTIME_ENABLED=true` 后，服务从 `AGENT_PLUGIN_DIR`（默认 `plugins`）下的每个 `<installation>/plugin.yaml` 加载插件。
+- 插件目录建议使用只读挂载。每个 Skill 的 `path` 必须指向插件目录内的 UTF-8 `SKILL.md`；参考资料只能通过内置的 `internal.skill_read_reference` 工具读取，且受 `AGENT_MAX_SKILL_REFERENCE_BYTES` 限制。
+- MCP stdio 连接必须同时满足 `AGENT_MCP_STDIO_ALLOWED_COMMANDS` 精确可执行文件 allowlist、插件目录内 cwd 和安全环境变量规则；shell 包装器（包括 `.cmd`/`.bat`）始终拒绝。
+- MCP Streamable HTTP 连接必须使用 HTTPS、精确主机 allowlist（`AGENT_MCP_ALLOWED_HOSTS`）和安全 DNS 地址；不会跟随重定向或使用代理环境变量。
+- `enabled: false` 的插件会记录为 disabled；`required: true` 的插件启动失败会阻止服务启动，普通插件失败只会被禁用。`/api/plugins`、`/api/skills` 和 `/api/tools` 需要鉴权，并且不会返回密钥、命令参数、Skill 正文或参考文件内容。
+
+最小插件示例：
+
+```text
+plugins/
+└── weather/
+    ├── plugin.yaml
+    └── skills/
+        └── forecast/SKILL.md
+```
+
+```yaml
+api_version: minimal-agent/v1
+id: weather
+version: 1.0.0
+enabled: true
+required: false
+skills:
+  - id: forecast
+    path: skills/forecast/SKILL.md
+    triggers: [天气预报]
+mcp_servers: []
+```
 
 5. API 调用示例：
 
@@ -75,6 +107,8 @@ curl http://localhost:8000/api/tools
 curl http://localhost:8000/api/plugins
 curl http://localhost:8000/api/skills
 ```
+
+启用 `AGENT_AUTH_REQUIRED=true` 时，API 请求使用 `X-API-Key`；`/docs`、`/redoc` 和 `/openapi.json` 也受同一鉴权保护。任务查询按 API Key 对应的用户隔离。
 
 更多文档：请参见 `docs/AGENT_GUIDE.md`，其中包含架构设计、部署建议、安全与维护策略。
 
