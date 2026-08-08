@@ -3,6 +3,7 @@
 from dataclasses import dataclass, field
 
 from src.agent.plugins.catalog import PluginCatalog
+from src.agent.namespaces import namespaced_id
 
 from .models import SkillDefinition
 
@@ -16,7 +17,7 @@ class SkillCatalog:
         skills: dict[str, SkillDefinition] = {}
         for plugin_id, plugin in plugins.plugins.items():
             for manifest_skill in plugin.manifest.skills:
-                full_id = _namespaced_skill_id(plugin_id, manifest_skill.id)
+                full_id = namespaced_id(plugin_id, manifest_skill.id)
                 if full_id in skills:
                     raise ValueError("duplicate_skill_id")
                 skills[full_id] = SkillDefinition(
@@ -33,17 +34,3 @@ class SkillCatalog:
 
     def sorted(self) -> list[SkillDefinition]:
         return [self.skills[skill_id] for skill_id in sorted(self.skills)]
-
-
-def _namespaced_skill_id(plugin_id: str, skill_id: str) -> str:
-    """Keep legacy IDs readable while escaping dots in either segment."""
-
-    return f"{_encode_segment(plugin_id)}.{_encode_segment(skill_id)}"
-
-
-def _encode_segment(value: str) -> str:
-    if "." not in value:
-        return value
-    # ``~`` is outside the manifest identifier alphabet, so the encoding
-    # cannot collide with an unencoded administrator-provided segment.
-    return f"~{value.encode('utf-8').hex()}"

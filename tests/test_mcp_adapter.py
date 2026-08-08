@@ -430,6 +430,71 @@ async def test_optional_plugin_failure_closes_all_its_clients_and_registers_noth
 
 
 @pytest.mark.anyio
+async def test_catalog_encodes_plugin_and_server_namespace_segments() -> None:
+    first_manifest = PluginManifest.model_validate(
+        {
+            "api_version": "minimal-agent/v1",
+            "id": "a.b",
+            "version": "1.0.0",
+            "mcp_servers": [
+                {
+                    "id": "c",
+                    "transport": "streamable_http",
+                    "url_env": "FIRST_URL",
+                    "allowed_tools": [
+                        {"name": "echo", "side_effects": False, "idempotent": True}
+                    ],
+                }
+            ],
+        }
+    )
+    second_manifest = PluginManifest.model_validate(
+        {
+            "api_version": "minimal-agent/v1",
+            "id": "a",
+            "version": "1.0.0",
+            "mcp_servers": [
+                {
+                    "id": "b.c",
+                    "transport": "streamable_http",
+                    "url_env": "SECOND_URL",
+                    "allowed_tools": [
+                        {"name": "echo", "side_effects": False, "idempotent": True}
+                    ],
+                }
+            ],
+        }
+    )
+    catalog = PluginCatalog(
+        plugins={
+            "a.b": LoadedPlugin("first", Path("."), first_manifest, {}),
+            "a": LoadedPlugin("second", Path("."), second_manifest, {}),
+        },
+        statuses={
+            "first": PluginStatus("first", "enabled", "a.b", "1.0.0"),
+            "second": PluginStatus("second", "enabled", "a", "1.0.0"),
+        },
+    )
+    clients = CatalogClientFactory(
+        [
+            CatalogClient({None: page([remote_tool("echo")])}),
+            CatalogClient({None: page([remote_tool("echo")])}),
+        ]
+    )
+    manager = MCPClientManager(
+        client_factory=clients,
+        server_config_resolver=lambda _plugin, _server: resolved_config(),
+    )
+
+    await manager.start_catalog(catalog, CapabilityRegistry())
+
+    assert manager.server_ids() == [
+        "a.~622e63",
+        "~612e62.c",
+    ]
+
+
+@pytest.mark.anyio
 async def test_required_plugin_failure_is_sanitized_and_closes_its_clients() -> None:
     catalog = catalog_with_plugin(
         required=True,

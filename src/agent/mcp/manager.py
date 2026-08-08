@@ -17,6 +17,7 @@ from src.agent.capabilities.registry import CapabilityRegistry
 from src.agent.plugins.catalog import LoadedPlugin, PluginCatalog
 from src.agent.plugins.loader import RequiredPluginError
 from src.agent.plugins.models import HTTPMCPServerManifest, MCPServerManifest, StdioMCPServerManifest
+from src.agent.namespaces import namespaced_id
 
 from .adapter import ClientResolver, MCPToolDiscoveryError, prepare_server_tools
 from .security import (
@@ -112,7 +113,7 @@ class MCPClientManager:
             registrations = []
             try:
                 for server in sorted(plugin.manifest.mcp_servers, key=lambda item: item.id):
-                    server_key = f"{plugin_id}.{server.id}"
+                    server_key = namespaced_id(plugin_id, server.id)
                     server_config = await self._resolve_catalog_config(plugin, server)
                     revalidator = (
                         lambda plugin=plugin, server=server: self._server_config_resolver(

@@ -15,6 +15,7 @@ from src.agent.capabilities.errors import ToolExecutionError
 from src.agent.capabilities.models import ToolInvocationContext, ToolSource, ToolSpec
 from src.agent.capabilities.registry import CapabilityHandler, CapabilityRegistry
 from src.agent.plugins.models import AllowedToolManifest
+from src.agent.namespaces import capability_namespaced_id
 
 
 class MCPToolDiscoveryError(RuntimeError):
@@ -133,9 +134,8 @@ async def prepare_server_tools(
             raise MCPToolDiscoveryError("declared_tool_missing") from error
 
         spec = ToolSpec(
-            name=(
-                f"{plugin_id}.{server_id}."
-                f"{encode_remote_tool_name(remote_tool.name)}"
+            name=capability_namespaced_id(
+                plugin_id, server_id, encode_remote_tool_name(remote_tool.name)
             ),
             description=remote_tool.description or "",
             input_schema=remote_tool.input_schema,

@@ -100,3 +100,9 @@ def test_compose_forwards_and_documents_mcp_lifecycle_timeouts():
     for variable, default in defaults.items():
         assert f"{variable}=${{{variable}:-{default}}}" in compose
         assert variable in readme
+
+
+def test_compose_forwards_global_tool_result_limit():
+    compose = (ROOT / "docker-compose.yml").read_text(encoding="utf-8")
+
+    assert "AGENT_MAX_TOOL_RESULT_BYTES=${AGENT_MAX_TOOL_RESULT_BYTES:-1048576}" in compose
