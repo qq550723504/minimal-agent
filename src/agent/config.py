@@ -6,6 +6,7 @@ def _bool_env(name: str, default: str = "true") -> bool:
 
 
 LLM_BACKEND = os.getenv("AGENT_LLM_BACKEND", "mock").strip().lower()
+PLUGIN_DIR = os.getenv("AGENT_PLUGIN_DIR", "plugins").strip()
 OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-3.5-turbo").strip()
 GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash").strip()
 EMBEDDING_BACKEND = os.getenv("AGENT_EMBEDDING_BACKEND", "mock").strip().lower()
