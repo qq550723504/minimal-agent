@@ -31,6 +31,33 @@ def test_allowed_tool_rejects_non_finite_timeout(timeout):
         )
 
 
+@pytest.mark.parametrize("field", ["side_effects", "idempotent"])
+def test_allowed_tool_requires_strict_booleans(field):
+    payload = {
+        "api_version": "minimal-agent/v1",
+        "id": "demo",
+        "version": "1.0.0",
+        "mcp_servers": [
+            {
+                "id": "remote",
+                "transport": "streamable_http",
+                "url_env": "DEMO_URL",
+                "allowed_tools": [
+                    {
+                        "name": "search",
+                        "side_effects": False,
+                        "idempotent": True,
+                    }
+                ],
+            }
+        ],
+    }
+    payload["mcp_servers"][0]["allowed_tools"][0][field] = 1
+
+    with pytest.raises(ValidationError):
+        PluginManifest.model_validate(payload)
+
+
 def test_manifest_rejects_unknown_fields():
     with pytest.raises(ValidationError):
         PluginManifest.model_validate(

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import math
 import re
 from collections.abc import Iterable
@@ -15,6 +16,7 @@ from mcp.types import Tool
 from src.agent.capabilities.errors import ToolExecutionError
 from src.agent.capabilities.models import ToolInvocationContext, ToolSource, ToolSpec
 from src.agent.capabilities.registry import CapabilityHandler, CapabilityRegistry
+from src.agent.config import MAX_TOOL_RESULT_BYTES
 from src.agent.plugins.models import AllowedToolManifest
 from src.agent.namespaces import capability_namespaced_id
 
@@ -32,6 +34,7 @@ class MCPToolDiscoveryError(RuntimeError):
 _PLAIN_REMOTE_NAME = re.compile(r"^[a-z0-9][a-z0-9_-]*$")
 _ENCODED_REMOTE_PREFIX = "mcp-encoded-"
 _DEFAULT_DISCOVERY_TIMEOUT_SECONDS = 30.0
+_MAX_DISCOVERED_TOOLS = 256
 ClientResolver = Callable[[], Any]
 
 
@@ -70,11 +73,23 @@ async def discover_tools(
     cursor: str | None = None
     seen_cursors: set[str | None] = {None}
     tools: list[Tool] = []
+    discovered_bytes = 0
     try:
         async with asyncio.timeout(timeout_seconds):
             while True:
                 result = await client.list_tools(cursor=cursor)
-                tools.extend(result.tools)
+                for tool in result.tools:
+                    discovered_bytes += len(
+                        json.dumps(
+                            tool.model_dump(), ensure_ascii=False, default=str
+                        ).encode("utf-8")
+                    )
+                    tools.append(tool)
+                    if (
+                        len(tools) > _MAX_DISCOVERED_TOOLS
+                        or discovered_bytes > MAX_TOOL_RESULT_BYTES
+                    ):
+                        raise MCPToolDiscoveryError("mcp_tool_discovery_limit")
                 cursor = result.next_cursor
                 if cursor is None:
                     return tools
@@ -171,8 +186,8 @@ def _remote_handler(
     idempotent: bool,
 ) -> CapabilityHandler:
     async def invoke(arguments: dict[str, Any], _context: ToolInvocationContext) -> Any:
-        client = resolve_client()
         try:
+            client = resolve_client()
             result = await client.call_tool(remote_name, arguments)
         except MCPResponseTooLarge:
             raise ToolExecutionError("tool_result_too_large", retryable=False) from None
@@ -186,6 +201,12 @@ def _remote_handler(
             if idempotent:
                 raise ToolExecutionError(
                     "mcp_tool_transport_failed", retryable=True
+                ) from None
+            raise
+        except Exception:
+            if idempotent:
+                raise ToolExecutionError(
+                    "mcp_tool_unavailable", retryable=True
                 ) from None
             raise
         if result.is_error:

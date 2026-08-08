@@ -153,6 +153,49 @@ async def test_schema_validation_runs_under_tool_timeout():
     )
 
     assert result.error_code == "tool_timeout"
+    assert result.status == "error"
+
+
+@pytest.mark.anyio
+async def test_non_json_result_is_rejected():
+    registry = CapabilityRegistry()
+    registry.register(make_spec("demo.invalid_result"), lambda *_: {"bad"})
+
+    result = await registry.invoke(
+        ToolCall(call_id="invalid-result", tool="demo.invalid_result"),
+        ToolInvocationContext(),
+    )
+
+    assert result.error_code == "tool_result_not_serializable"
+
+
+@pytest.mark.anyio
+async def test_schema_timeout_is_not_unknown_outcome():
+    from src.agent.capabilities.registry import _RegistryEntry
+
+    registry = CapabilityRegistry()
+    spec = make_spec(
+        "demo.unsafe_schema",
+        timeout_seconds=0.001,
+        side_effects=True,
+        idempotent=False,
+    )
+    registry.register(spec, lambda *_: "not called")
+    entry = registry._entries[spec.name]
+
+    class SlowValidator:
+        def is_valid(self, arguments):
+            time.sleep(0.05)
+            return True
+
+    registry._entries[spec.name] = _RegistryEntry(
+        spec=entry.spec, handler=entry.handler, validator=SlowValidator()
+    )
+    result = await registry.invoke(
+        ToolCall(call_id="unsafe-schema", tool=spec.name), ToolInvocationContext()
+    )
+
+    assert (result.status, result.error_code) == ("error", "tool_timeout")
 
 
 @pytest.mark.anyio

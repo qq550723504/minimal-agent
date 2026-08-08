@@ -100,6 +100,7 @@ class CapabilityRegistry:
         if entry is None:
             result = self._error_result(call, "unknown_tool")
         else:
+            validation_timed_out = False
             try:
                 try:
                     async with asyncio.timeout(entry.spec.timeout_seconds):
@@ -107,12 +108,14 @@ class CapabilityRegistry:
                             entry.validator.is_valid, call.arguments
                         )
                 except asyncio.TimeoutError:
-                    raise
+                    validation_timed_out = True
                 except Exception:
                     # Unresolvable refs (including all remote refs) are invalid
                     # arguments, never an execution failure or network request.
                     valid_arguments = False
-                if not valid_arguments:
+                if validation_timed_out:
+                    result = self._error_result(call, "tool_timeout", retryable=True)
+                elif not valid_arguments:
                     result = self._error_result(call, "invalid_tool_arguments")
                 else:
                     async with asyncio.timeout(entry.spec.timeout_seconds):
@@ -125,10 +128,14 @@ class CapabilityRegistry:
                         if inspect.isawaitable(value):
                             value = await value
                     result_limit = min(entry.spec.result_size_limit, self._max_result_bytes)
-                    within_limit = await asyncio.to_thread(
-                        _serialized_size_within_limit, value, result_limit
+                    serialization_status = await asyncio.to_thread(
+                        _serialized_size_status, value, result_limit
                     )
-                    if not within_limit:
+                    if serialization_status == "invalid":
+                        result = self._error_result(
+                            call, "tool_result_not_serializable"
+                        )
+                    elif serialization_status == "too_large":
                         result = self._error_result(call, "tool_result_too_large")
                     else:
                         result = ToolResult(
@@ -189,11 +196,14 @@ def _is_async_callable(handler: CapabilityHandler) -> bool:
     )
 
 
-def _serialized_size_within_limit(value: Any, limit: int) -> bool:
+def _serialized_size_status(value: Any, limit: int) -> str:
     total = 0
-    encoder = json.JSONEncoder(ensure_ascii=False, default=str)
-    for chunk in encoder.iterencode(value):
-        total += len(chunk.encode("utf-8"))
-        if total > limit:
-            return False
-    return True
+    try:
+        encoder = json.JSONEncoder(ensure_ascii=False)
+        for chunk in encoder.iterencode(value):
+            total += len(chunk.encode("utf-8"))
+            if total > limit:
+                return "too_large"
+    except (TypeError, ValueError, UnicodeError):
+        return "invalid"
+    return "ok"

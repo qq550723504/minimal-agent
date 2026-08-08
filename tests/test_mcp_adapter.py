@@ -143,6 +143,18 @@ async def test_discovery_rejects_repeating_cursor() -> None:
 
 
 @pytest.mark.anyio
+async def test_discovery_bounds_cumulative_tool_count(monkeypatch) -> None:
+    from src.agent.mcp import adapter
+    from src.agent.mcp.adapter import MCPToolDiscoveryError, discover_tools
+
+    monkeypatch.setattr(adapter, "_MAX_DISCOVERED_TOOLS", 1)
+    client = FakeMCPClient({None: page([remote_tool("one"), remote_tool("two")])})
+
+    with pytest.raises(MCPToolDiscoveryError, match="mcp_tool_discovery_limit"):
+        await discover_tools(client)
+
+
+@pytest.mark.anyio
 async def test_discovery_has_a_total_timeout() -> None:
     from src.agent.mcp.adapter import MCPToolDiscoveryError, discover_tools
 

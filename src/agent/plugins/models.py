@@ -40,8 +40,8 @@ class AllowedToolManifest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     name: str
-    side_effects: bool
-    idempotent: bool
+    side_effects: StrictBool
+    idempotent: StrictBool
     timeout_seconds: float = Field(default=30.0, gt=0)
     result_size_limit: int = Field(default=1_048_576, gt=0)
 
