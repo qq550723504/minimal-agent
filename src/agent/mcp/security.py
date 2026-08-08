@@ -38,6 +38,7 @@ class ResolvedHTTPConfig:
 
 
 _SHELL_BASENAMES = frozenset({"cmd", "powershell", "pwsh", "bash", "sh"})
+_SHELL_EXTENSIONS = frozenset({".bat", ".cmd"})
 
 
 def validate_stdio_config(
@@ -185,7 +186,7 @@ def _normalize_path(path: Path) -> str:
 
 
 def _shell_basename(command: Path) -> bool:
-    return _shell_name(command.name)
+    return command.suffix.lower() in _SHELL_EXTENSIONS or _shell_name(command.name)
 
 
 def _shell_name(command: str) -> bool:

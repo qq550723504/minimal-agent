@@ -48,6 +48,19 @@ def test_stdio_rejects_shell_wrappers(command, stdio_manifest, tmp_path):
         validate_stdio_config(stdio_manifest, tmp_path, {command})
 
 
+@pytest.mark.parametrize("extension", [".cmd", ".bat"])
+def test_stdio_rejects_allowlisted_windows_batch_wrapper(
+    extension, stdio_manifest, tmp_path
+):
+    """An allowlisted batch file still invokes cmd.exe and is therefore a shell wrapper."""
+    wrapper = tmp_path / f"server{extension}"
+    wrapper.write_text("@echo off\r\n", encoding="utf-8")
+    stdio_manifest.command = str(wrapper)
+
+    with pytest.raises(MCPSecurityError, match="mcp_stdio_shell_forbidden"):
+        validate_stdio_config(stdio_manifest, tmp_path, {str(wrapper)})
+
+
 def test_stdio_resolves_allowed_executable_and_only_declared_environment(
     stdio_manifest, tmp_path
 ):
