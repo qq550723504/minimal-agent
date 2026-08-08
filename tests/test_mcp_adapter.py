@@ -328,3 +328,72 @@ async def test_required_plugin_failure_is_sanitized_and_closes_its_clients() -> 
 
     assert client.exit_count == 1
     assert manager.server_ids() == []
+
+
+@pytest.mark.anyio
+async def test_required_failure_rolls_back_earlier_plugins_but_keeps_preexisting_tools() -> None:
+    first_catalog = catalog_with_plugin(
+        required=False,
+        servers=[
+            {
+                "id": "remote",
+                "transport": "streamable_http",
+                "url_env": "FIRST_URL",
+                "allowed_tools": [
+                    {"name": "approved", "side_effects": False, "idempotent": True}
+                ],
+            }
+        ],
+    )
+    first_plugin = first_catalog.plugins.pop("demo")
+    first_status = first_catalog.statuses.pop("demo-install")
+    required_manifest = PluginManifest.model_validate(
+        {
+            "api_version": "minimal-agent/v1",
+            "id": "required",
+            "version": "1.0.0",
+            "required": True,
+            "mcp_servers": [
+                {
+                    "id": "remote",
+                    "transport": "streamable_http",
+                    "url_env": "REQUIRED_URL",
+                    "allowed_tools": [
+                        {"name": "missing", "side_effects": False, "idempotent": True}
+                    ],
+                }
+            ],
+        }
+    )
+    required_plugin = LoadedPlugin("required-install", Path("."), required_manifest, {})
+    catalog = PluginCatalog(
+        plugins={"demo": first_plugin, "required": required_plugin},
+        statuses={
+            first_status.installation_name: first_status,
+            "required-install": PluginStatus(
+                "required-install", "enabled", "required", "1.0.0"
+            ),
+        },
+    )
+    preexisting = ToolSpec(
+        name="preexisting.local",
+        input_schema={"type": "object"},
+        source=ToolSource.LOCAL,
+        side_effects=False,
+        idempotent=True,
+    )
+    registry = CapabilityRegistry()
+    registry.register(preexisting, lambda _arguments, _context: None)
+    first_client = CatalogClient({None: page([remote_tool("approved")])})
+    required_client = CatalogClient({None: page([])})
+    manager = MCPClientManager(
+        client_factory=CatalogClientFactory([first_client, required_client]),
+        server_config_resolver=lambda _plugin, _server: resolved_config(),
+    )
+
+    with pytest.raises(RequiredPluginError, match="declared_tool_missing"):
+        await manager.start_catalog(catalog, registry)
+
+    assert first_client.exit_count == required_client.exit_count == 1
+    assert manager.server_ids() == []
+    assert [spec.name for spec in registry.list_specs()] == ["preexisting.local"]

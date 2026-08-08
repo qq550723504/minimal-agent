@@ -66,6 +66,8 @@ class MCPClientManager:
         self, catalog: PluginCatalog, registry: CapabilityRegistry
     ) -> None:
         """Start plugins deterministically and publish each plugin's tools atomically."""
+        attempt_server_ids: list[str] = []
+        attempt_tool_names: list[str] = []
         for plugin_id, plugin in sorted(catalog.plugins.items()):
             started_server_ids: list[str] = []
             registrations = []
@@ -86,11 +88,16 @@ class MCPClientManager:
                         )
                     )
                 registry.register_many(registrations)
+                attempt_server_ids.extend(started_server_ids)
+                attempt_tool_names.extend(spec.name for spec, _handler in registrations)
             except Exception as error:
                 await self._stop_catalog_servers(started_server_ids)
                 error_code = self._catalog_error_code(error)
                 catalog.disable_plugin(plugin_id, error_code)
                 if plugin.manifest.required:
+                    await self._rollback_catalog_attempt(
+                        attempt_server_ids, attempt_tool_names, registry
+                    )
                     raise RequiredPluginError(error_code) from None
 
     async def _start_server(
@@ -126,6 +133,17 @@ class MCPClientManager:
                 await self.stop_server(server_id)
             except MCPConnectionError:
                 continue
+
+    async def _rollback_catalog_attempt(
+        self,
+        server_ids: Iterable[str],
+        tool_names: Iterable[str],
+        registry: CapabilityRegistry,
+    ) -> None:
+        """Undo only clients and tools created during this failed catalog start."""
+        await self._stop_catalog_servers(server_ids)
+        for tool_name in tool_names:
+            registry.unregister(tool_name)
 
     @staticmethod
     def _catalog_error_code(error: Exception) -> str:
