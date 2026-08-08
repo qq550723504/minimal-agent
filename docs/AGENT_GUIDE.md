@@ -12,7 +12,7 @@
 
 ## 三、开发与依赖
 - 推荐语言：Python 3.11+（示例基于 Python）。
-- 依赖管理：使用 `requirements.txt` 或 `pyproject.toml`。
+- 依赖管理：运行时使用 `requirements.txt`，测试和 CI 使用 `requirements-dev.txt`；如需构建可发布包，再引入 `pyproject.toml`。
 
 示例：
 ```bash
@@ -47,6 +47,8 @@ MCP Server 支持两种传输：
 建议至少配置：`AGENT_MCP_ALLOWED_HOSTS`、`AGENT_MCP_STDIO_ALLOWED_COMMANDS`、`AGENT_MAX_TOOL_RESULT_BYTES`、`AGENT_MAX_ACTIVE_SKILLS` 和三个 `AGENT_MCP_*_TIMEOUT_SECONDS` 变量。所有 MCP allowlist 默认拒绝，超时必须是有限正数。
 
 队列工作流使用 `WORKFLOW_STORE_PATH` 指定的 SQLite 数据库保存工作流定义、步骤结果、重试状态和生命周期事件。每个步骤完成后立即提交状态；服务重启时会把中断中的工作流恢复为待执行，并从第一个未完成步骤继续。该机制提供至少一次执行语义，步骤执行期间进程退出可能导致该步骤再次执行。任意 Python callable 直接提交到内部队列仍仅支持进程内执行，不支持跨进程恢复。
+
+当前队列由单个进程内工作线程和 SQLite 文件组成，生产部署应保持单实例；多副本部署前应采用成熟的外部队列和共享数据库，并重新验证任务领取、幂等性和恢复语义。
 
 ### 4.2 向量记忆持久化
 `src/agent/vector_memory.py` 提供 `save(path)` 和 `load(path)` 方法，适合用于简单的磁盘持久化或作为构建持久化记忆层的基础。
@@ -86,6 +88,7 @@ http_post: {"url": "https://api.example.com/items", "json": {"name": "agent"}}
 - 容器化：提供 `Dockerfile`，镜像中包含运行时与入口。
 - 编排：建议 Kubernetes 或 Serverless；先灰度再放量。
 - 监控：Prometheus/Grafana 指标、ELK/EFK 日志聚合。
+- 本地开发使用 `docker compose up --build`。生产环境使用 `docker compose -f docker-compose.yml -f docker-compose.production.yml up --build`，并提供 `AGENT_API_KEYS`、`AGENT_METRICS_API_KEY` 和 `AGENT_HTTP_ALLOWED_HOSTS`；生产模式会在启动时拒绝不安全配置。
 
 ## 七、安全与合规
 - 最小权限、输入校验、审计日志、PII 识别与删除策略。

@@ -1,7 +1,32 @@
+import os
 from pathlib import Path
+import subprocess
+import sys
 
 
 ROOT = Path(__file__).parents[1]
+
+_CONFIG_ENVIRONMENT_KEYS = {
+    "AGENT_DEPLOYMENT_MODE",
+    "AGENT_AUTH_REQUIRED",
+    "AGENT_API_KEYS",
+    "AGENT_METRICS_API_KEY",
+    "AGENT_HTTP_ALLOWED_HOSTS",
+}
+
+
+def _import_config_with_environment(**values):
+    environment = os.environ.copy()
+    for key in _CONFIG_ENVIRONMENT_KEYS:
+        environment.pop(key, None)
+    environment.update(values)
+    return subprocess.run(
+        [sys.executable, "-c", "import src.agent.config"],
+        cwd=ROOT,
+        env=environment,
+        capture_output=True,
+        text=True,
+    )
 
 
 def test_prometheus_config_is_tracked_and_compose_references_it():
@@ -48,11 +73,11 @@ def test_readme_documents_vector_memory_migration():
 def test_compose_forwards_gemini_configuration():
     compose = (ROOT / "docker-compose.yml").read_text(encoding="utf-8")
 
-    assert "GEMINI_API_KEY=${GEMINI_API_KEY:-}" in compose
-    assert "GEMINI_MODEL=${GEMINI_MODEL:-gemini-2.5-flash}" in compose
-    assert "GEMINI_EMBEDDING_MODEL=${GEMINI_EMBEDDING_MODEL:-gemini-embedding-2}" in compose
-    assert "AGENT_LLM_BACKEND=${AGENT_LLM_BACKEND:-mock}" in compose
-    assert "AGENT_EMBEDDING_BACKEND=${AGENT_EMBEDDING_BACKEND:-mock}" in compose
+    assert "GEMINI_API_KEY: ${GEMINI_API_KEY:-}" in compose
+    assert "GEMINI_MODEL: ${GEMINI_MODEL:-gemini-2.5-flash}" in compose
+    assert "GEMINI_EMBEDDING_MODEL: ${GEMINI_EMBEDDING_MODEL:-gemini-embedding-2}" in compose
+    assert "AGENT_LLM_BACKEND: ${AGENT_LLM_BACKEND:-mock}" in compose
+    assert "AGENT_EMBEDDING_BACKEND: ${AGENT_EMBEDDING_BACKEND:-mock}" in compose
 
 
 def test_compose_configures_persistent_workflow_store():
@@ -60,7 +85,7 @@ def test_compose_configures_persistent_workflow_store():
     readme = (ROOT / "README.md").read_text(encoding="utf-8")
     guide = (ROOT / "docs" / "AGENT_GUIDE.md").read_text(encoding="utf-8")
 
-    assert "WORKFLOW_STORE_PATH=${WORKFLOW_STORE_PATH:-/app/data/workflows.sqlite3}" in compose
+    assert "WORKFLOW_STORE_PATH: ${WORKFLOW_STORE_PATH:-/app/data/workflows.sqlite3}" in compose
     assert "WORKFLOW_STORE_PATH" in readme
     assert "重启" in readme
     assert "WORKFLOW_STORE_PATH" in guide
@@ -70,7 +95,7 @@ def test_compose_mounts_plugins_read_only():
     compose = (ROOT / "docker-compose.yml").read_text(encoding="utf-8")
 
     assert "./plugins:/app/plugins:ro" in compose
-    assert "AGENT_CAPABILITY_RUNTIME_ENABLED=${AGENT_CAPABILITY_RUNTIME_ENABLED:-false}" in compose
+    assert "AGENT_CAPABILITY_RUNTIME_ENABLED: ${AGENT_CAPABILITY_RUNTIME_ENABLED:-false}" in compose
 
 
 def test_compose_forwards_and_documents_mcp_security_allowlists():
@@ -78,9 +103,9 @@ def test_compose_forwards_and_documents_mcp_security_allowlists():
     readme = (ROOT / "README.md").read_text(encoding="utf-8")
     guide = (ROOT / "docs" / "AGENT_GUIDE.md").read_text(encoding="utf-8")
 
-    assert "AGENT_MCP_ALLOWED_HOSTS=${AGENT_MCP_ALLOWED_HOSTS:-}" in compose
+    assert "AGENT_MCP_ALLOWED_HOSTS: ${AGENT_MCP_ALLOWED_HOSTS:-}" in compose
     assert (
-        "AGENT_MCP_STDIO_ALLOWED_COMMANDS=${AGENT_MCP_STDIO_ALLOWED_COMMANDS:-}"
+        "AGENT_MCP_STDIO_ALLOWED_COMMANDS: ${AGENT_MCP_STDIO_ALLOWED_COMMANDS:-}"
         in compose
     )
     assert "AGENT_MCP_ALLOWED_HOSTS" in readme
@@ -98,14 +123,14 @@ def test_compose_forwards_and_documents_mcp_lifecycle_timeouts():
     }
 
     for variable, default in defaults.items():
-        assert f"{variable}=${{{variable}:-{default}}}" in compose
+        assert f"{variable}: ${{{variable}:-{default}}}" in compose
         assert variable in readme
 
 
 def test_compose_forwards_global_tool_result_limit():
     compose = (ROOT / "docker-compose.yml").read_text(encoding="utf-8")
 
-    assert "AGENT_MAX_TOOL_RESULT_BYTES=${AGENT_MAX_TOOL_RESULT_BYTES:-1048576}" in compose
+    assert "AGENT_MAX_TOOL_RESULT_BYTES: ${AGENT_MAX_TOOL_RESULT_BYTES:-1048576}" in compose
 
 
 def test_docker_build_context_excludes_local_runtime_data():
@@ -122,3 +147,81 @@ def test_dockerfile_copies_only_runtime_inputs():
     assert "COPY requirements.txt /app/requirements.txt" in dockerfile
     assert "COPY src /app/src" in dockerfile
     assert "COPY plugins /app/plugins" in dockerfile
+
+
+def test_development_mode_accepts_existing_defaults():
+    result = _import_config_with_environment(AGENT_DEPLOYMENT_MODE="development")
+
+    assert result.returncode == 0, result.stderr
+
+
+def test_production_mode_rejects_disabled_authentication():
+    result = _import_config_with_environment(
+        AGENT_DEPLOYMENT_MODE="production",
+        AGENT_AUTH_REQUIRED="false",
+        AGENT_API_KEYS="worker:strong-key",
+        AGENT_METRICS_API_KEY="strong-metrics-key",
+        AGENT_HTTP_ALLOWED_HOSTS="api.example.com",
+    )
+
+    assert result.returncode != 0
+    assert "AGENT_AUTH_REQUIRED" in result.stderr
+
+
+def test_production_mode_rejects_missing_api_keys():
+    result = _import_config_with_environment(
+        AGENT_DEPLOYMENT_MODE="production",
+        AGENT_AUTH_REQUIRED="true",
+        AGENT_METRICS_API_KEY="strong-metrics-key",
+        AGENT_HTTP_ALLOWED_HOSTS="api.example.com",
+    )
+
+    assert result.returncode != 0
+    assert "AGENT_API_KEYS" in result.stderr
+
+
+def test_production_mode_rejects_default_metrics_token():
+    result = _import_config_with_environment(
+        AGENT_DEPLOYMENT_MODE="production",
+        AGENT_AUTH_REQUIRED="true",
+        AGENT_API_KEYS="worker:strong-key",
+        AGENT_METRICS_API_KEY="local-dev-metrics",
+        AGENT_HTTP_ALLOWED_HOSTS="api.example.com",
+    )
+
+    assert result.returncode != 0
+    assert "AGENT_METRICS_API_KEY" in result.stderr
+
+
+def test_production_mode_rejects_missing_http_allowlist():
+    result = _import_config_with_environment(
+        AGENT_DEPLOYMENT_MODE="production",
+        AGENT_AUTH_REQUIRED="true",
+        AGENT_API_KEYS="worker:strong-key",
+        AGENT_METRICS_API_KEY="strong-metrics-key",
+    )
+
+    assert result.returncode != 0
+    assert "AGENT_HTTP_ALLOWED_HOSTS" in result.stderr
+
+
+def test_production_mode_accepts_complete_configuration():
+    result = _import_config_with_environment(
+        AGENT_DEPLOYMENT_MODE="production",
+        AGENT_AUTH_REQUIRED="true",
+        AGENT_API_KEYS="worker:strong-key",
+        AGENT_METRICS_API_KEY="strong-metrics-key",
+        AGENT_HTTP_ALLOWED_HOSTS="api.example.com",
+    )
+
+    assert result.returncode == 0, result.stderr
+
+
+def test_production_compose_requires_security_variables():
+    compose = (ROOT / "docker-compose.production.yml").read_text(encoding="utf-8")
+
+    assert "AGENT_DEPLOYMENT_MODE: production" in compose
+    assert "AGENT_AUTH_REQUIRED: \"true\"" in compose
+    assert "${AGENT_API_KEYS:?" in compose
+    assert "${AGENT_METRICS_API_KEY:?" in compose
+    assert "${AGENT_HTTP_ALLOWED_HOSTS:?" in compose

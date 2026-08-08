@@ -1,0 +1,8 @@
+services:
+  agent:
+    environment:
+      AGENT_DEPLOYMENT_MODE: production
+      AGENT_AUTH_REQUIRED: "true"
+      AGENT_API_KEYS: "${AGENT_API_KEYS:?AGENT_API_KEYS must be set}"
+      AGENT_METRICS_API_KEY: "${AGENT_METRICS_API_KEY:?AGENT_METRICS_API_KEY must be set}"
+      AGENT_HTTP_ALLOWED_HOSTS: "${AGENT_HTTP_ALLOWED_HOSTS:?AGENT_HTTP_ALLOWED_HOSTS must be set}"

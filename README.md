@@ -3,6 +3,8 @@
 [![CI](https://github.com/qq550723504/minimal-agent/actions/workflows/ci.yml/badge.svg)](https://github.com/qq550723504/minimal-agent/actions/workflows/ci.yml)
 [![Release](https://github.com/qq550723504/minimal-agent/actions/workflows/release.yml/badge.svg)](https://github.com/qq550723504/minimal-agent/actions/workflows/release.yml)
 
+Minimal Agent 是一个可配置、可观测、支持多步骤规划与工具执行的 FastAPI Agent 原型，默认使用 mock 后端，支持 OpenAI、Gemini、向量记忆、持久化工作流以及可选的 Plugin、Skill 和 MCP 运行时。
+
 运行示例：
 
 1. 本地运行：
@@ -47,6 +49,7 @@ curl http://localhost:8000/
 - `VECTOR_MEMORY_PATH`: 向量记忆持久化文件路径，Docker 默认 `/app/data/vector_memory.json`。
 - `QUEUE_WORKER_COUNT`: 后台任务队列工作线程数，默认 `2`。
 - `WORKFLOW_STORE_PATH`: SQLite 工作流状态数据库路径，默认 `data/workflows.sqlite3`；Docker 默认 `/app/data/workflows.sqlite3`。
+- `AGENT_DEPLOYMENT_MODE`: 部署模式，默认 `development`；`production` 模式会强制校验鉴权、密钥、metrics token 和 HTTP allowlist。
 - `AGENT_AUTH_REQUIRED`: 是否强制 API Key 鉴权，默认 `false`；生产环境建议设置为 `true`。
 - `AGENT_API_KEYS`: 用户和 API Key 映射，格式为 `user_id:key,user_id2:key2`。
 - `AGENT_METRICS_API_KEY`: Prometheus 访问 `/metrics` 的独立 Bearer token。
@@ -114,15 +117,17 @@ curl http://localhost:8000/api/skills
 
 编排与监控：
 - `docker-compose.yml` 包含 `agent` 和 `prometheus` 服务。
+- 本地开发使用 `docker compose up --build`；生产环境使用 `docker compose -f docker-compose.yml -f docker-compose.production.yml up --build`，并必须提供 `AGENT_API_KEYS`、`AGENT_METRICS_API_KEY` 和 `AGENT_HTTP_ALLOWED_HOSTS`。
 - `AGENT_ENABLE_MEMORY=true` 和 `VECTOR_MEMORY_PATH=/app/data/vector_memory.json` 已在 Docker 环境中启用。
 - 升级旧版 Compose 部署时，请在首次启动新配置前迁移旧版向量记忆：如果项目根目录存在 `vector_memory.json` 且 `data/vector_memory.json` 不存在，PowerShell 执行 `New-Item -ItemType Directory -Force .\data; Copy-Item .\vector_memory.json .\data\vector_memory.json`。
-- 生产部署至少应配置 `AGENT_AUTH_REQUIRED=true`、`AGENT_API_KEYS` 和 `AGENT_HTTP_ALLOWED_HOSTS`。
+- 生产部署必须使用 `AGENT_DEPLOYMENT_MODE=production`；生产 Compose 会要求 `AGENT_AUTH_REQUIRED=true`、`AGENT_API_KEYS`、`AGENT_METRICS_API_KEY` 和 `AGENT_HTTP_ALLOWED_HOSTS`。
 - 切换 `AGENT_EMBEDDING_BACKEND` 或 Embeddings 模型后，向量空间可能不兼容；应删除并重建 `VECTOR_MEMORY_PATH` 中的旧向量数据。
-- Prometheus 使用 `./data/metrics-token` 作为 Bearer token；生产环境必须把它替换为与 `AGENT_METRICS_API_KEY` 相同的随机值。
+- Prometheus 使用固定版本镜像和 `./data/metrics-token` 作为 Bearer token；该 token 仅用于本地开发，生产环境必须把它替换为与 `AGENT_METRICS_API_KEY` 相同的随机值。
 - Compose 会把 `./data` 挂载到容器的 `/app/data`，用于持久化向量记忆、审计日志和 SQLite 工作流状态。
 - 插件运行时默认关闭。启用 `AGENT_CAPABILITY_RUNTIME_ENABLED=true` 后，服务仅在启动时从只读插件目录构建目录；`/api/plugins` 和 `/api/skills` 仅返回声明的标识、版本、状态、错误码、触发词和能力名，不返回命令、环境变量、Skill 正文或参考文件内容。
 - 队列工作流会在每个步骤完成后保存状态；服务重启后会从第一个未完成步骤恢复。恢复语义是至少一次执行，服务在步骤执行中退出时该步骤可能再次执行。
 - 只有通过工作流入口创建的任务支持重启恢复；直接提交任意 Python callable 的内部队列任务不支持跨进程恢复。
+- 当前队列由单个进程内工作线程和 SQLite 文件组成，生产部署应保持单实例；多副本需要迁移到外部队列和共享数据库。
 - 访问 `http://localhost:9090` 可查看 Prometheus UI。
 
 版本与变更记录：请参见 `CHANGELOG.md`。
