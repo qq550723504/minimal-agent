@@ -7,9 +7,11 @@ from .models import (
     ToolSource,
     ToolSpec,
 )
+from .registry import CapabilityRegistry
 
 __all__ = [
     "ToolCall",
+    "CapabilityRegistry",
     "ToolExecutionError",
     "ToolInvocationContext",
     "ToolResult",
