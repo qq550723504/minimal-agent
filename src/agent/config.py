@@ -10,7 +10,18 @@ def _csv_env(name: str) -> frozenset[str]:
     return frozenset(item.strip() for item in os.getenv(name, "").split(",") if item.strip())
 
 
+def _has_configured_api_key() -> bool:
+    for item in os.getenv("AGENT_API_KEYS", "").split(","):
+        if ":" not in item:
+            continue
+        user_id, key = (part.strip() for part in item.split(":", 1))
+        if user_id and user_id != "default" and key:
+            return True
+    return False
+
+
 LLM_BACKEND = os.getenv("AGENT_LLM_BACKEND", "mock").strip().lower()
+DEPLOYMENT_MODE = os.getenv("AGENT_DEPLOYMENT_MODE", "development").strip().lower()
 CAPABILITY_RUNTIME_ENABLED = _bool_env("AGENT_CAPABILITY_RUNTIME_ENABLED", "false")
 PLUGIN_DIR = os.getenv("AGENT_PLUGIN_DIR", "plugins").strip()
 MCP_ALLOWED_HOSTS = _csv_env("AGENT_MCP_ALLOWED_HOSTS")
@@ -45,3 +56,15 @@ if any(
     )
 ):
     raise ValueError("MCP lifecycle timeouts must be finite and positive")
+if DEPLOYMENT_MODE not in {"development", "production"}:
+    raise ValueError("AGENT_DEPLOYMENT_MODE must be development or production")
+if DEPLOYMENT_MODE == "production":
+    if not _bool_env("AGENT_AUTH_REQUIRED", "false"):
+        raise ValueError("AGENT_AUTH_REQUIRED must be true in production")
+    if not _has_configured_api_key():
+        raise ValueError("AGENT_API_KEYS must contain a non-default user key in production")
+    metrics_api_key = os.getenv("AGENT_METRICS_API_KEY", "").strip()
+    if not metrics_api_key or metrics_api_key == "local-dev-metrics":
+        raise ValueError("AGENT_METRICS_API_KEY must be a non-default value in production")
+    if not _csv_env("AGENT_HTTP_ALLOWED_HOSTS"):
+        raise ValueError("AGENT_HTTP_ALLOWED_HOSTS must be configured in production")

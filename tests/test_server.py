@@ -1,4 +1,5 @@
 import asyncio
+from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
@@ -8,11 +9,31 @@ from src.agent.task_queue import enqueue_task
 from src.agent.tool_registry import get_capability_registry
 
 
+ROOT = Path(__file__).parents[1]
+
+
 def test_handle_endpoint():
     client = TestClient(server.app)
     resp = client.post("/api/handle", json={"prompt": "hello"})
     assert resp.status_code == 200
     assert resp.json()["result"]
+
+
+def test_runtime_and_development_requirements_are_separated():
+    runtime = (ROOT / "requirements.txt").read_text(encoding="utf-8")
+    development = (ROOT / "requirements-dev.txt").read_text(encoding="utf-8")
+
+    assert "pytest" not in runtime
+    assert "scikit-learn" not in runtime
+    assert "-r requirements.txt" in development
+    assert "pytest==9.1.1" in development
+
+
+def test_fastapi_version_comes_from_service_version_module():
+    from src.agent.version import __version__
+
+    assert __version__ == "0.1.0"
+    assert server.app.version == __version__
 
 
 def test_api_requires_valid_key_when_authentication_is_enabled(monkeypatch):

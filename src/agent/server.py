@@ -22,6 +22,7 @@ from src.agent.skills.loader import SkillCatalog
 from src.agent.skills.reference_tool import register_skill_reference_tool
 from src.agent.task_queue import get_status, list_tasks, start_queue, stop_queue
 from src.agent.tool_registry import get_capability_registry, list_tool_metadata
+from src.agent.version import __version__
 
 logging.basicConfig(
     level=logging.INFO,
@@ -112,7 +113,13 @@ async def lifespan(application: FastAPI):
             logging.error("Agent lifecycle cleanup failed: %s", cleanup_failure)
 
 
-app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None, lifespan=lifespan)
+app = FastAPI(
+    version=__version__,
+    docs_url=None,
+    redoc_url=None,
+    openapi_url=None,
+    lifespan=lifespan,
+)
 app.state.plugin_catalog = PluginCatalog()
 app.state.skill_catalog = SkillCatalog()
 app.state.mcp_manager = None

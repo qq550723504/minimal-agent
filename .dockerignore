@@ -1,0 +1,16 @@
+.git
+.worktrees
+.pytest_cache
+__pycache__
+*.py[cod]
+.venv
+.ci_env
+env
+venv
+data
+tests
+docs
+*.log
+*.sqlite3
+vector_memory.json
+audit.log

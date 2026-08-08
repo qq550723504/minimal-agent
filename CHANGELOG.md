@@ -34,7 +34,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) 
 ### Security
 - MCP stdio 精确命令 allowlist、shell 包装器拒绝、HTTP HTTPS/主机 allowlist、SSRF 地址校验、DNS rebinding 防护和 Skill 参考路径 containment。
 
-## [0.0.1] - YYYY-MM-DD
+## [0.0.1] - 2026-08-08
 
 ### Added
 - Initial minimal Agent architecture and implementation.
