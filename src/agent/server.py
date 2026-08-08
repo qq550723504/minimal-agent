@@ -30,6 +30,9 @@ app.state.skill_catalog = SkillCatalog()
 setup_metrics(app)
 
 
+_CAPABILITY_RUNTIME_TOOL_NAMES = ("internal.skill_read_reference",)
+
+
 @app.exception_handler(ClientInputError)
 async def client_input_error_handler(_request, exc: ClientInputError):
     return JSONResponse(status_code=400, content={"detail": str(exc)})
@@ -70,6 +73,7 @@ class SkillCatalogOut(BaseModel):
 
 @app.on_event("startup")
 def on_startup():
+    _clear_capability_runtime()
     if config.CAPABILITY_RUNTIME_ENABLED:
         plugin_catalog = PluginLoader(Path(config.PLUGIN_DIR)).load_all()
         skill_catalog = SkillCatalog.from_plugins(plugin_catalog)
@@ -85,8 +89,17 @@ def on_startup():
 
 @app.on_event("shutdown")
 def on_shutdown():
+    _clear_capability_runtime()
     save_memory()
     stop_queue()
+
+
+def _clear_capability_runtime() -> None:
+    registry = get_capability_registry()
+    for tool_name in _CAPABILITY_RUNTIME_TOOL_NAMES:
+        registry.unregister(tool_name)
+    app.state.plugin_catalog = PluginCatalog()
+    app.state.skill_catalog = SkillCatalog()
 
 
 @app.get("/")

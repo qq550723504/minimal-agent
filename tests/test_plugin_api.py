@@ -4,8 +4,8 @@ import pytest
 from fastapi.testclient import TestClient
 
 from src.agent import server
-from src.agent.capabilities.registry import CapabilityRegistry
 from src.agent.plugins.loader import RequiredPluginError
+from src.agent.tool_registry import get_capability_registry
 
 
 def _write_plugin(root: Path) -> None:
@@ -41,7 +41,6 @@ def _configure_runtime(monkeypatch, plugin_dir: Path, *, enabled: bool) -> None:
     monkeypatch.setenv("AGENT_ENABLE_MEMORY", "false")
     monkeypatch.setattr(server.config, "CAPABILITY_RUNTIME_ENABLED", enabled)
     monkeypatch.setattr(server.config, "PLUGIN_DIR", str(plugin_dir))
-    monkeypatch.setattr(server, "get_capability_registry", CapabilityRegistry)
 
 
 def test_plugin_and_skill_catalogs_require_auth(monkeypatch):
@@ -86,6 +85,33 @@ def test_catalog_endpoints_expose_only_safe_declarations(monkeypatch, tmp_path):
     assert "private-command" not in response_text
     assert "private instructions" not in response_text
     assert "private reference" not in response_text
+
+
+def test_runtime_shutdown_cleans_reference_tool_before_disabled_restart(monkeypatch, tmp_path):
+    plugin_dir = tmp_path / "plugins"
+    _write_plugin(plugin_dir)
+    _configure_runtime(monkeypatch, plugin_dir, enabled=True)
+
+    with TestClient(server.app):
+        assert get_capability_registry().get_spec("internal.skill_read_reference") is not None
+
+    _configure_runtime(monkeypatch, tmp_path / "unused", enabled=False)
+    with TestClient(server.app) as client:
+        assert get_capability_registry().get_spec("internal.skill_read_reference") is None
+        assert "internal.skill_read_reference" not in {
+            tool["name"] for tool in client.get("/api/tools").json()
+        }
+
+
+def test_enabled_runtime_can_restart_with_the_production_registry(monkeypatch, tmp_path):
+    plugin_dir = tmp_path / "plugins"
+    _write_plugin(plugin_dir)
+    _configure_runtime(monkeypatch, plugin_dir, enabled=True)
+
+    with TestClient(server.app):
+        assert get_capability_registry().get_spec("internal.skill_read_reference") is not None
+    with TestClient(server.app):
+        assert get_capability_registry().get_spec("internal.skill_read_reference") is not None
 
 
 def test_disabled_runtime_uses_empty_catalogs_without_touching_plugin_directory(monkeypatch, tmp_path):

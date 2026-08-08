@@ -69,6 +69,11 @@ class CapabilityRegistry:
         entry = self._entries.get(name)
         return entry.spec if entry else None
 
+    def unregister(self, name: str) -> bool:
+        """Remove a lifecycle-owned capability and report whether it existed."""
+
+        return self._entries.pop(name, None) is not None
+
     def list_specs(self) -> list[ToolSpec]:
         return [self._entries[name].spec for name in sorted(self._entries)]
 
