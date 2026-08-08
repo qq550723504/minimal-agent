@@ -102,7 +102,12 @@ class CapabilityRegistry:
         else:
             try:
                 try:
-                    valid_arguments = entry.validator.is_valid(call.arguments)
+                    async with asyncio.timeout(entry.spec.timeout_seconds):
+                        valid_arguments = await asyncio.to_thread(
+                            entry.validator.is_valid, call.arguments
+                        )
+                except asyncio.TimeoutError:
+                    raise
                 except Exception:
                     # Unresolvable refs (including all remote refs) are invalid
                     # arguments, never an execution failure or network request.
@@ -119,10 +124,11 @@ class CapabilityRegistry:
                             )
                         if inspect.isawaitable(value):
                             value = await value
-                    serialized = json.dumps(value, ensure_ascii=False, default=str)
-                    if len(serialized.encode("utf-8")) > min(
-                        entry.spec.result_size_limit, self._max_result_bytes
-                    ):
+                    result_limit = min(entry.spec.result_size_limit, self._max_result_bytes)
+                    within_limit = await asyncio.to_thread(
+                        _serialized_size_within_limit, value, result_limit
+                    )
+                    if not within_limit:
                         result = self._error_result(call, "tool_result_too_large")
                     else:
                         result = ToolResult(
@@ -181,3 +187,13 @@ def _is_async_callable(handler: CapabilityHandler) -> bool:
     return inspect.iscoroutinefunction(handler) or inspect.iscoroutinefunction(
         getattr(handler, "__call__", None)
     )
+
+
+def _serialized_size_within_limit(value: Any, limit: int) -> bool:
+    total = 0
+    encoder = json.JSONEncoder(ensure_ascii=False, default=str)
+    for chunk in encoder.iterencode(value):
+        total += len(chunk.encode("utf-8"))
+        if total > limit:
+            return False
+    return True

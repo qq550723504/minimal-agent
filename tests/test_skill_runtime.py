@@ -84,6 +84,16 @@ def test_unknown_explicit_skill_is_rejected(skill_catalog):
         SkillResolver(skill_catalog).resolve("anything", ["demo.missing"])
 
 
+def test_skill_resolver_uses_configured_active_limit(skill_catalog, monkeypatch):
+    monkeypatch.setattr("src.agent.skills.resolver.config.MAX_ACTIVE_SKILLS", 1)
+
+    selected = SkillResolver(skill_catalog).resolve(
+        "review pull request manual mode release", None
+    )
+
+    assert len(selected) == 1
+
+
 def test_skill_namespace_escapes_dots_without_collisions(tmp_path):
     def loaded(plugin_id: str, skill_id: str, name: str) -> LoadedPlugin:
         root = tmp_path / name

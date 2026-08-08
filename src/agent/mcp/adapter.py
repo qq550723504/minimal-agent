@@ -9,6 +9,7 @@ from collections.abc import Iterable
 from collections.abc import Callable
 from typing import Any
 
+import httpx2
 from mcp.types import Tool
 
 from src.agent.capabilities.errors import ToolExecutionError
@@ -16,6 +17,8 @@ from src.agent.capabilities.models import ToolInvocationContext, ToolSource, Too
 from src.agent.capabilities.registry import CapabilityHandler, CapabilityRegistry
 from src.agent.plugins.models import AllowedToolManifest
 from src.agent.namespaces import capability_namespaced_id
+
+from .transport import MCPResponseTooLarge
 
 
 class MCPToolDiscoveryError(RuntimeError):
@@ -171,12 +174,18 @@ def _remote_handler(
         client = resolve_client()
         try:
             result = await client.call_tool(remote_name, arguments)
-        except Exception:
+        except MCPResponseTooLarge:
+            raise ToolExecutionError("tool_result_too_large", retryable=False) from None
+        except (httpx2.RequestError, ConnectionError, TimeoutError, OSError):
             if side_effects and not idempotent:
                 raise ToolExecutionError(
                     "mcp_tool_unknown_outcome",
                     retryable=False,
                     unknown_outcome=True,
+                ) from None
+            if idempotent:
+                raise ToolExecutionError(
+                    "mcp_tool_transport_failed", retryable=True
                 ) from None
             raise
         if result.is_error:

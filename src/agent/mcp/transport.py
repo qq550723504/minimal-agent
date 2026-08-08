@@ -10,6 +10,8 @@ import httpx2
 from mcp.client.stdio import StdioServerParameters, stdio_client
 from mcp.client.streamable_http import streamable_http_client
 
+from src.agent.config import MAX_TOOL_RESULT_BYTES
+
 from .security import ResolvedHTTPConfig, ResolvedStdioConfig
 
 
@@ -43,11 +45,13 @@ class PinnedHostAsyncTransport(httpx2.AsyncBaseTransport):
         config: ResolvedHTTPConfig,
         *,
         delegate: httpx2.AsyncBaseTransport | None = None,
+        max_response_bytes: int = MAX_TOOL_RESULT_BYTES,
     ) -> None:
         if not config.addresses:
             raise ValueError("mcp_http_dns_failed")
         self._config = config
         self._addresses = tuple(config.addresses)
+        self._max_response_bytes = max_response_bytes
         self._scheme = urlsplit(config.url).scheme
         self._delegate = delegate or httpx2.AsyncHTTPTransport(
             trust_env=False,
@@ -92,7 +96,16 @@ class PinnedHostAsyncTransport(httpx2.AsyncBaseTransport):
                 extensions=extensions,
             )
             try:
-                return await self._delegate.handle_async_request(pinned_request)
+                response = await self._delegate.handle_async_request(pinned_request)
+                content_length = response.headers.get("content-length")
+                if content_length is not None and int(content_length) > self._max_response_bytes:
+                    await response.aclose()
+                    raise MCPResponseTooLarge("mcp_response_too_large")
+                if isinstance(response.stream, httpx2.AsyncByteStream):
+                    response.stream = _BoundedAsyncByteStream(
+                        response.stream, self._max_response_bytes
+                    )
+                return response
             except (httpx2.ConnectError, httpx2.ConnectTimeout) as error:
                 last_error = error
         assert last_error is not None
@@ -100,6 +113,27 @@ class PinnedHostAsyncTransport(httpx2.AsyncBaseTransport):
 
     async def aclose(self) -> None:
         await self._delegate.aclose()
+
+
+class MCPResponseTooLarge(RuntimeError):
+    """Raised when an MCP HTTP response exceeds the global result limit."""
+
+
+class _BoundedAsyncByteStream(httpx2.AsyncByteStream):
+    def __init__(self, stream: httpx2.AsyncByteStream, limit: int) -> None:
+        self._stream = stream
+        self._limit = limit
+        self._total = 0
+
+    async def __aiter__(self):
+        async for chunk in self._stream:
+            self._total += len(chunk)
+            if self._total > self._limit:
+                raise MCPResponseTooLarge("mcp_response_too_large")
+            yield chunk
+
+    async def aclose(self) -> None:
+        await self._stream.aclose()
 
 
 def _effective_port(scheme: str, port: int | None) -> int | None:

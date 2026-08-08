@@ -129,6 +129,33 @@ async def test_remote_schema_refs_are_rejected_without_retrieval():
 
 
 @pytest.mark.anyio
+async def test_schema_validation_runs_under_tool_timeout():
+    from src.agent.capabilities.registry import _RegistryEntry
+
+    registry = CapabilityRegistry()
+    registry.register(make_spec("demo.schema_slow", timeout_seconds=0.001), lambda *_: None)
+    entry = registry._entries["demo.schema_slow"]
+
+    def slow_is_valid(arguments):
+        time.sleep(0.05)
+        return True
+
+    class SlowValidator:
+        def is_valid(self, arguments):
+            return slow_is_valid(arguments)
+
+    registry._entries["demo.schema_slow"] = _RegistryEntry(
+        spec=entry.spec, handler=entry.handler, validator=SlowValidator()
+    )
+    result = await registry.invoke(
+        ToolCall(call_id="schema-timeout", tool="demo.schema_slow"),
+        ToolInvocationContext(),
+    )
+
+    assert result.error_code == "tool_timeout"
+
+
+@pytest.mark.anyio
 async def test_non_idempotent_side_effect_timeout_has_unknown_outcome():
     async def slow(arguments, context):
         await asyncio.sleep(0.05)

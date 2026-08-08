@@ -9,7 +9,7 @@ import pytest
 
 from src.agent.mcp.manager import MCPClientManager, MCPConnectionError
 from src.agent.mcp.security import ResolvedHTTPConfig, validate_http_config
-from src.agent.mcp.transport import PinnedHostAsyncTransport
+from src.agent.mcp.transport import MCPResponseTooLarge, PinnedHostAsyncTransport
 from src.agent.plugins.models import HTTPMCPServerManifest
 
 
@@ -51,12 +51,13 @@ class FakeClientFactory:
 
 
 class RecordingTransport(httpx2.AsyncBaseTransport):
-    def __init__(self) -> None:
+    def __init__(self, content: bytes = b"ok") -> None:
         self.requests: list[httpx2.Request] = []
+        self.content = content
 
     async def handle_async_request(self, request: httpx2.Request) -> httpx2.Response:
         self.requests.append(request)
-        return httpx2.Response(200, request=request, content=b"ok")
+        return httpx2.Response(200, request=request, content=self.content)
 
     async def aclose(self) -> None:
         return None
@@ -370,6 +371,24 @@ async def test_pinned_transport_fails_over_across_validated_addresses() -> None:
 
     assert response.status_code == 200
     assert delegate.hosts == ["2001:db8::1", "192.0.2.10"]
+
+
+@pytest.mark.anyio
+async def test_pinned_transport_enforces_response_size_cap() -> None:
+    config = ResolvedHTTPConfig(
+        url="https://mcp.example.test/tools",
+        hostname="mcp.example.test",
+        port=443,
+        headers={},
+        addresses=("192.0.2.10",),
+    )
+    transport = PinnedHostAsyncTransport(
+        config, delegate=RecordingTransport(b"four"), max_response_bytes=3
+    )
+
+    async with httpx2.AsyncClient(transport=transport) as client:
+        with pytest.raises(MCPResponseTooLarge, match="mcp_response_too_large"):
+            await client.get(config.url)
 
 
 @pytest.mark.anyio

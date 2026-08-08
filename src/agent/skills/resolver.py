@@ -2,6 +2,7 @@
 
 from .loader import SkillCatalog
 from .models import SkillDefinition
+from src.agent import config
 
 
 def normalize_trigger(value: str) -> str:
@@ -11,7 +12,9 @@ def normalize_trigger(value: str) -> str:
 
 
 class SkillResolver:
-    def __init__(self, catalog: SkillCatalog, max_active: int = 3):
+    def __init__(self, catalog: SkillCatalog, max_active: int | None = None):
+        if max_active is None:
+            max_active = config.MAX_ACTIVE_SKILLS
         if max_active <= 0:
             raise ValueError("max_active must be positive")
         self.catalog = catalog

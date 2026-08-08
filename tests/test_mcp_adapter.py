@@ -299,6 +299,36 @@ async def test_non_idempotent_transport_failure_is_unknown_outcome() -> None:
 
 
 @pytest.mark.anyio
+async def test_idempotent_transport_failure_is_retryable() -> None:
+    from src.agent.mcp.adapter import register_server_tools
+
+    class DroppedConnectionClient(FakeMCPClient):
+        async def call_tool(self, name: str, arguments: dict | None = None):
+            raise ConnectionError("connection dropped")
+
+    client = DroppedConnectionClient({None: page([remote_tool("search")])})
+    registry = CapabilityRegistry()
+    await register_server_tools(
+        "demo",
+        "remote",
+        client,
+        [AllowedToolManifest(name="search", side_effects=False, idempotent=True)],
+        registry,
+    )
+
+    result = await registry.invoke(
+        ToolCall(call_id="search-1", tool="demo.remote.search", arguments={}),
+        ToolInvocationContext(),
+    )
+
+    assert (result.status, result.error_code, result.retryable) == (
+        "error",
+        "mcp_tool_transport_failed",
+        True,
+    )
+
+
+@pytest.mark.anyio
 async def test_structured_content_is_preserved() -> None:
     from src.agent.mcp.adapter import register_server_tools
 
