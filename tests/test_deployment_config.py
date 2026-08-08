@@ -64,3 +64,10 @@ def test_compose_configures_persistent_workflow_store():
     assert "WORKFLOW_STORE_PATH" in readme
     assert "重启" in readme
     assert "WORKFLOW_STORE_PATH" in guide
+
+
+def test_compose_mounts_plugins_read_only():
+    compose = (ROOT / "docker-compose.yml").read_text(encoding="utf-8")
+
+    assert "./plugins:/app/plugins:ro" in compose
+    assert "AGENT_CAPABILITY_RUNTIME_ENABLED=${AGENT_CAPABILITY_RUNTIME_ENABLED:-false}" in compose

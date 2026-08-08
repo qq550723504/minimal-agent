@@ -53,6 +53,10 @@ curl http://localhost:8000/
 - `AGENT_HTTP_ALLOWED_HOSTS`: HTTP 工具允许访问的域名，逗号分隔；为空时默认拒绝所有 HTTP 工具请求。
 - `AGENT_HTTP_TIMEOUT_SECONDS`: HTTP 工具连接和读取超时，默认 `5` 秒。
 - `AGENT_HTTP_MAX_RESPONSE_BYTES`: HTTP 工具最大响应体大小，默认 `1048576` 字节。
+- `AGENT_CAPABILITY_RUNTIME_ENABLED`: 是否加载管理员安装的插件与 Skill 目录，默认 `false`。
+- `AGENT_PLUGIN_DIR`: 插件根目录，默认 `plugins`；Compose 将项目的 `./plugins` 以只读方式挂载到 `/app/plugins`。
+- `AGENT_MAX_ACTIVE_SKILLS`: 单次请求最多激活的 Skill 数，默认 `3`。
+- `AGENT_MAX_SKILL_REFERENCE_BYTES`: 单个 Skill 参考文件的最大读取字节数，默认 `262144`。
 
 5. API 调用示例：
 
@@ -63,6 +67,8 @@ curl -X POST http://localhost:8000/api/handle/queue -H "Content-Type: applicatio
 
 curl http://localhost:8000/api/tasks
 curl http://localhost:8000/api/tools
+curl http://localhost:8000/api/plugins
+curl http://localhost:8000/api/skills
 ```
 
 更多文档：请参见 `docs/AGENT_GUIDE.md`，其中包含架构设计、部署建议、安全与维护策略。
@@ -75,6 +81,7 @@ curl http://localhost:8000/api/tools
 - 切换 `AGENT_EMBEDDING_BACKEND` 或 Embeddings 模型后，向量空间可能不兼容；应删除并重建 `VECTOR_MEMORY_PATH` 中的旧向量数据。
 - Prometheus 使用 `./data/metrics-token` 作为 Bearer token；生产环境必须把它替换为与 `AGENT_METRICS_API_KEY` 相同的随机值。
 - Compose 会把 `./data` 挂载到容器的 `/app/data`，用于持久化向量记忆、审计日志和 SQLite 工作流状态。
+- 插件运行时默认关闭。启用 `AGENT_CAPABILITY_RUNTIME_ENABLED=true` 后，服务仅在启动时从只读插件目录构建目录；`/api/plugins` 和 `/api/skills` 仅返回声明的标识、版本、状态、错误码、触发词和能力名，不返回命令、环境变量、Skill 正文或参考文件内容。
 - 队列工作流会在每个步骤完成后保存状态；服务重启后会从第一个未完成步骤恢复。恢复语义是至少一次执行，服务在步骤执行中退出时该步骤可能再次执行。
 - 只有通过工作流入口创建的任务支持重启恢复；直接提交任意 Python callable 的内部队列任务不支持跨进程恢复。
 - 访问 `http://localhost:9090` 可查看 Prometheus UI。

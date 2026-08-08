@@ -18,8 +18,13 @@ services:
       - AGENT_API_KEYS=${AGENT_API_KEYS:-}
       - AGENT_METRICS_API_KEY=${AGENT_METRICS_API_KEY:-local-dev-metrics}
       - AGENT_HTTP_ALLOWED_HOSTS=${AGENT_HTTP_ALLOWED_HOSTS:-}
+      - AGENT_CAPABILITY_RUNTIME_ENABLED=${AGENT_CAPABILITY_RUNTIME_ENABLED:-false}
+      - AGENT_PLUGIN_DIR=/app/plugins
+      - AGENT_MAX_ACTIVE_SKILLS=${AGENT_MAX_ACTIVE_SKILLS:-3}
+      - AGENT_MAX_SKILL_REFERENCE_BYTES=${AGENT_MAX_SKILL_REFERENCE_BYTES:-262144}
     volumes:
       - ./data:/app/data
+      - ./plugins:/app/plugins:ro
   prometheus:
     image: prom/prometheus:latest
     ports:

@@ -6,7 +6,10 @@ def _bool_env(name: str, default: str = "true") -> bool:
 
 
 LLM_BACKEND = os.getenv("AGENT_LLM_BACKEND", "mock").strip().lower()
+CAPABILITY_RUNTIME_ENABLED = _bool_env("AGENT_CAPABILITY_RUNTIME_ENABLED", "false")
 PLUGIN_DIR = os.getenv("AGENT_PLUGIN_DIR", "plugins").strip()
+MAX_ACTIVE_SKILLS = int(os.getenv("AGENT_MAX_ACTIVE_SKILLS", "3"))
+MAX_SKILL_REFERENCE_BYTES = int(os.getenv("AGENT_MAX_SKILL_REFERENCE_BYTES", "262144"))
 OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-3.5-turbo").strip()
 GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash").strip()
 EMBEDDING_BACKEND = os.getenv("AGENT_EMBEDDING_BACKEND", "mock").strip().lower()
@@ -19,3 +22,7 @@ WORKFLOW_STORE_PATH = os.getenv("WORKFLOW_STORE_PATH", "data/workflows.sqlite3")
 MAX_TOOL_RESULT_BYTES = int(os.getenv("AGENT_MAX_TOOL_RESULT_BYTES", "1048576"))
 if MAX_TOOL_RESULT_BYTES <= 0:
     raise ValueError("AGENT_MAX_TOOL_RESULT_BYTES must be positive")
+if MAX_ACTIVE_SKILLS <= 0:
+    raise ValueError("AGENT_MAX_ACTIVE_SKILLS must be positive")
+if MAX_SKILL_REFERENCE_BYTES <= 0:
+    raise ValueError("AGENT_MAX_SKILL_REFERENCE_BYTES must be positive")
