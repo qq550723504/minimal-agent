@@ -4,8 +4,10 @@ import uuid
 from typing import Any, List, Optional
 
 from src.agent.task_queue import enqueue_task, get_workflow_queue, get_workflow_store
-from src.agent.tool_registry import get_tool
+from src.agent.tool_registry import get_capability_registry, get_tool
 from src.agent.workflow_store import WorkflowStore
+from src.agent.capabilities.models import ToolCall, ToolInvocationContext, ToolResult
+from src.agent.capabilities.registry import CapabilityRegistry
 
 # 导入默认工具注册模块
 import src.agent.tools  # noqa: F401
@@ -71,6 +73,28 @@ def execute_step(step: Any) -> str:
 def execute_tasks(steps: List[Any]) -> List[str]:
     """同步执行步骤列表。"""
     return [execute_step(step) for step in steps]
+
+
+async def execute_tool_call(
+    call: ToolCall,
+    context: ToolInvocationContext,
+    registry: CapabilityRegistry | None = None,
+) -> ToolResult:
+    """Execute one structured tool call through the capability registry."""
+    active_registry = registry or get_capability_registry()
+    return await active_registry.invoke(call, context)
+
+
+async def execute_structured_calls(
+    calls: List[ToolCall],
+    context: ToolInvocationContext,
+    registry: CapabilityRegistry | None = None,
+) -> List[ToolResult]:
+    """Execute structured tool calls sequentially, preserving their order."""
+    results = []
+    for call in calls:
+        results.append(await execute_tool_call(call, context, registry))
+    return results
 
 
 class DurableWorkflowRunner:
