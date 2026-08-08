@@ -1,5 +1,5 @@
 fastapi==0.141.1
-uvicorn==0.22.0
+uvicorn==0.52.0
 prometheus_client==0.17.0
 requests==2.31.0
 pytest==9.1.1
@@ -10,3 +10,4 @@ google-genai==2.17.0
 scikit-learn==1.4.0
 jsonschema==4.26.0
 PyYAML==6.0.3
+mcp==2.0.0
