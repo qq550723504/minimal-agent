@@ -136,6 +136,7 @@ def test_enqueue_task_execution_creates_one_workflow_task(monkeypatch):
         return "workflow-task"
 
     monkeypatch.setattr("src.agent.executor.enqueue_task", fake_enqueue)
+    monkeypatch.setattr("src.agent.executor.get_workflow_store", lambda: None)
 
     result = enqueue_task_execution(["echo: first", "echo: second"], owner_id="alice")
 

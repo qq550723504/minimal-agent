@@ -1,9 +1,11 @@
 import json
 import re
-from typing import Any, List
+import uuid
+from typing import Any, List, Optional
 
-from src.agent.task_queue import enqueue_task
+from src.agent.task_queue import enqueue_task, get_workflow_queue, get_workflow_store
 from src.agent.tool_registry import get_tool
+from src.agent.workflow_store import WorkflowStore
 
 # 导入默认工具注册模块
 import src.agent.tools  # noqa: F401
@@ -71,6 +73,42 @@ def execute_tasks(steps: List[Any]) -> List[str]:
     return [execute_step(step) for step in steps]
 
 
+class DurableWorkflowRunner:
+    """从 SQLite 状态执行 workflow，并跳过已经完成的步骤。"""
+
+    def __init__(self, store: WorkflowStore, workflow_id: str):
+        self.store = store
+        self.workflow_id = workflow_id
+        self.__name__ = "execute_workflow"
+
+    def __call__(self) -> List[str]:
+        record = self.store.get_workflow(self.workflow_id)
+        if record is None:
+            raise KeyError(f"workflow not found: {self.workflow_id}")
+        if record["status"] == "completed":
+            return list(record["results"])
+
+        self.store.start_workflow(self.workflow_id)
+        results: List[str] = []
+        for step_record in record["steps"]:
+            step_index = step_record["step_index"]
+            if step_record["status"] == "completed":
+                results.append(step_record["result"])
+                continue
+
+            try:
+                self.store.start_step(self.workflow_id, step_index)
+                result = execute_step(step_record["definition"])
+            except Exception as exc:
+                raise WorkflowExecutionError(step_index, exc, results) from exc
+
+            results.append(result)
+            self.store.complete_step(self.workflow_id, step_index, result, results)
+
+        self.store.complete_workflow(self.workflow_id, results)
+        return list(results)
+
+
 class WorkflowRunner:
     """执行 workflow，并在队列重试时从失败步骤继续。"""
 
@@ -103,8 +141,33 @@ def enqueue_task_execution(
     owner_id: str = "default",
     max_retries: int = 0,
     retry_delay: float = 0.0,
+    workflow_store: Optional[WorkflowStore] = None,
+    workflow_queue=None,
 ):
     """把完整 workflow 加入后台队列，并返回单个任务 ID。"""
+    if workflow_store is None:
+        workflow_store = get_workflow_store()
+    if workflow_store is None:
+        runner = WorkflowRunner(steps)
+    else:
+        workflow_id = uuid.uuid4().hex
+        workflow_store.create_workflow(
+            workflow_id,
+            owner_id,
+            steps,
+            max_retries,
+            retry_delay,
+        )
+        queue = workflow_queue or get_workflow_queue()
+        if queue.workflow_store is not workflow_store:
+            raise ValueError("workflow queue must use the supplied workflow store")
+        queue.enqueue_workflow(workflow_id)
+        return {
+            "status": "queued",
+            "task_id": workflow_id,
+            "task_ids": [workflow_id],
+        }
+
     runner = WorkflowRunner(steps)
     task_id = enqueue_task(
         runner,

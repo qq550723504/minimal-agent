@@ -14,3 +14,4 @@ GEMINI_EMBEDDING_MODEL = os.getenv("GEMINI_EMBEDDING_MODEL", "gemini-embedding-2
 VECTOR_MEMORY_PATH = os.getenv("VECTOR_MEMORY_PATH", "vector_memory.json").strip()
 ENABLE_MEMORY = _bool_env("AGENT_ENABLE_MEMORY", "true")
 QUEUE_WORKER_COUNT = int(os.getenv("QUEUE_WORKER_COUNT", "2"))
+WORKFLOW_STORE_PATH = os.getenv("WORKFLOW_STORE_PATH", "data/workflows.sqlite3").strip()

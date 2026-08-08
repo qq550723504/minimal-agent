@@ -44,8 +44,10 @@ prometheus.yml
 
 # Temporary directories
 .tmp
+.worktrees/
 
 # Vector memory persistence
 vector_memory.json
 data/*.json
 data/*.log
+data/*.sqlite3

@@ -13,6 +13,7 @@ services:
       - AGENT_ENABLE_MEMORY=true
       - VECTOR_MEMORY_PATH=/app/data/vector_memory.json
       - AGENT_AUDIT_LOG=/app/data/audit.log
+      - WORKFLOW_STORE_PATH=${WORKFLOW_STORE_PATH:-/app/data/workflows.sqlite3}
       - AGENT_AUTH_REQUIRED=${AGENT_AUTH_REQUIRED:-false}
       - AGENT_API_KEYS=${AGENT_API_KEYS:-}
       - AGENT_METRICS_API_KEY=${AGENT_METRICS_API_KEY:-local-dev-metrics}
