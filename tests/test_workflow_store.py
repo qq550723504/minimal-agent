@@ -80,3 +80,38 @@ def test_workflow_recovery_and_terminal_lifecycle_are_persisted(tmp_path):
     assert completed_record["status"] == "completed"
     assert completed_record["results"] == ["second result"]
     assert completed_record["completed_at"] is not None
+
+
+def test_failed_step_state_is_reset_for_retry_and_terminally_failed(tmp_path):
+    store = WorkflowStore(str(tmp_path / "workflows.sqlite3"))
+    store.create_workflow("wf-1", "alice", ["echo: first", "echo: second"], 1, 0.0)
+    store.start_workflow("wf-1")
+    store.start_step("wf-1", 1)
+
+    store.retry_workflow("wf-1", "temporary failure", 1)
+    retry_step = store.get_workflow("wf-1", owner_id="alice")["steps"][1]
+    assert retry_step["status"] == "pending"
+    assert retry_step["error"] == "temporary failure"
+    assert retry_step["started_at"] is None
+
+    store.fail_workflow("wf-1", "permanent failure", 1, [])
+    failed_step = store.get_workflow("wf-1", owner_id="alice")["steps"][1]
+    assert failed_step["status"] == "failed"
+    assert failed_step["error"] == "permanent failure"
+    assert failed_step["completed_at"] is not None
+
+
+def test_list_workflows_returns_metadata_without_history(tmp_path, monkeypatch):
+    store = WorkflowStore(str(tmp_path / "workflows.sqlite3"))
+    store.create_workflow("wf-1", "alice", ["echo: first"], 0, 0.0)
+
+    def fail_if_history_is_hydrated(_row):
+        raise AssertionError("list_workflows should not hydrate steps or events")
+
+    monkeypatch.setattr(store, "_record_from_row", fail_if_history_is_hydrated)
+
+    records = store.list_workflows(owner_id="alice")
+
+    assert records[0]["workflow_id"] == "wf-1"
+    assert "steps" not in records[0]
+    assert "events" not in records[0]

@@ -1,6 +1,7 @@
 import pytest
 
 from src.agent.executor import DurableWorkflowRunner, WorkflowExecutionError, enqueue_task_execution
+from src.agent.task_queue import TaskQueue
 from src.agent.tool_registry import register_tool
 from src.agent.workflow_store import WorkflowStore
 
@@ -58,29 +59,38 @@ def test_durable_runner_resumes_after_completed_step(tmp_path):
     assert calls == ["second"]
 
 
-def test_enqueue_persists_before_placing_durable_runner_on_queue(tmp_path, monkeypatch):
-    calls = []
+def test_enqueue_persists_before_placing_durable_runner_on_queue(tmp_path):
     store = WorkflowStore(str(tmp_path / "workflows.sqlite3"))
-
-    def fake_enqueue(func, *args, **kwargs):
-        calls.append((func, args, kwargs))
-        return func.workflow_id
-
-    monkeypatch.setattr("src.agent.executor.enqueue_task", fake_enqueue)
+    queue = TaskQueue(worker_count=1, poll_interval=0.01, workflow_store=store)
 
     result = enqueue_task_execution(
         ["echo: first", "echo: second"],
         owner_id="alice",
         workflow_store=store,
+        workflow_queue=queue,
     )
 
     task_id = result["task_id"]
     assert result == {"status": "queued", "task_id": task_id, "task_ids": [task_id]}
     assert store.get_workflow(task_id, owner_id="alice")["status"] == "pending"
-    assert len(calls) == 1
-    assert isinstance(calls[0][0], DurableWorkflowRunner)
-    assert calls[0][0].workflow_id == task_id
-    assert calls[0][2]["owner_id"] == "alice"
+    assert queue.get_status(task_id, owner_id="alice").status == "pending"
+
+
+def test_enqueue_returns_persisted_id_and_uses_durable_queue(tmp_path):
+    store = WorkflowStore(str(tmp_path / "workflows.sqlite3"))
+    queue = TaskQueue(worker_count=1, poll_interval=0.01, workflow_store=store)
+
+    result = enqueue_task_execution(
+        ["echo: first"],
+        owner_id="alice",
+        workflow_store=store,
+        workflow_queue=queue,
+    )
+
+    task_id = result["task_id"]
+    assert task_id == result["task_ids"][0]
+    assert store.get_workflow(task_id, owner_id="alice") is not None
+    assert queue.get_status(task_id, owner_id="alice").status == "pending"
 
 
 def test_durable_runner_reports_failed_step(tmp_path):

@@ -201,6 +201,23 @@ class WorkflowStore:
             ],
         }
 
+    @staticmethod
+    def _metadata_from_row(row: sqlite3.Row) -> dict[str, Any]:
+        return {
+            "workflow_id": row["workflow_id"],
+            "owner_id": row["owner_id"],
+            "status": row["status"],
+            "attempts": row["attempts"],
+            "max_retries": row["max_retries"],
+            "retry_delay": row["retry_delay"],
+            "results": json.loads(row["results_json"]),
+            "error": row["error"],
+            "failed_step": row["failed_step"],
+            "created_at": row["created_at"],
+            "completed_at": row["completed_at"],
+            "updated_at": row["updated_at"],
+        }
+
     def get_workflow(
         self, workflow_id: str, owner_id: Optional[str] = None
     ) -> Optional[dict[str, Any]]:
@@ -225,7 +242,7 @@ class WorkflowStore:
         query = f"SELECT * FROM workflows{where} ORDER BY created_at, workflow_id"
         with self._lock:
             rows = self._connection.execute(query, values).fetchall()
-            return [self._record_from_row(row) for row in rows]
+            return [self._metadata_from_row(row) for row in rows]
 
     def mark_interrupted_workflows_pending(self) -> int:
         with self._lock, self._connection:
@@ -346,6 +363,18 @@ class WorkflowStore:
                 """,
                 (error, failed_step, now, workflow_id),
             )
+            if failed_step is not None:
+                cursor = self._connection.execute(
+                    """
+                    UPDATE workflow_steps
+                    SET status = 'pending', error = ?, result_json = NULL,
+                        started_at = NULL, completed_at = NULL
+                    WHERE workflow_id = ? AND step_index = ?
+                    """,
+                    (error, workflow_id, failed_step),
+                )
+                if cursor.rowcount != 1:
+                    raise KeyError(f"workflow step not found: {workflow_id}/{failed_step}")
             self._append_event(workflow_id, "retry", failed_step, {"error": error})
 
     def fail_workflow(
@@ -367,6 +396,17 @@ class WorkflowStore:
                 """,
                 (error, failed_step, self._encode(results), now, now, workflow_id),
             )
+            if failed_step is not None:
+                cursor = self._connection.execute(
+                    """
+                    UPDATE workflow_steps
+                    SET status = 'failed', error = ?, completed_at = ?
+                    WHERE workflow_id = ? AND step_index = ?
+                    """,
+                    (error, now, workflow_id, failed_step),
+                )
+                if cursor.rowcount != 1:
+                    raise KeyError(f"workflow step not found: {workflow_id}/{failed_step}")
             self._append_event(workflow_id, "failed", failed_step, {"error": error})
 
     def complete_workflow(self, workflow_id: str, results: list[str]) -> None:

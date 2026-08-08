@@ -48,6 +48,10 @@ class TaskQueue:
         self._workflow_store = workflow_store
         self._queued_workflows: set[str] = set()
 
+    @property
+    def workflow_store(self) -> Optional[WorkflowStore]:
+        return self._workflow_store
+
     def start(self):
         if self._running:
             return
@@ -295,6 +299,10 @@ def stop_queue():
 
 def get_workflow_store() -> WorkflowStore:
     return WORKFLOW_STORE
+
+
+def get_workflow_queue() -> TaskQueue:
+    return QUEUE
 
 
 def enqueue_task(func: Callable[..., Any], *args, **kwargs) -> str:

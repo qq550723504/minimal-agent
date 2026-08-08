@@ -3,7 +3,7 @@ import re
 import uuid
 from typing import Any, List, Optional
 
-from src.agent.task_queue import enqueue_task, get_workflow_store
+from src.agent.task_queue import enqueue_task, get_workflow_queue, get_workflow_store
 from src.agent.tool_registry import get_tool
 from src.agent.workflow_store import WorkflowStore
 
@@ -142,6 +142,7 @@ def enqueue_task_execution(
     max_retries: int = 0,
     retry_delay: float = 0.0,
     workflow_store: Optional[WorkflowStore] = None,
+    workflow_queue=None,
 ):
     """把完整 workflow 加入后台队列，并返回单个任务 ID。"""
     if workflow_store is None:
@@ -157,7 +158,17 @@ def enqueue_task_execution(
             max_retries,
             retry_delay,
         )
-        runner = DurableWorkflowRunner(workflow_store, workflow_id)
+        queue = workflow_queue or get_workflow_queue()
+        if queue.workflow_store is not workflow_store:
+            raise ValueError("workflow queue must use the supplied workflow store")
+        queue.enqueue_workflow(workflow_id)
+        return {
+            "status": "queued",
+            "task_id": workflow_id,
+            "task_ids": [workflow_id],
+        }
+
+    runner = WorkflowRunner(steps)
     task_id = enqueue_task(
         runner,
         owner_id=owner_id,
