@@ -135,6 +135,30 @@ def test_parse_structured_plan_output_serializes_invalid_tool_calls_as_text():
     ]
 
 
+def test_parse_structured_plan_output_preserves_valid_tool_call_siblings():
+    valid_payload = {
+        "kind": "tool_call",
+        "call_id": "call-1",
+        "tool": "demo.read",
+        "arguments": {"id": "x"},
+    }
+    invalid_payload = {
+        "kind": "tool_call",
+        "call_id": "call-2",
+        "tool": "Demo.Read",
+        "arguments": {},
+    }
+
+    items = parse_structured_plan_output(
+        json.dumps([valid_payload, invalid_payload, "Verify results"])
+    )
+
+    assert isinstance(items[0], ToolCallPlan)
+    assert items[0].tool == "demo.read"
+    assert items[1] == json.dumps(invalid_payload, ensure_ascii=False, sort_keys=True)
+    assert items[2] == "Verify results"
+
+
 def test_parse_structured_plan_output_falls_back_for_malformed_json():
     assert parse_structured_plan_output("[{\"kind\":\"tool_call\"") == ['[{"kind":"tool_call"']
 

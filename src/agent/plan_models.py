@@ -47,7 +47,20 @@ def normalize_plan_items_text(items: Sequence[Any]) -> list[str]:
 
 
 def coerce_plan_items(items: Sequence[Any]) -> list[PlanItem]:
-    try:
-        return normalize_plan_items(items)
-    except ValidationError:
-        return normalize_plan_items_text(items)
+    coerced: list[PlanItem] = []
+    for item in items:
+        if isinstance(item, str):
+            coerced.append(item)
+            continue
+        if isinstance(item, dict):
+            if item.get("kind") == "tool_call":
+                try:
+                    coerced.append(ToolCallPlan.model_validate(item))
+                    continue
+                except ValidationError:
+                    coerced.append(_serialize_text_safe_item(item))
+                    continue
+            coerced.append(_serialize_text_safe_item(item))
+            continue
+        coerced.append(_serialize_text_safe_item(item))
+    return coerced
