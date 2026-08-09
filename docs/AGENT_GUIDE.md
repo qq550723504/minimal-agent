@@ -8,7 +8,7 @@
 
 ## 二、架构概览
 - 模块：感知(Perception)、记忆(Memory)、规划(Planner)、执行(Executor)、工具适配(Tools)、安全(Safety)、监控(Observability)。
-- 接口：统一的请求/响应契约（JSON）、请求ID、超时与重试策略。
+- 接口：统一的请求/响应契约（JSON）、内部运行 ID、超时与重试策略。
 
 ## 三、开发与依赖
 - 推荐语言：Python 3.11+（示例基于 Python）。
@@ -49,6 +49,27 @@ MCP Server 支持两种传输：
 队列工作流使用 `WORKFLOW_STORE_PATH` 指定的 SQLite 数据库保存工作流定义、步骤结果、重试状态和生命周期事件。每个步骤完成后立即提交状态；服务重启时会把中断中的工作流恢复为待执行，并从第一个未完成步骤继续。该机制提供至少一次执行语义，步骤执行期间进程退出可能导致该步骤再次执行。任意 Python callable 直接提交到内部队列仍仅支持进程内执行，不支持跨进程恢复。
 
 当前队列由单个进程内工作线程和 SQLite 文件组成，生产部署应保持单实例；多副本部署前应采用成熟的外部队列和共享数据库，并重新验证任务领取、幂等性和恢复语义。
+
+结构化工具调用只在同步 `/api/handle` 路径启用。规划器在开启开关后返回由字符串步骤和如下工具调用对象组成的 JSON 数组：
+
+```json
+[
+  {
+    "kind": "tool_call",
+    "call_id": "call-1",
+    "tool": "park-energy.energy.mcp-encoded-656e657267792e71756572795f7472656e64",
+    "arguments": {
+      "park_id": "park-a",
+      "building_id": "building-1",
+      "date": "2026-08-09"
+    }
+  }
+]
+```
+
+`call_id` 必须非空且不超过 128 个字符，`tool` 必须是已注册能力名，`arguments` 必须是 JSON 对象。工具按照计划顺序串行执行；参数会依据已发现工具的 JSON Schema 校验，结果会受到 timeout、幂等性和结果大小限制。规划器输出无法通过结构化校验时，工具调用对象会降级为文本，不会把任意 JSON 对象直接当作工具执行。
+
+结构化 MCP 工具调用的启用条件、`plugin.yaml` 模板、园区权限边界、验证命令和故障码请参见 [`MCP_INTEGRATION.md`](MCP_INTEGRATION.md)。当前没有公开的直接工具调用 API；业务方通过 `/api/handle` 提交自然语言请求，工具目录由服务端管理。
 
 ### 4.2 向量记忆持久化
 `src/agent/vector_memory.py` 提供 `save(path)` 和 `load(path)` 方法，适合用于简单的磁盘持久化或作为构建持久化记忆层的基础。

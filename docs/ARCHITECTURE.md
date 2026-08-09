@@ -14,9 +14,10 @@
 - `Safety/Observability`：输入/输出过滤、SSRF/DNS 固定、shell 边界、审计日志、Prometheus 指标和稳定错误码。
 
 ## 接口契约
-- `/api/handle` 接收 `{ "prompt": "..." }` 并同步返回 `{ "result": "..." }`；`/api/handle/queue` 返回任务状态。
+- `/api/handle` 接收 `{ "prompt": "..." }` 并同步返回 `{ "result": "..." }`；`/api/handle/queue` 只创建旧版字符串步骤工作流并返回 queued 状态和任务 ID，当前不支持结构化 MCP 工具调用。
 - `/api/tasks`、`/api/tools`、`/api/plugins`、`/api/skills` 返回当前用户可见的任务、工具和运行时目录元数据。
 - 能力调用使用 `ToolCall`、`ToolSpec` 和 `ToolResult`；结果状态为 `success`、`error` 或 `unknown_outcome`，并携带稳定 `error_code` 与 `retryable`。
+- Planner 的结构化计划项使用 `ToolCallPlan`：`kind` 固定为 `tool_call`，并包含 `call_id`、已注册的 `tool` 和 JSON 对象 `arguments`。`/api/handle` 内部为每次同步执行生成 `run_id`，当前不在 HTTP 响应中公开请求追踪 ID。
 - 插件清单采用 `minimal-agent/v1`；MCP 工具名按插件/Server/远端工具分段命名，含点号的分段会编码避免碰撞。
 
 ## 扩展点
