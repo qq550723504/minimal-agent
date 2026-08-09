@@ -127,6 +127,29 @@ def test_compose_forwards_and_documents_mcp_lifecycle_timeouts():
         assert variable in readme
 
 
+def test_compose_and_docs_cover_structured_mcp_tool_calling():
+    compose = (ROOT / "docker-compose.yml").read_text(encoding="utf-8")
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    architecture = (ROOT / "docs" / "ARCHITECTURE.md").read_text(encoding="utf-8")
+
+    assert (
+        "AGENT_STRUCTURED_TOOL_CALLING_ENABLED: "
+        "${AGENT_STRUCTURED_TOOL_CALLING_ENABLED:-false}"
+        in compose
+    )
+    assert "AGENT_STRUCTURED_TOOL_CALLING_ENABLED" in readme
+    assert "AGENT_CAPABILITY_RUNTIME_ENABLED=true" in readme
+    assert "AGENT_MCP_ALLOWED_HOSTS" in readme
+    assert "AGENT_MCP_STDIO_ALLOWED_COMMANDS" in readme
+    assert "`name`、`description`、`input_schema`、`side_effects`、`idempotent`" in readme
+    assert "CapabilityRegistry.invoke()" in readme
+    assert "远端 MCP 服务仍必须自行执行租户鉴权" in readme
+    assert "`/api/handle`" in readme
+    assert "SQLite" in readme
+    assert "不支持结构化 MCP 工具调用" in readme
+    assert "ToolCall -> CapabilityRegistry -> MCP/local handler -> ToolResult" in architecture
+
+
 def test_compose_forwards_global_tool_result_limit():
     compose = (ROOT / "docker-compose.yml").read_text(encoding="utf-8")
 
