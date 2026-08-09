@@ -76,9 +76,9 @@ curl http://localhost:8000/
 - MCP Streamable HTTP 连接必须使用 HTTPS、精确主机 allowlist（`AGENT_MCP_ALLOWED_HOSTS`）和安全 DNS 地址；不会跟随重定向或使用代理环境变量。
 - `enabled: false` 的插件会记录为 disabled；`required: true` 的插件启动失败会阻止服务启动，普通插件失败只会被禁用。`/api/plugins`、`/api/skills` 和 `/api/tools` 需要鉴权，并且不会返回密钥、命令参数、Skill 正文或参考文件内容。
 
-结构化 MCP 工具调用首个切片：
+结构化工具调用首个切片：
 
-- 默认关闭。只有同时开启 `AGENT_CAPABILITY_RUNTIME_ENABLED=true` 和 `AGENT_STRUCTURED_TOOL_CALLING_ENABLED=true`，并配置 `AGENT_MCP_ALLOWED_HOSTS` / `AGENT_MCP_STDIO_ALLOWED_COMMANDS` allowlist 后，`/api/handle` 才会允许规划器生成结构化 MCP 工具调用。
+- 默认关闭。设置 `AGENT_STRUCTURED_TOOL_CALLING_ENABLED=true` 后，`/api/handle` 才会允许规划器生成结构化工具调用；如果调用插件/MCP 工具，还必须同时开启 `AGENT_CAPABILITY_RUNTIME_ENABLED=true`，并按传输方式配置对应的 MCP allowlist。仅调用内置本地工具时不需要 MCP allowlist。
 - 规划器提示词只会注入安全 ToolSpec 元数据：`name`、`description`、`input_schema`、`side_effects`、`idempotent`。不会暴露 MCP URL、命令、环境变量、凭证或 Skill 正文。
 - 结构化工具调用统一通过 `CapabilityRegistry.invoke()` 执行，再路由到本地工具或 MCP 处理器；现有 Mock、`echo`、`http_get`、`http_post` 与旧版字符串步骤仍保持兼容。
 - 远端 MCP 服务仍必须自行执行租户鉴权；本项目当前不会把远端服务的租户边界假定为可信。
@@ -134,7 +134,7 @@ curl http://localhost:8000/api/skills
 - Prometheus 使用固定版本镜像和 `./data/metrics-token` 作为 Bearer token；该 token 仅用于本地开发，生产环境必须把它替换为与 `AGENT_METRICS_API_KEY` 相同的随机值。
 - Compose 会把 `./data` 挂载到容器的 `/app/data`，用于持久化向量记忆、审计日志和 SQLite 工作流状态。
 - 插件运行时默认关闭。启用 `AGENT_CAPABILITY_RUNTIME_ENABLED=true` 后，服务仅在启动时从只读插件目录构建目录；`/api/plugins` 和 `/api/skills` 仅返回声明的标识、版本、状态、错误码、触发词和能力名，不返回命令、环境变量、Skill 正文或参考文件内容。
-- 如需启用结构化 MCP 工具调用，先开启 `AGENT_CAPABILITY_RUNTIME_ENABLED=true`，再配置 `AGENT_MCP_ALLOWED_HOSTS`、`AGENT_MCP_STDIO_ALLOWED_COMMANDS`，最后显式设置 `AGENT_STRUCTURED_TOOL_CALLING_ENABLED=true`；默认值始终为 `false`，避免未审计的规划器工具执行进入生产请求路径。
+- 如需启用结构化 MCP 工具调用，先开启 `AGENT_CAPABILITY_RUNTIME_ENABLED=true`，再按传输方式配置 `AGENT_MCP_ALLOWED_HOSTS` 或 `AGENT_MCP_STDIO_ALLOWED_COMMANDS`，最后显式设置 `AGENT_STRUCTURED_TOOL_CALLING_ENABLED=true`；仅调用内置本地工具时只需设置最后一个开关。默认值始终为 `false`，避免未审计的规划器工具执行进入生产请求路径。完整的 MCP/园区能耗接入流程请参见 [`docs/MCP_INTEGRATION.md`](docs/MCP_INTEGRATION.md)。
 - 队列工作流会在每个步骤完成后保存状态；服务重启后会从第一个未完成步骤恢复。恢复语义是至少一次执行，服务在步骤执行中退出时该步骤可能再次执行。
 - 只有通过工作流入口创建的任务支持重启恢复；直接提交任意 Python callable 的内部队列任务不支持跨进程恢复。
 - 当前队列由单个进程内工作线程和 SQLite 文件组成，生产部署应保持单实例；多副本需要迁移到外部队列和共享数据库。
