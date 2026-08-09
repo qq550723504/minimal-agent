@@ -15,6 +15,16 @@ def echo(message: str) -> dict[str, str]:
     return {"message": message}
 
 
+@mcp.tool()
+def park_energy(park_id: str, window_hours: int = 24) -> dict[str, float | int | str]:
+    return {
+        "park_id": park_id,
+        "window_hours": window_hours,
+        "average_kw": 12.5,
+        "peak_kw": 18.0,
+    }
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--transport", choices=("stdio", "streamable-http"), default="stdio")

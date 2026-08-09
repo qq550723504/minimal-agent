@@ -10,7 +10,7 @@ from pydantic import BaseModel
 from fastapi.responses import JSONResponse
 from src.agent import config
 from src.agent.auth import get_current_user
-from src.agent.main import handle_input, enqueue_input
+from src.agent.main import enqueue_input, handle_input_async
 from src.agent.memory_manager import initialize_memory, save_memory
 from src.agent.capabilities.models import ToolSource
 from src.agent.mcp.manager import MCPClientManager
@@ -176,10 +176,14 @@ def redoc_route(
 
 
 @app.post("/api/handle")
-def handle_route(payload: PromptIn, user_id: str = Depends(get_current_user)):
+async def handle_route(payload: PromptIn, user_id: str = Depends(get_current_user)):
     safe_prompt = sanitize_input(payload.prompt)
     audit_log(user_id, "request_received", safe_prompt)
-    result = handle_input(safe_prompt, user_id=user_id)
+    result = await handle_input_async(
+        safe_prompt,
+        user_id=user_id,
+        skill_catalog=app.state.skill_catalog,
+    )
     audit_log(user_id, "request_completed", result)
     return {"result": result}
 

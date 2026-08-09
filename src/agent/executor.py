@@ -1,8 +1,11 @@
+import asyncio
 import json
 import re
 import uuid
 from typing import Any, List, Optional
 
+from src.agent.config import MAX_TOOL_RESULT_BYTES
+from src.agent.plan_models import PlanItem, ToolCallPlan
 from src.agent.task_queue import enqueue_task, get_workflow_queue, get_workflow_store
 from src.agent.tool_registry import get_capability_registry, get_tool
 from src.agent.workflow_store import WorkflowStore
@@ -94,6 +97,111 @@ async def execute_structured_calls(
     results = []
     for call in calls:
         results.append(await execute_tool_call(call, context, registry))
+    return results
+
+
+def _bounded_json_dumps(value: Any) -> str:
+    return _bounded_json_dumps_with_limit(value, enforce_limit=True)
+
+
+def _bounded_json_dumps_with_limit(value: Any, *, enforce_limit: bool) -> str:
+    rendered = json.dumps(value, ensure_ascii=False, sort_keys=True)
+    if enforce_limit and len(rendered.encode("utf-8")) > MAX_TOOL_RESULT_BYTES:
+        raise ValueError("rendered tool result exceeds size limit")
+    return rendered
+
+
+def _tool_result_error_payload(
+    *,
+    status: str = "error",
+    error_code: str | None,
+    retryable: bool,
+) -> dict[str, Any]:
+    return {
+        "status": status,
+        "error_code": error_code,
+        "retryable": retryable,
+    }
+
+
+def _render_tool_result(result: ToolResult) -> str:
+    if result.status == "success":
+        if isinstance(result.content, str):
+            if len(result.content.encode("utf-8")) > MAX_TOOL_RESULT_BYTES:
+                return _bounded_json_dumps_with_limit(
+                    _tool_result_error_payload(
+                        error_code="tool_result_too_large",
+                        retryable=False,
+                    ),
+                    enforce_limit=False,
+                )
+            return result.content
+        try:
+            return _bounded_json_dumps(result.content)
+        except ValueError:
+            return _bounded_json_dumps_with_limit(
+                _tool_result_error_payload(
+                    error_code="tool_result_too_large",
+                    retryable=False,
+                ),
+                enforce_limit=False,
+            )
+
+    return _bounded_json_dumps_with_limit(
+        _tool_result_error_payload(
+            status=str(result.status),
+            error_code=result.error_code,
+            retryable=result.retryable,
+        ),
+        enforce_limit=False,
+    )
+
+
+def _restore_legacy_step(step: str) -> Any:
+    stripped = step.strip()
+    if not stripped.startswith("{"):
+        return step
+    try:
+        parsed = json.loads(stripped)
+    except json.JSONDecodeError:
+        return step
+    if not isinstance(parsed, dict):
+        return step
+    if isinstance(parsed.get("tool"), str):
+        return parsed
+    if any(isinstance(parsed.get(key), str) for key in ("action", "text", "step")):
+        return parsed
+    return step
+
+
+async def execute_plan_items(
+    steps: list[PlanItem],
+    owner_id: str,
+    run_id: str | None = None,
+    active_skill_ids: tuple[str, ...] = (),
+    registry: CapabilityRegistry | None = None,
+) -> list[str]:
+    """Execute mixed text and structured tool-call steps without blocking the event loop."""
+
+    context = ToolInvocationContext(
+        owner_id=owner_id,
+        run_id=run_id,
+        active_skill_ids=active_skill_ids,
+    )
+    active_registry = registry or get_capability_registry()
+    results: list[str] = []
+    for step in steps:
+        if isinstance(step, ToolCallPlan):
+            tool_result = await execute_tool_call(
+                ToolCall(call_id=step.call_id, tool=step.tool, arguments=step.arguments),
+                context,
+                active_registry,
+            )
+            results.append(_render_tool_result(tool_result))
+            continue
+
+        legacy_step = _restore_legacy_step(step) if isinstance(step, str) else step
+        results.append(await asyncio.to_thread(execute_step, legacy_step))
     return results
 
 

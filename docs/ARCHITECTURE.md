@@ -30,13 +30,15 @@
 请求/API Key
     -> 输入清理与用户隔离
     -> Planner 生成步骤
-    -> CapabilityRegistry 校验参数/timeout
-    -> 本地工具或插件 MCP 客户端
+    -> ToolCall
+    -> CapabilityRegistry 校验参数/timeout 并分发
+    -> 本地工具处理器或插件 MCP 客户端
+    -> 规范化 ToolResult
     -> 结果大小检查与稳定错误状态
-    -> 同步响应或持久化队列状态
+    -> Executor 继续后续步骤或返回同步响应/持久化队列状态
 ```
 
-应用 lifespan 启动时加载插件、建立 Skill 目录、启动 MCP 客户端并注册工具；关闭时按逆序停止队列、清理 MCP 连接、注销运行时工具并保存记忆。必需插件启动失败会阻止服务，普通插件只记录禁用状态。
+应用 lifespan 启动时加载插件、建立 Skill 目录、启动 MCP 客户端并注册工具；关闭时按逆序停止队列、清理 MCP 连接、注销运行时工具并保存记忆。必需插件启动失败会阻止服务，普通插件只记录禁用状态。结构化工具调用的首个切片仅在 `/api/handle` 请求路径上把 `ToolCall` 送入 `CapabilityRegistry`；SQLite 队列路径仍保留旧的字符串步骤执行语义。
 
 ## 性能与可用性考虑
 - 关键路径支持异步执行与限流；同步工具和 Schema 校验在线程边界内执行并受 timeout 约束。

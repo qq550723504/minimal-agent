@@ -3,14 +3,19 @@ from __future__ import annotations
 from dataclasses import dataclass
 import asyncio
 import socket
+from pathlib import Path
+import sys
 
 import httpx2
 import pytest
 
 from src.agent.mcp.manager import MCPClientManager, MCPConnectionError
-from src.agent.mcp.security import ResolvedHTTPConfig, validate_http_config
+from src.agent.mcp.security import ResolvedHTTPConfig, validate_http_config, validate_stdio_config
 from src.agent.mcp.transport import MCPResponseTooLarge, PinnedHostAsyncTransport
-from src.agent.plugins.models import HTTPMCPServerManifest
+from src.agent.plugins.models import HTTPMCPServerManifest, StdioMCPServerManifest
+
+
+MCP_FIXTURE = Path(__file__).parent / "fixtures" / "mcp_echo_server.py"
 
 
 @dataclass
@@ -256,6 +261,29 @@ async def test_reconnect_uses_freshly_revalidated_http_config(
         ("127.0.0.1",),
         ("127.0.0.2",),
     ]
+
+
+@pytest.mark.anyio
+async def test_manager_starts_real_stdio_fixture_and_lists_declared_tools() -> None:
+    from mcp.types import Tool
+
+    manifest = StdioMCPServerManifest(
+        id="local",
+        transport="stdio",
+        command=sys.executable,
+        args=[str(MCP_FIXTURE)],
+        allowed_tools=[],
+    )
+    config = validate_stdio_config(manifest, MCP_FIXTURE.parent, {sys.executable})
+    manager = MCPClientManager()
+
+    await manager.start_server("demo.local", config)
+    client = manager.get_client("demo.local")
+    listing = await client.list_tools()
+    await manager.close()
+
+    assert isinstance(listing.tools[0], Tool)
+    assert sorted(tool.name for tool in listing.tools) == ["echo", "park_energy"]
 
 
 @pytest.mark.anyio

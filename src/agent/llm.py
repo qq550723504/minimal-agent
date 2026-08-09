@@ -2,6 +2,8 @@ import json
 import re
 from typing import Any, List, Union
 
+from src.agent.plan_models import PlanItem, ToolCallPlan, coerce_plan_items, normalize_plan_items
+
 
 def _normalize_plan_item(item: Any) -> Any:
     if isinstance(item, str):
@@ -34,6 +36,10 @@ def parse_plan_output(text: str) -> List[Union[str, dict]]:
     if not parts:
         return [text.strip()]
     return parts
+
+
+def parse_structured_plan_output(text: str) -> list[PlanItem]:
+    return coerce_plan_items(parse_plan_output(text))
 
 
 class LLMAdapter:
@@ -74,4 +80,11 @@ class MockLLM(LLMAdapter):
         return [f"echo: {p}" for p in parts]
 
 
-__all__ = ["LLMAdapter", "MockLLM", "parse_plan_output"]
+__all__ = [
+    "LLMAdapter",
+    "MockLLM",
+    "ToolCallPlan",
+    "normalize_plan_items",
+    "parse_plan_output",
+    "parse_structured_plan_output",
+]
