@@ -209,3 +209,62 @@ def test_required_mcp_plugin_failure_prevents_application_startup(monkeypatch, t
     with pytest.raises(RequiredPluginError, match="declared_tool_missing"):
         with TestClient(server.app):
             pass
+
+
+def test_handle_endpoint_invokes_capability_registry_for_structured_mcp_calls(
+    monkeypatch, tmp_path
+):
+    plugin_dir = tmp_path / "plugins"
+    plugin = plugin_dir / "demo"
+    plugin.mkdir(parents=True)
+    (plugin / "plugin.yaml").write_text(
+        f"""api_version: minimal-agent/v1
+id: demo
+version: 1.0.0
+mcp_servers:
+  - id: local
+    transport: stdio
+    command: {sys.executable}
+    args: [{MCP_FIXTURE.as_posix()}]
+    allowed_tools:
+      - name: park_energy
+        side_effects: false
+        idempotent: true
+""",
+        encoding="utf-8",
+    )
+    _configure_runtime(monkeypatch, plugin_dir, enabled=True)
+    monkeypatch.setattr(server.config, "STRUCTURED_TOOL_CALLING_ENABLED", True)
+
+    class FakeStructuredLLM:
+        def plan(self, _prompt):
+            return [
+                {
+                    "kind": "tool_call",
+                    "call_id": "park-energy-api",
+                    "tool": "demo.local.park_energy",
+                    "arguments": {"park_id": "north-campus"},
+                }
+            ]
+
+    monkeypatch.setattr("src.agent.planner.create_llm_adapter", lambda: FakeStructuredLLM())
+    registry = get_capability_registry()
+    seen = []
+    original_invoke = registry.invoke
+
+    async def recording_invoke(call, context):
+        seen.append((call.tool, call.arguments, context.owner_id))
+        return await original_invoke(call, context)
+
+    monkeypatch.setattr(registry, "invoke", recording_invoke)
+
+    with TestClient(server.app) as client:
+        response = client.post("/api/handle", json={"prompt": "Read park energy"})
+
+    assert response.status_code == 200
+    assert response.json()["result"] == (
+        '{"average_kw": 12.5, "park_id": "north-campus", "peak_kw": 18.0, "window_hours": 24}'
+    )
+    assert seen == [
+        ("demo.local.park_energy", {"park_id": "north-campus"}, "default")
+    ]

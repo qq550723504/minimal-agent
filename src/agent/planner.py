@@ -3,7 +3,7 @@ import re
 from typing import Any, List, Optional, Sequence
 
 from src.agent.capabilities.models import ToolSpec
-from src.agent.config import STRUCTURED_TOOL_CALLING_ENABLED
+from src.agent import config
 from src.agent.llm import LLMAdapter
 from src.agent.llm_factory import create_llm_adapter
 from src.agent.memory import get_global_memory
@@ -39,11 +39,19 @@ _COMMAND_VALUE_PATTERN = re.compile(
     r"^\s*(?:curl|wget|bash|sh|pwsh|powershell|cmd(?:\.exe)?|python(?:\d+(?:\.\d+)*)?|pip|uv|npm|yarn|pnpm|node|docker|kubectl|git|make)\b",
     re.IGNORECASE,
 )
+STRUCTURED_TOOL_CALLING_ENABLED: bool | None = None
 
 
 def _format_conversation_history(conversation_history: List[dict]) -> str:
     history_lines = [f"- {item.get('prompt', '')}" for item in conversation_history if item.get("prompt")]
     return "Conversation history:\n" + "\n".join(history_lines) if history_lines else ""
+
+
+def _structured_tool_calling_enabled() -> bool:
+    override = STRUCTURED_TOOL_CALLING_ENABLED
+    if isinstance(override, bool):
+        return override
+    return config.STRUCTURED_TOOL_CALLING_ENABLED
 
 
 def _format_relevant_memory(memories: List[dict]) -> str:
@@ -200,7 +208,7 @@ def plan_task(
     if user_id != "default":
         conversation_history = mem.recent(user_id, limit=5)
 
-    structured_mode = STRUCTURED_TOOL_CALLING_ENABLED if structured_tools is None else structured_tools
+    structured_mode = _structured_tool_calling_enabled() if structured_tools is None else structured_tools
 
     wrapped_prompt = prompt
     relevant: List[dict] = []

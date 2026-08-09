@@ -13,13 +13,16 @@ if __package__ is None and __name__ == "__main__":
     if root not in sys.path:
         sys.path.insert(0, root)
 
-from src.agent.config import STRUCTURED_TOOL_CALLING_ENABLED
+from src.agent import config
 from src.agent.executor import enqueue_task_execution, execute_plan_items
 from src.agent.memory_manager import initialize_memory, save_memory
 from src.agent.planner import plan_task
 from src.agent.skills.loader import SkillCatalog
 from src.agent.skills.resolver import SkillResolver
 from src.agent.tool_registry import get_capability_registry
+
+
+STRUCTURED_TOOL_CALLING_ENABLED: bool | None = None
 
 
 def _resolve_active_skill_ids(
@@ -29,6 +32,13 @@ def _resolve_active_skill_ids(
     if skill_catalog is None:
         return ()
     return tuple(skill.id for skill in SkillResolver(skill_catalog).resolve(prompt, None))
+
+
+def _structured_tool_calling_enabled() -> bool:
+    override = STRUCTURED_TOOL_CALLING_ENABLED
+    if isinstance(override, bool):
+        return override
+    return config.STRUCTURED_TOOL_CALLING_ENABLED
 
 
 async def handle_input_async(
@@ -45,7 +55,7 @@ async def handle_input_async(
             prompt,
             user_id=user_id,
             tool_specs=registry.list_specs(),
-            structured_tools=STRUCTURED_TOOL_CALLING_ENABLED,
+            structured_tools=_structured_tool_calling_enabled(),
         )
     )
     run_id = uuid.uuid4().hex
