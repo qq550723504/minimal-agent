@@ -3,16 +3,21 @@ import socket
 import requests
 import pytest
 
+from src.agent.capabilities.errors import ToolExecutionError
+from src.agent.capabilities.models import ToolSource, ToolSpec
+from src.agent.capabilities.registry import CapabilityRegistry
 from src.agent.capabilities.models import ToolCall, ToolInvocationContext
 from src.agent.executor import (
     WorkflowExecutionError,
     WorkflowRunner,
     enqueue_task_execution,
+    execute_plan_items,
     execute_step,
     execute_structured_calls,
     execute_tasks,
     execute_workflow,
 )
+from src.agent.plan_models import ToolCallPlan
 from src.agent.tool_registry import register_tool
 
 
@@ -108,6 +113,23 @@ def test_execute_tasks_batch():
     assert execute_tasks(["echo: a", "b"]) == ["a", "b"]
 
 
+def _make_capability_spec(name: str, **overrides) -> ToolSpec:
+    values = {
+        "name": name,
+        "input_schema": {
+            "type": "object",
+            "properties": {"value": {"type": "string"}},
+            "required": ["value"],
+            "additionalProperties": False,
+        },
+        "source": ToolSource.LOCAL,
+        "side_effects": False,
+        "idempotent": True,
+    }
+    values.update(overrides)
+    return ToolSpec(**values)
+
+
 @pytest.mark.anyio
 async def test_execute_structured_calls_preserves_order():
     register_tool("test_record_order", lambda payload: payload)
@@ -119,6 +141,79 @@ async def test_execute_structured_calls_preserves_order():
     results = await execute_structured_calls(calls, ToolInvocationContext())
 
     assert [result.content for result in results] == ["first", "second"]
+
+
+@pytest.mark.anyio
+async def test_execute_plan_items_runs_text_and_tool_call_in_order():
+    seen = []
+    registry = CapabilityRegistry()
+
+    async def handler(arguments, context):
+        seen.append((arguments, context.owner_id, context.run_id))
+        return {"value": arguments["value"]}
+
+    registry.register(_make_capability_spec("test.echo"), handler)
+
+    result = await execute_plan_items(
+        [
+            "first",
+            ToolCallPlan(
+                kind="tool_call",
+                call_id="call-1",
+                tool="test.echo",
+                arguments={"value": "second"},
+            ),
+        ],
+        owner_id="user-1",
+        run_id="run-1",
+        registry=registry,
+    )
+
+    assert result[0] == "first"
+    assert '"value": "second"' in result[1]
+    assert seen == [({"value": "second"}, "user-1", "run-1")]
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize(
+    ("call", "spec", "handler", "expected"),
+    [
+        (
+            ToolCallPlan(kind="tool_call", call_id="call-1", tool="demo.missing", arguments={"value": "x"}),
+            None,
+            None,
+            {"status": "error", "error_code": "unknown_tool", "retryable": False},
+        ),
+        (
+            ToolCallPlan(kind="tool_call", call_id="call-2", tool="demo.invalid", arguments={"value": 1}),
+            _make_capability_spec("demo.invalid"),
+            lambda arguments, context: arguments["value"],
+            {"status": "error", "error_code": "invalid_tool_arguments", "retryable": False},
+        ),
+        (
+            ToolCallPlan(kind="tool_call", call_id="call-3", tool="demo.unknown", arguments={"value": "x"}),
+            _make_capability_spec("demo.unknown"),
+            lambda arguments, context: (_ for _ in ()).throw(
+                ToolExecutionError("remote_state_unknown", unknown_outcome=True)
+            ),
+            {"status": "unknown_outcome", "error_code": "remote_state_unknown", "retryable": False},
+        ),
+        (
+            ToolCallPlan(kind="tool_call", call_id="call-4", tool="demo.large", arguments={"value": "x"}),
+            _make_capability_spec("demo.large", result_size_limit=3),
+            lambda arguments, context: "four",
+            {"status": "error", "error_code": "tool_result_too_large", "retryable": False},
+        ),
+    ],
+)
+async def test_execute_plan_items_renders_stable_tool_result_status(call, spec, handler, expected):
+    registry = CapabilityRegistry()
+    if spec is not None:
+        registry.register(spec, handler)
+
+    result = await execute_plan_items([call], owner_id="user-1", registry=registry)
+
+    assert json.loads(result[0]) == expected
 
 
 def test_execute_workflow_preserves_step_order():

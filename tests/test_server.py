@@ -12,11 +12,19 @@ from src.agent.tool_registry import get_capability_registry
 ROOT = Path(__file__).parents[1]
 
 
-def test_handle_endpoint():
+def test_handle_endpoint(monkeypatch):
+    seen = []
+
+    async def fake_handle_input_async(prompt, user_id="default"):
+        seen.append((prompt, user_id))
+        return "async-result"
+
+    monkeypatch.setattr(server, "handle_input_async", fake_handle_input_async)
     client = TestClient(server.app)
     resp = client.post("/api/handle", json={"prompt": "hello"})
     assert resp.status_code == 200
-    assert resp.json()["result"]
+    assert resp.json()["result"] == "async-result"
+    assert seen == [("hello", "default")]
 
 
 def test_runtime_and_development_requirements_are_separated():
@@ -182,10 +190,10 @@ def test_authenticated_docs_session_can_fetch_openapi_without_header(monkeypatch
 def test_downstream_value_error_is_not_reported_as_client_input(monkeypatch):
     monkeypatch.setenv("AGENT_AUTH_REQUIRED", "false")
 
-    def fail(*args, **kwargs):
+    async def fail(*args, **kwargs):
         raise ValueError("provider failure")
 
-    monkeypatch.setattr(server, "handle_input", fail)
+    monkeypatch.setattr(server, "handle_input_async", fail)
     client = TestClient(server.app, raise_server_exceptions=False)
 
     response = client.post("/api/handle", json={"prompt": "hello"})
