@@ -1,9 +1,29 @@
-from typing import List, Optional
+import json
+from typing import Any, List, Optional, Sequence
 
+from src.agent.capabilities.models import ToolSpec
+from src.agent.config import STRUCTURED_TOOL_CALLING_ENABLED
 from src.agent.llm import LLMAdapter
 from src.agent.llm_factory import create_llm_adapter
 from src.agent.memory import get_global_memory
 from src.agent.memory_manager import add_memory, get_relevant_memory, initialize_memory, is_memory_enabled
+from src.agent.plan_models import normalize_plan_items
+from src.agent.tool_registry import get_capability_registry
+
+
+_SAFE_TOOL_FIELDS = ("name", "description", "input_schema", "side_effects", "idempotent")
+_SAFE_SCHEMA_KEYS = {
+    "type",
+    "properties",
+    "required",
+    "additionalProperties",
+    "items",
+    "enum",
+    "const",
+    "oneOf",
+    "anyOf",
+    "allOf",
+}
 
 
 def _format_conversation_history(conversation_history: List[dict]) -> str:
@@ -21,8 +41,62 @@ def _format_relevant_memory(memories: List[dict]) -> str:
     return "Relevant memory:\n" + "\n".join(memory_lines) if memory_lines else ""
 
 
-def _build_rag_prompt(prompt: str, memories: List[dict], conversation_history: Optional[List[dict]] = None) -> str:
-    if not memories and not conversation_history:
+def _sanitize_input_schema(value: Any) -> Any:
+    if isinstance(value, dict):
+        sanitized: dict[str, Any] = {}
+        for key, child in value.items():
+            if key not in _SAFE_SCHEMA_KEYS:
+                continue
+            if key == "properties" and isinstance(child, dict):
+                sanitized[key] = {
+                    property_name: _sanitize_input_schema(property_schema)
+                    for property_name, property_schema in sorted(child.items())
+                    if isinstance(property_schema, dict)
+                }
+                continue
+            if key in {"oneOf", "anyOf", "allOf"} and isinstance(child, list):
+                sanitized[key] = [_sanitize_input_schema(item) for item in child if isinstance(item, dict)]
+                continue
+            if key == "items":
+                sanitized[key] = _sanitize_input_schema(child)
+                continue
+            sanitized[key] = child
+        return sanitized
+    if isinstance(value, list):
+        return [_sanitize_input_schema(item) for item in value]
+    return value
+
+
+def build_tool_catalog_prompt(specs: Sequence[ToolSpec]) -> str:
+    catalog = []
+    for spec in sorted(specs, key=lambda item: item.name):
+        entry = {}
+        for field_name in _SAFE_TOOL_FIELDS:
+            value = getattr(spec, field_name)
+            if field_name == "input_schema":
+                value = _sanitize_input_schema(value)
+            entry[field_name] = value
+        catalog.append(entry)
+
+    catalog_json = json.dumps(catalog, ensure_ascii=False, indent=2, sort_keys=True)
+    return (
+        "Tool catalog:\n"
+        f"{catalog_json}\n\n"
+        "Response contract:\n"
+        "Return only a JSON array.\n"
+        "Each array item must be either a plain string step or a tool call object with this exact shape:\n"
+        '{ "kind": "tool_call", "call_id": "call-1", "tool": "tool.name", "arguments": {"...": "..."} }\n'
+        "Do not return markdown."
+    )
+
+
+def _build_rag_prompt(
+    prompt: str,
+    memories: List[dict],
+    conversation_history: Optional[List[dict]] = None,
+    tool_catalog_prompt: str = "",
+) -> str:
+    if not memories and not conversation_history and not tool_catalog_prompt:
         return prompt
 
     sections = []
@@ -37,6 +111,14 @@ def _build_rag_prompt(prompt: str, memories: List[dict], conversation_history: O
             sections.append(memory_section)
 
     context_block = "\n\n".join(sections)
+    if tool_catalog_prompt:
+        context_block = "\n\n".join(part for part in [context_block, tool_catalog_prompt] if part)
+
+    response_format = (
+        "Return only the JSON array contract above."
+        if tool_catalog_prompt
+        else "Provide each step on a separate line without markdown bullets."
+    )
     return (
         "System:\n"
         "You are an AI planning assistant. Use the provided context to produce an actionable plan. "
@@ -45,11 +127,18 @@ def _build_rag_prompt(prompt: str, memories: List[dict], conversation_history: O
         "Task:\n"
         f"{prompt}\n\n"
         "Response format:\n"
-        "Provide each step on a separate line without markdown bullets."
+        f"{response_format}"
     )
 
 
-def plan_task(prompt: str, user_id: str = "default", llm: Optional[LLMAdapter] = None) -> List[str]:
+def plan_task(
+    prompt: str,
+    user_id: str = "default",
+    llm: Optional[LLMAdapter] = None,
+    *,
+    tool_specs: Optional[Sequence[ToolSpec]] = None,
+    structured_tools: Optional[bool] = None,
+) -> List[Any]:
     """将输入转换为待执行步骤；支持注入 LLMAdapter（若为空则使用默认行为）。"""
     if is_memory_enabled():
         initialize_memory()
@@ -59,13 +148,20 @@ def plan_task(prompt: str, user_id: str = "default", llm: Optional[LLMAdapter] =
     if user_id != "default":
         conversation_history = mem.recent(user_id, limit=5)
 
+    structured_mode = STRUCTURED_TOOL_CALLING_ENABLED if structured_tools is None else structured_tools
+
     wrapped_prompt = prompt
     relevant: List[dict] = []
     if is_memory_enabled():
         relevant = get_relevant_memory(prompt, top_k=3, user_id=user_id)
 
-    if relevant or conversation_history:
-        wrapped_prompt = _build_rag_prompt(prompt, relevant, conversation_history)
+    tool_catalog_prompt = ""
+    if structured_mode:
+        effective_tool_specs = list(tool_specs) if tool_specs is not None else get_capability_registry().list_specs()
+        tool_catalog_prompt = build_tool_catalog_prompt(effective_tool_specs)
+
+    if relevant or conversation_history or structured_mode:
+        wrapped_prompt = _build_rag_prompt(prompt, relevant, conversation_history, tool_catalog_prompt)
 
     if user_id != "default":
         mem.add(user_id, {"prompt": prompt})
@@ -76,7 +172,10 @@ def plan_task(prompt: str, user_id: str = "default", llm: Optional[LLMAdapter] =
     if llm is None:
         llm = create_llm_adapter()
 
-    return llm.plan(wrapped_prompt)
+    plan = llm.plan(wrapped_prompt)
+    if structured_mode:
+        return normalize_plan_items(plan)
+    return plan
 
 
 def build_plan_summary(steps: List[str]) -> str:
