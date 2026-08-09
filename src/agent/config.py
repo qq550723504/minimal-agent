@@ -23,6 +23,7 @@ def _has_configured_api_key() -> bool:
 LLM_BACKEND = os.getenv("AGENT_LLM_BACKEND", "mock").strip().lower()
 DEPLOYMENT_MODE = os.getenv("AGENT_DEPLOYMENT_MODE", "development").strip().lower()
 CAPABILITY_RUNTIME_ENABLED = _bool_env("AGENT_CAPABILITY_RUNTIME_ENABLED", "false")
+STRUCTURED_TOOL_CALLING_ENABLED = _bool_env("AGENT_STRUCTURED_TOOL_CALLING_ENABLED", "false")
 PLUGIN_DIR = os.getenv("AGENT_PLUGIN_DIR", "plugins").strip()
 MCP_ALLOWED_HOSTS = _csv_env("AGENT_MCP_ALLOWED_HOSTS")
 MCP_STDIO_ALLOWED_COMMANDS = _csv_env("AGENT_MCP_STDIO_ALLOWED_COMMANDS")
