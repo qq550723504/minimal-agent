@@ -161,6 +161,61 @@ def test_build_tool_catalog_prompt_is_safe_and_sorted():
     assert "idempotent" in prompt
 
 
+def test_build_tool_catalog_prompt_redacts_sensitive_schema_names_and_scalar_values():
+    spec = ToolSpec(
+        name="demo.secure",
+        description="Sensitive schema should be sanitized",
+        input_schema={
+            "type": "object",
+            "properties": {
+                "query": {
+                    "type": "string",
+                    "enum": ["summary", "detail"],
+                },
+                "headers_env": {
+                    "type": "string",
+                    "const": "OPENAI_API_KEY",
+                },
+                "nested": {
+                    "type": "object",
+                    "properties": {
+                        "command": {
+                            "type": "string",
+                            "enum": ["python -m http.server", "safe-choice"],
+                        },
+                        "callback": {
+                            "type": "string",
+                            "const": "https://internal.example/api",
+                        },
+                    },
+                    "required": ["command", "callback"],
+                    "additionalProperties": False,
+                },
+            },
+            "required": ["query", "headers_env"],
+            "additionalProperties": False,
+        },
+        source=ToolSource.LOCAL,
+        side_effects=False,
+        idempotent=True,
+    )
+
+    prompt = build_tool_catalog_prompt([spec])
+
+    assert '"query"' in prompt
+    assert '"summary"' in prompt
+    assert '"detail"' in prompt
+    assert "headers_env" not in prompt
+    assert "OPENAI_API_KEY" not in prompt
+    assert "python -m http.server" not in prompt
+    assert "https://internal.example/api" not in prompt
+    assert '"required": [' in prompt
+    assert '"query"' in prompt
+    assert '[REDACTED]' in prompt
+    assert '"command"' in prompt
+    assert '"callback"' in prompt
+
+
 def test_plan_task_injects_structured_tool_catalog_and_normalizes_items():
     captured = {}
 

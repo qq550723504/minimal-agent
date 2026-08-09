@@ -1,4 +1,5 @@
 import json
+import re
 from typing import Any, List, Optional, Sequence
 
 from src.agent.capabilities.models import ToolSpec
@@ -24,6 +25,20 @@ _SAFE_SCHEMA_KEYS = {
     "anyOf",
     "allOf",
 }
+_REDACTED_SCHEMA_VALUE = "[REDACTED]"
+_SENSITIVE_NAME_PATTERNS = (
+    re.compile(r"(^|[_-])(api[_-]?key|token|secret|password|credential|headers?[_-]?env|env)([_-]|$)", re.IGNORECASE),
+)
+_ENV_VALUE_PATTERN = re.compile(r"^[A-Z][A-Z0-9_]{2,}$")
+_CREDENTIAL_VALUE_PATTERNS = (
+    re.compile(r"(^|[_-])(api[_-]?key|token|secret|password|credential)([_-]|$)", re.IGNORECASE),
+    re.compile(r"^sk-[A-Za-z0-9_-]+$"),
+    re.compile(r"^Bearer\s+\S+$", re.IGNORECASE),
+)
+_COMMAND_VALUE_PATTERN = re.compile(
+    r"^\s*(?:curl|wget|bash|sh|pwsh|powershell|cmd(?:\.exe)?|python(?:\d+(?:\.\d+)*)?|pip|uv|npm|yarn|pnpm|node|docker|kubectl|git|make)\b",
+    re.IGNORECASE,
+)
 
 
 def _format_conversation_history(conversation_history: List[dict]) -> str:
@@ -48,11 +63,12 @@ def _sanitize_input_schema(value: Any) -> Any:
             if key not in _SAFE_SCHEMA_KEYS:
                 continue
             if key == "properties" and isinstance(child, dict):
-                sanitized[key] = {
-                    property_name: _sanitize_input_schema(property_schema)
-                    for property_name, property_schema in sorted(child.items())
-                    if isinstance(property_schema, dict)
-                }
+                sanitized_properties = {}
+                for property_name, property_schema in sorted(child.items()):
+                    if not isinstance(property_schema, dict) or _is_sensitive_schema_name(property_name):
+                        continue
+                    sanitized_properties[property_name] = _sanitize_input_schema(property_schema)
+                sanitized[key] = sanitized_properties
                 continue
             if key in {"oneOf", "anyOf", "allOf"} and isinstance(child, list):
                 sanitized[key] = [_sanitize_input_schema(item) for item in child if isinstance(item, dict)]
@@ -60,11 +76,47 @@ def _sanitize_input_schema(value: Any) -> Any:
             if key == "items":
                 sanitized[key] = _sanitize_input_schema(child)
                 continue
+            if key == "required" and isinstance(child, list):
+                allowed_properties = sanitized.get("properties", {})
+                sanitized[key] = [
+                    item for item in child
+                    if isinstance(item, str) and not _is_sensitive_schema_name(item) and item in allowed_properties
+                ]
+                continue
+            if key == "enum" and isinstance(child, list):
+                sanitized[key] = [_sanitize_scalar(item) for item in child]
+                continue
+            if key == "const":
+                sanitized[key] = _sanitize_scalar(child)
+                continue
             sanitized[key] = child
         return sanitized
     if isinstance(value, list):
-        return [_sanitize_input_schema(item) for item in value]
+        return [_sanitize_input_schema(item) for item in value if isinstance(item, (dict, list))]
     return value
+
+
+def _is_sensitive_schema_name(name: str) -> bool:
+    return any(pattern.search(name) for pattern in _SENSITIVE_NAME_PATTERNS)
+
+
+def _sanitize_scalar(value: Any) -> Any:
+    if isinstance(value, str) and _is_sensitive_scalar(value):
+        return _REDACTED_SCHEMA_VALUE
+    return value
+
+
+def _is_sensitive_scalar(value: str) -> bool:
+    stripped = value.strip()
+    if not stripped:
+        return False
+    if "://" in stripped:
+        return True
+    if _COMMAND_VALUE_PATTERN.match(stripped):
+        return True
+    if _ENV_VALUE_PATTERN.fullmatch(stripped):
+        return True
+    return any(pattern.search(stripped) for pattern in _CREDENTIAL_VALUE_PATTERNS)
 
 
 def build_tool_catalog_prompt(specs: Sequence[ToolSpec]) -> str:
