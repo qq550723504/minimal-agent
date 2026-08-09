@@ -244,6 +244,31 @@ def test_build_tool_catalog_prompt_sanitizes_sensitive_description_content():
     assert "Bearer secret-token" not in prompt
 
 
+def test_build_tool_catalog_prompt_redacts_generic_credential_like_description_fragments():
+    spec = ToolSpec(
+        name="demo.description.generic-creds",
+        description="Uses secret-token plus password hunter2 and token abc for auth",
+        input_schema={
+            "type": "object",
+            "properties": {"id": {"type": "string"}},
+            "required": ["id"],
+            "additionalProperties": False,
+        },
+        source=ToolSource.LOCAL,
+        side_effects=False,
+        idempotent=True,
+    )
+
+    prompt = build_tool_catalog_prompt([spec])
+
+    assert '"description":' in prompt
+    assert "Uses " in prompt
+    assert "secret-token" not in prompt
+    assert "password hunter2" not in prompt
+    assert "token abc" not in prompt
+    assert prompt.count("[REDACTED]") >= 3
+
+
 def test_plan_task_injects_structured_tool_catalog_and_normalizes_items():
     captured = {}
 

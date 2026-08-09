@@ -44,6 +44,8 @@ _CREDENTIAL_VALUE_PATTERNS = (
 _CREDENTIAL_FRAGMENT_PATTERNS = (
     re.compile(r"Bearer\s+\S+", re.IGNORECASE),
     re.compile(r"sk-[A-Za-z0-9_-]+"),
+    re.compile(r"\b(?:api[_-]?key|token|secret|password|credential)[-_][A-Za-z0-9._~+/=-]+\b", re.IGNORECASE),
+    re.compile(r"\b(?:api(?:\s+|[_-])?key|token|password|credential)\s+[A-Za-z0-9._~+/=-]+\b", re.IGNORECASE),
 )
 _COMMAND_VALUE_PATTERN = re.compile(
     r"^\s*(?:curl|wget|bash|sh|pwsh|powershell|cmd(?:\.exe)?|python(?:\d+(?:\.\d+)*)?|pip|uv|npm|yarn|pnpm|node|docker|kubectl|git|make)\b",
