@@ -1,7 +1,10 @@
 import os
 from pathlib import Path
+import re
 import subprocess
 import sys
+
+import yaml
 
 
 ROOT = Path(__file__).parents[1]
@@ -13,6 +16,8 @@ _CONFIG_ENVIRONMENT_KEYS = {
     "AGENT_METRICS_API_KEY",
     "AGENT_HTTP_ALLOWED_HOSTS",
 }
+
+_COMPOSE_ENV_INTERPOLATION = re.compile(r"^\$\{(?P<name>[^}:]+)(?::-(?P<default>.*))?\}$")
 
 
 def _import_config_with_environment(**values):
@@ -27,6 +32,18 @@ def _import_config_with_environment(**values):
         capture_output=True,
         text=True,
     )
+
+
+def _load_agent_compose_environment() -> dict[str, str]:
+    compose = yaml.safe_load((ROOT / "docker-compose.yml").read_text(encoding="utf-8"))
+    return compose["services"]["agent"]["environment"]
+
+
+def _compose_default(name: str) -> str | None:
+    value = _load_agent_compose_environment()[name]
+    match = _COMPOSE_ENV_INTERPOLATION.fullmatch(value)
+    assert match, f"unexpected compose environment expression for {name}: {value!r}"
+    return match.group("default")
 
 
 def test_prometheus_config_is_tracked_and_compose_references_it():
@@ -128,26 +145,40 @@ def test_compose_forwards_and_documents_mcp_lifecycle_timeouts():
 
 
 def test_compose_and_docs_cover_structured_mcp_tool_calling():
-    compose = (ROOT / "docker-compose.yml").read_text(encoding="utf-8")
     readme = (ROOT / "README.md").read_text(encoding="utf-8")
     architecture = (ROOT / "docs" / "ARCHITECTURE.md").read_text(encoding="utf-8")
 
-    assert (
-        "AGENT_STRUCTURED_TOOL_CALLING_ENABLED: "
-        "${AGENT_STRUCTURED_TOOL_CALLING_ENABLED:-false}"
-        in compose
-    )
+    assert _compose_default("AGENT_STRUCTURED_TOOL_CALLING_ENABLED") == "false"
     assert "AGENT_STRUCTURED_TOOL_CALLING_ENABLED" in readme
-    assert "AGENT_CAPABILITY_RUNTIME_ENABLED=true" in readme
-    assert "AGENT_MCP_ALLOWED_HOSTS" in readme
-    assert "AGENT_MCP_STDIO_ALLOWED_COMMANDS" in readme
     assert "`name`、`description`、`input_schema`、`side_effects`、`idempotent`" in readme
     assert "CapabilityRegistry.invoke()" in readme
     assert "远端 MCP 服务仍必须自行执行租户鉴权" in readme
     assert "`/api/handle`" in readme
     assert "SQLite" in readme
     assert "不支持结构化 MCP 工具调用" in readme
-    assert "ToolCall -> CapabilityRegistry -> MCP/local handler -> ToolResult" in architecture
+    activation_start = readme.index("如需启用结构化 MCP 工具调用")
+    runtime_index = readme.index("AGENT_CAPABILITY_RUNTIME_ENABLED=true", activation_start)
+    allowlist_index = readme.index("AGENT_MCP_ALLOWED_HOSTS", activation_start)
+    structured_index = readme.index(
+        "AGENT_STRUCTURED_TOOL_CALLING_ENABLED=true", activation_start
+    )
+    activation_end = readme.index("\n", activation_start)
+    activation_line = readme[activation_start:activation_end]
+
+    assert runtime_index < allowlist_index < structured_index
+    assert "默认值始终为 `false`" in activation_line
+    assert (
+        "请求/API Key\n"
+        "    -> 输入清理与用户隔离\n"
+        "    -> Planner 生成步骤\n"
+        "    -> ToolCall\n"
+        "    -> CapabilityRegistry 校验参数/timeout 并分发\n"
+        "    -> 本地工具处理器或插件 MCP 客户端\n"
+        "    -> 规范化 ToolResult\n"
+        "    -> 结果大小检查与稳定错误状态\n"
+        "    -> Executor 继续后续步骤或返回同步响应/持久化队列状态"
+        in architecture
+    )
 
 
 def test_compose_forwards_global_tool_result_limit():
