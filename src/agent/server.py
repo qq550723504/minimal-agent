@@ -179,7 +179,11 @@ def redoc_route(
 async def handle_route(payload: PromptIn, user_id: str = Depends(get_current_user)):
     safe_prompt = sanitize_input(payload.prompt)
     audit_log(user_id, "request_received", safe_prompt)
-    result = await handle_input_async(safe_prompt, user_id=user_id)
+    result = await handle_input_async(
+        safe_prompt,
+        user_id=user_id,
+        skill_catalog=app.state.skill_catalog,
+    )
     audit_log(user_id, "request_completed", result)
     return {"result": result}
 

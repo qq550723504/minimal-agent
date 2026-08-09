@@ -7,6 +7,7 @@ from src.agent.capabilities.errors import ToolExecutionError
 from src.agent.capabilities.models import ToolSource, ToolSpec
 from src.agent.capabilities.registry import CapabilityRegistry
 from src.agent.capabilities.models import ToolCall, ToolInvocationContext
+from src.agent.config import MAX_TOOL_RESULT_BYTES
 from src.agent.executor import (
     WorkflowExecutionError,
     WorkflowRunner,
@@ -214,6 +215,44 @@ async def test_execute_plan_items_renders_stable_tool_result_status(call, spec, 
     result = await execute_plan_items([call], owner_id="user-1", registry=registry)
 
     assert json.loads(result[0]) == expected
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize(
+    "content",
+    [
+        pytest.param("x" * (MAX_TOOL_RESULT_BYTES + 1), id="string"),
+        pytest.param({"value": "x" * (MAX_TOOL_RESULT_BYTES + 1)}, id="object"),
+    ],
+)
+async def test_execute_plan_items_returns_stable_error_when_rendered_success_exceeds_global_limit(content):
+    registry = CapabilityRegistry(max_result_bytes=MAX_TOOL_RESULT_BYTES + 4096)
+    registry.register(
+        _make_capability_spec(
+            "demo.large_render",
+            result_size_limit=MAX_TOOL_RESULT_BYTES + 4096,
+        ),
+        lambda arguments, context: content,
+    )
+
+    result = await execute_plan_items(
+        [
+            ToolCallPlan(
+                kind="tool_call",
+                call_id="call-large-render",
+                tool="demo.large_render",
+                arguments={"value": "ok"},
+            )
+        ],
+        owner_id="user-1",
+        registry=registry,
+    )
+
+    assert json.loads(result[0]) == {
+        "status": "error",
+        "error_code": "tool_result_too_large",
+        "retryable": False,
+    }
 
 
 def test_execute_workflow_preserves_step_order():

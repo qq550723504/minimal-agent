@@ -5,6 +5,10 @@ import pytest
 from fastapi.testclient import TestClient
 from src.agent import server
 from src.agent.capabilities.models import ToolCall, ToolInvocationContext, ToolSource, ToolSpec
+from src.agent.plan_models import ToolCallPlan
+from src.agent.plugins.catalog import LoadedPlugin, PluginCatalog
+from src.agent.plugins.models import PluginManifest
+from src.agent.skills.loader import SkillCatalog
 from src.agent.task_queue import enqueue_task
 from src.agent.tool_registry import get_capability_registry
 
@@ -15,8 +19,8 @@ ROOT = Path(__file__).parents[1]
 def test_handle_endpoint(monkeypatch):
     seen = []
 
-    async def fake_handle_input_async(prompt, user_id="default"):
-        seen.append((prompt, user_id))
+    async def fake_handle_input_async(prompt, user_id="default", skill_catalog=None):
+        seen.append((prompt, user_id, skill_catalog))
         return "async-result"
 
     monkeypatch.setattr(server, "handle_input_async", fake_handle_input_async)
@@ -24,7 +28,79 @@ def test_handle_endpoint(monkeypatch):
     resp = client.post("/api/handle", json={"prompt": "hello"})
     assert resp.status_code == 200
     assert resp.json()["result"] == "async-result"
-    assert seen == [("hello", "default")]
+    assert seen == [("hello", "default", server.app.state.skill_catalog)]
+
+
+def _skill_catalog(root: Path) -> SkillCatalog:
+    manifest = PluginManifest.model_validate(
+        {
+            "api_version": "minimal-agent/v1",
+            "id": "demo",
+            "version": "1.0.0",
+            "skills": [
+                {
+                    "id": "review",
+                    "path": "skills/review/SKILL.md",
+                    "triggers": ["review pull request"],
+                }
+            ],
+        }
+    )
+    skill_path = root / "skills" / "review" / "SKILL.md"
+    skill_path.parent.mkdir(parents=True, exist_ok=True)
+    skill_path.write_text("# review\n", encoding="utf-8")
+    catalog = PluginCatalog(
+        plugins={
+            "demo": LoadedPlugin("demo", root, manifest, {"review": skill_path}),
+        }
+    )
+    return SkillCatalog.from_plugins(catalog)
+
+
+def test_handle_endpoint_preserves_active_skill_ids_for_async_tool_calls(monkeypatch, tmp_path):
+    monkeypatch.setattr("src.agent.main.STRUCTURED_TOOL_CALLING_ENABLED", True)
+    monkeypatch.setattr(
+        "src.agent.main.get_capability_registry",
+        lambda: get_capability_registry().__class__(),
+    )
+    monkeypatch.setattr(
+        "src.agent.main.plan_task",
+        lambda prompt, user_id="default", **kwargs: [
+            ToolCallPlan(
+                kind="tool_call",
+                call_id="call-1",
+                tool="internal.skill_read_reference",
+                arguments={"skill_id": "demo.review", "path": "guide.md"},
+            )
+        ],
+    )
+
+    seen = {}
+
+    async def fake_execute_plan_items(
+        steps,
+        owner_id,
+        run_id=None,
+        active_skill_ids=(),
+        registry=None,
+    ):
+        seen["steps"] = steps
+        seen["owner_id"] = owner_id
+        seen["run_id"] = run_id
+        seen["active_skill_ids"] = active_skill_ids
+        return ["skill-result"]
+
+    monkeypatch.setattr("src.agent.main.execute_plan_items", fake_execute_plan_items)
+    server.app.state.skill_catalog = _skill_catalog(tmp_path)
+
+    client = TestClient(server.app)
+    response = client.post("/api/handle", json={"prompt": "Please review pull request"})
+
+    assert response.status_code == 200
+    assert response.json()["result"] == "skill-result"
+    assert seen["owner_id"] == "default"
+    assert isinstance(seen["run_id"], str) and seen["run_id"]
+    assert seen["active_skill_ids"] == ("demo.review",)
 
 
 def test_runtime_and_development_requirements_are_separated():

@@ -107,18 +107,46 @@ def _bounded_json_dumps(value: Any) -> str:
     return rendered
 
 
+def _tool_result_error_payload(
+    *,
+    status: str = "error",
+    error_code: str | None,
+    retryable: bool,
+) -> dict[str, Any]:
+    return {
+        "status": status,
+        "error_code": error_code,
+        "retryable": retryable,
+    }
+
+
 def _render_tool_result(result: ToolResult) -> str:
     if result.status == "success":
         if isinstance(result.content, str):
+            if len(result.content.encode("utf-8")) > MAX_TOOL_RESULT_BYTES:
+                return _bounded_json_dumps(
+                    _tool_result_error_payload(
+                        error_code="tool_result_too_large",
+                        retryable=False,
+                    )
+                )
             return result.content
-        return _bounded_json_dumps(result.content)
+        try:
+            return _bounded_json_dumps(result.content)
+        except ValueError:
+            return _bounded_json_dumps(
+                _tool_result_error_payload(
+                    error_code="tool_result_too_large",
+                    retryable=False,
+                )
+            )
 
     return _bounded_json_dumps(
-        {
-            "status": str(result.status),
-            "error_code": result.error_code,
-            "retryable": result.retryable,
-        }
+        _tool_result_error_payload(
+            status=str(result.status),
+            error_code=result.error_code,
+            retryable=result.retryable,
+        )
     )
 
 

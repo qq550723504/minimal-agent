@@ -17,12 +17,28 @@ from src.agent.config import STRUCTURED_TOOL_CALLING_ENABLED
 from src.agent.executor import enqueue_task_execution, execute_plan_items
 from src.agent.memory_manager import initialize_memory, save_memory
 from src.agent.planner import plan_task
+from src.agent.skills.loader import SkillCatalog
+from src.agent.skills.resolver import SkillResolver
 from src.agent.tool_registry import get_capability_registry
 
 
-async def handle_input_async(prompt: str, user_id: str = "default") -> str:
+def _resolve_active_skill_ids(
+    prompt: str,
+    skill_catalog: SkillCatalog | None,
+) -> tuple[str, ...]:
+    if skill_catalog is None:
+        return ()
+    return tuple(skill.id for skill in SkillResolver(skill_catalog).resolve(prompt, None))
+
+
+async def handle_input_async(
+    prompt: str,
+    user_id: str = "default",
+    skill_catalog: SkillCatalog | None = None,
+) -> str:
     """对外接口：接收输入，规划并执行，返回合并后的结果字符串。"""
     registry = get_capability_registry()
+    active_skill_ids = _resolve_active_skill_ids(prompt, skill_catalog)
     steps = await asyncio.to_thread(
         partial(
             plan_task,
@@ -32,10 +48,12 @@ async def handle_input_async(prompt: str, user_id: str = "default") -> str:
             structured_tools=STRUCTURED_TOOL_CALLING_ENABLED,
         )
     )
+    run_id = uuid.uuid4().hex
     results = await execute_plan_items(
         steps,
         owner_id=user_id,
-        run_id=uuid.uuid4().hex,
+        run_id=run_id,
+        active_skill_ids=active_skill_ids,
         registry=registry,
     )
     return "; ".join(results)
