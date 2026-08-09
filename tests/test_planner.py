@@ -1,7 +1,14 @@
+import json
+
 from src.agent.capabilities.models import ToolSource, ToolSpec
 from src.agent.memory import get_global_memory
 from src.agent.planner import build_tool_catalog_prompt, plan_task, _build_rag_prompt
 from src.agent.llm import MockLLM, LLMAdapter
+
+
+def _catalog_from_prompt(prompt: str) -> list[dict]:
+    catalog_json = prompt.split("Tool catalog:\n", 1)[1].split("\n\nResponse contract:", 1)[0]
+    return json.loads(catalog_json)
 
 
 def test_plan_with_mock_llm():
@@ -269,6 +276,82 @@ def test_build_tool_catalog_prompt_redacts_generic_credential_like_description_f
     assert prompt.count("[REDACTED]") >= 3
 
 
+def test_build_tool_catalog_prompt_keeps_safe_required_fields_when_required_precedes_properties():
+    spec = ToolSpec(
+        name="demo.required-order",
+        description="Required field order should not matter",
+        input_schema={
+            "type": "object",
+            "required": ["safe_name", "token_env"],
+            "properties": {
+                "safe_name": {"type": "string"},
+                "token_env": {"type": "string", "const": "OPENAI_API_KEY"},
+            },
+            "additionalProperties": False,
+        },
+        source=ToolSource.LOCAL,
+        side_effects=False,
+        idempotent=True,
+    )
+
+    prompt = build_tool_catalog_prompt([spec])
+
+    catalog = _catalog_from_prompt(prompt)
+    schema = catalog[0]["input_schema"]
+
+    assert schema["properties"] == {"safe_name": {"type": "string"}}
+    assert schema["required"] == ["safe_name"]
+
+
+def test_build_tool_catalog_prompt_sanitizes_nested_additional_properties_schema():
+    spec = ToolSpec(
+        name="demo.additional-properties",
+        description="Nested additionalProperties schema should be sanitized",
+        input_schema={
+            "type": "object",
+            "properties": {"query": {"type": "string"}},
+            "required": ["query"],
+            "additionalProperties": {
+                "type": "object",
+                "title": "drop-me",
+                "properties": {
+                    "safe_field": {
+                        "type": "string",
+                        "enum": ["safe-choice", "Bearer secret-token"],
+                    },
+                    "headers_env": {
+                        "type": "string",
+                        "const": "OPENAI_API_KEY",
+                    },
+                },
+                "required": ["safe_field", "headers_env"],
+                "additionalProperties": False,
+                "default": {"command": "curl https://internal.example/api"},
+            },
+        },
+        source=ToolSource.LOCAL,
+        side_effects=False,
+        idempotent=True,
+    )
+
+    prompt = build_tool_catalog_prompt([spec])
+
+    catalog = _catalog_from_prompt(prompt)
+    schema = catalog[0]["input_schema"]
+
+    assert schema["additionalProperties"] == {
+        "type": "object",
+        "properties": {
+            "safe_field": {
+                "type": "string",
+                "enum": ["safe-choice", "[REDACTED]"],
+            }
+        },
+        "required": ["safe_field"],
+        "additionalProperties": False,
+    }
+
+
 def test_plan_task_injects_structured_tool_catalog_and_normalizes_items():
     captured = {}
 
@@ -312,6 +395,39 @@ def test_plan_task_injects_structured_tool_catalog_and_normalizes_items():
     assert captured["prompt"].index("Tool catalog:") < captured["prompt"].index("Task:")
     assert '"name": "demo.read"' in captured["prompt"]
     assert '"kind": "tool_call"' in captured["prompt"]
+
+
+def test_plan_task_structured_mode_coerces_malformed_tool_calls_to_text():
+    class RecordingLLM(LLMAdapter):
+        def plan(self, prompt: str):
+            return [
+                {
+                    "kind": "tool_call",
+                    "call_id": "call-1",
+                    "tool": "Demo.Read",
+                    "arguments": {},
+                }
+            ]
+
+    steps = plan_task(
+        "Use the demo tool",
+        llm=RecordingLLM(),
+        structured_tools=True,
+        tool_specs=[],
+    )
+
+    assert steps == [
+        json.dumps(
+            {
+                "arguments": {},
+                "call_id": "call-1",
+                "kind": "tool_call",
+                "tool": "Demo.Read",
+            },
+            ensure_ascii=False,
+            sort_keys=True,
+        )
+    ]
 
 
 def test_plan_task_omits_tool_catalog_when_structured_mode_disabled(monkeypatch):

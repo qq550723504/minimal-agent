@@ -8,7 +8,7 @@ from src.agent.llm import LLMAdapter
 from src.agent.llm_factory import create_llm_adapter
 from src.agent.memory import get_global_memory
 from src.agent.memory_manager import add_memory, get_relevant_memory, initialize_memory, is_memory_enabled
-from src.agent.plan_models import normalize_plan_items
+from src.agent.plan_models import coerce_plan_items
 from src.agent.tool_registry import get_capability_registry
 
 
@@ -79,15 +79,17 @@ def _format_relevant_memory(memories: List[dict]) -> str:
 def _sanitize_input_schema(value: Any) -> Any:
     if isinstance(value, dict):
         sanitized: dict[str, Any] = {}
+        sanitized_properties: dict[str, Any] = {}
+        raw_properties = value.get("properties")
+        if isinstance(raw_properties, dict):
+            for property_name, property_schema in sorted(raw_properties.items()):
+                if not isinstance(property_schema, dict) or _is_sensitive_schema_name(property_name):
+                    continue
+                sanitized_properties[property_name] = _sanitize_input_schema(property_schema)
         for key, child in value.items():
             if key not in _SAFE_SCHEMA_KEYS:
                 continue
             if key == "properties" and isinstance(child, dict):
-                sanitized_properties = {}
-                for property_name, property_schema in sorted(child.items()):
-                    if not isinstance(property_schema, dict) or _is_sensitive_schema_name(property_name):
-                        continue
-                    sanitized_properties[property_name] = _sanitize_input_schema(property_schema)
                 sanitized[key] = sanitized_properties
                 continue
             if key in {"oneOf", "anyOf", "allOf"} and isinstance(child, list):
@@ -96,11 +98,17 @@ def _sanitize_input_schema(value: Any) -> Any:
             if key == "items":
                 sanitized[key] = _sanitize_input_schema(child)
                 continue
+            if key == "additionalProperties":
+                if isinstance(child, dict):
+                    sanitized[key] = _sanitize_input_schema(child)
+                    continue
+                if isinstance(child, bool):
+                    sanitized[key] = child
+                    continue
             if key == "required" and isinstance(child, list):
-                allowed_properties = sanitized.get("properties", {})
                 sanitized[key] = [
                     item for item in child
-                    if isinstance(item, str) and not _is_sensitive_schema_name(item) and item in allowed_properties
+                    if isinstance(item, str) and not _is_sensitive_schema_name(item) and item in sanitized_properties
                 ]
                 continue
             if key == "enum" and isinstance(child, list):
@@ -265,7 +273,7 @@ def plan_task(
 
     plan = llm.plan(wrapped_prompt)
     if structured_mode:
-        return normalize_plan_items(plan)
+        return coerce_plan_items(plan)
     return plan
 
 
