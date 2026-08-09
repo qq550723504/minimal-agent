@@ -29,11 +29,21 @@ _REDACTED_SCHEMA_VALUE = "[REDACTED]"
 _SENSITIVE_NAME_PATTERNS = (
     re.compile(r"(^|[_-])(api[_-]?key|token|secret|password|credential|headers?[_-]?env|env)([_-]|$)", re.IGNORECASE),
 )
+_URL_FRAGMENT_PATTERN = re.compile(r"https?://\S+", re.IGNORECASE)
+_ENV_NAME_FRAGMENT_PATTERN = re.compile(r"\b[A-Z][A-Z0-9]*_[A-Z0-9_]+\b")
+_COMMAND_FRAGMENT_PATTERN = re.compile(
+    r"(?:(?<=^)|(?<=[\s(]))(?:curl|wget|bash|sh|pwsh|powershell|cmd(?:\.exe)?|python(?:\d+(?:\.\d+)*)?|pip|uv|npm|yarn|pnpm|node|docker|kubectl|git|make)(?:\s+[^\s,;]+){1,6}",
+    re.IGNORECASE,
+)
 _ENV_VALUE_PATTERN = re.compile(r"^[A-Z][A-Z0-9_]{2,}$")
 _CREDENTIAL_VALUE_PATTERNS = (
     re.compile(r"(^|[_-])(api[_-]?key|token|secret|password|credential)([_-]|$)", re.IGNORECASE),
     re.compile(r"^sk-[A-Za-z0-9_-]+$"),
     re.compile(r"^Bearer\s+\S+$", re.IGNORECASE),
+)
+_CREDENTIAL_FRAGMENT_PATTERNS = (
+    re.compile(r"Bearer\s+\S+", re.IGNORECASE),
+    re.compile(r"sk-[A-Za-z0-9_-]+"),
 )
 _COMMAND_VALUE_PATTERN = re.compile(
     r"^\s*(?:curl|wget|bash|sh|pwsh|powershell|cmd(?:\.exe)?|python(?:\d+(?:\.\d+)*)?|pip|uv|npm|yarn|pnpm|node|docker|kubectl|git|make)\b",
@@ -104,8 +114,27 @@ def _sanitize_input_schema(value: Any) -> Any:
     return value
 
 
+def _sanitize_catalog_value(value: Any) -> Any:
+    if isinstance(value, dict):
+        return {key: _sanitize_catalog_value(child) for key, child in value.items()}
+    if isinstance(value, list):
+        return [_sanitize_catalog_value(item) for item in value]
+    if isinstance(value, str):
+        return _sanitize_text_fragments(value)
+    return value
+
+
 def _is_sensitive_schema_name(name: str) -> bool:
     return any(pattern.search(name) for pattern in _SENSITIVE_NAME_PATTERNS)
+
+
+def _sanitize_text_fragments(value: str) -> str:
+    sanitized = value
+    for pattern in (_URL_FRAGMENT_PATTERN, _COMMAND_FRAGMENT_PATTERN, _ENV_NAME_FRAGMENT_PATTERN):
+        sanitized = pattern.sub(_REDACTED_SCHEMA_VALUE, sanitized)
+    for pattern in _CREDENTIAL_FRAGMENT_PATTERNS:
+        sanitized = pattern.sub(_REDACTED_SCHEMA_VALUE, sanitized)
+    return sanitized
 
 
 def _sanitize_scalar(value: Any) -> Any:
@@ -135,7 +164,7 @@ def build_tool_catalog_prompt(specs: Sequence[ToolSpec]) -> str:
             value = getattr(spec, field_name)
             if field_name == "input_schema":
                 value = _sanitize_input_schema(value)
-            entry[field_name] = value
+            entry[field_name] = _sanitize_catalog_value(value)
         catalog.append(entry)
 
     catalog_json = json.dumps(catalog, ensure_ascii=False, indent=2, sort_keys=True)

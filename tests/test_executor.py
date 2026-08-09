@@ -18,7 +18,7 @@ from src.agent.executor import (
     execute_tasks,
     execute_workflow,
 )
-from src.agent.plan_models import ToolCallPlan
+from src.agent.plan_models import ToolCallPlan, normalize_plan_items
 from src.agent.tool_registry import register_tool
 
 
@@ -176,6 +176,102 @@ async def test_execute_plan_items_runs_text_and_tool_call_in_order():
 
 
 @pytest.mark.anyio
+async def test_execute_plan_items_runs_normalized_legacy_echo_dict_step():
+    steps = normalize_plan_items([{"text": "echo: legacy hello"}])
+
+    assert steps == ['{"text": "echo: legacy hello"}']
+
+    result = await execute_plan_items(steps, owner_id="user-1")
+
+    assert result == ["legacy hello"]
+
+
+@pytest.mark.anyio
+async def test_execute_plan_items_runs_normalized_legacy_http_get_dict_step(monkeypatch):
+    monkeypatch.setenv("AGENT_HTTP_ALLOWED_HOSTS", "api.example.com")
+    monkeypatch.setattr(
+        socket,
+        "getaddrinfo",
+        lambda *args, **kwargs: [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("93.184.216.34", 443))],
+    )
+
+    def fake_get(url, params=None, **kwargs):
+        class FakeResp:
+            def __init__(self):
+                self.status_code = 200
+                self.headers = {"Content-Length": "50"}
+
+            def raise_for_status(self):
+                pass
+
+            def iter_content(self, chunk_size=8192):
+                yield json.dumps({"url": url, "params": params}).encode()
+
+            def close(self):
+                pass
+
+        return FakeResp()
+
+    _patch_http_session(monkeypatch, fake_get)
+    steps = normalize_plan_items(
+        [{"tool": "http_get", "payload": {"url": "https://api.example.com/data", "params": {"q": "test"}}}]
+    )
+
+    assert steps == ['{"payload": {"params": {"q": "test"}, "url": "https://api.example.com/data"}, "tool": "http_get"}']
+
+    result = await execute_plan_items(steps, owner_id="user-1")
+
+    assert json.loads(result[0]) == {
+        "url": "https://api.example.com/data",
+        "params": {"q": "test"},
+    }
+
+
+@pytest.mark.anyio
+async def test_execute_plan_items_runs_normalized_legacy_http_post_dict_step(monkeypatch):
+    monkeypatch.setenv("AGENT_HTTP_ALLOWED_HOSTS", "api.example.com")
+    monkeypatch.setattr(
+        socket,
+        "getaddrinfo",
+        lambda *args, **kwargs: [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("93.184.216.34", 443))],
+    )
+
+    def fake_post(url, data=None, **kwargs):
+        json_body = kwargs.get("json")
+
+        class FakeResp:
+            def __init__(self):
+                self.status_code = 200
+                self.headers = {"Content-Length": "80"}
+
+            def raise_for_status(self):
+                pass
+
+            def iter_content(self, chunk_size=8192):
+                yield json.dumps({"url": url, "data": data, "json": json_body}).encode()
+
+            def close(self):
+                pass
+
+        return FakeResp()
+
+    _patch_http_session(monkeypatch, fake_post)
+    steps = normalize_plan_items(
+        [{"tool": "http_post", "payload": {"url": "https://api.example.com/items", "json": {"name": "demo"}}}]
+    )
+
+    assert steps == ['{"payload": {"json": {"name": "demo"}, "url": "https://api.example.com/items"}, "tool": "http_post"}']
+
+    result = await execute_plan_items(steps, owner_id="user-1")
+
+    assert json.loads(result[0]) == {
+        "url": "https://api.example.com/items",
+        "data": None,
+        "json": {"name": "demo"},
+    }
+
+
+@pytest.mark.anyio
 @pytest.mark.parametrize(
     ("call", "spec", "handler", "expected"),
     [
@@ -251,6 +347,30 @@ async def test_execute_plan_items_returns_stable_error_when_rendered_success_exc
     assert json.loads(result[0]) == {
         "status": "error",
         "error_code": "tool_result_too_large",
+        "retryable": False,
+    }
+
+
+@pytest.mark.anyio
+async def test_execute_plan_items_keeps_stable_error_envelope_at_smallest_positive_limit(monkeypatch):
+    monkeypatch.setattr("src.agent.executor.MAX_TOOL_RESULT_BYTES", 1)
+
+    result = await execute_plan_items(
+        [
+            ToolCallPlan(
+                kind="tool_call",
+                call_id="call-unknown",
+                tool="demo.missing",
+                arguments={"value": "x"},
+            )
+        ],
+        owner_id="user-1",
+        registry=CapabilityRegistry(),
+    )
+
+    assert json.loads(result[0]) == {
+        "status": "error",
+        "error_code": "unknown_tool",
         "retryable": False,
     }
 

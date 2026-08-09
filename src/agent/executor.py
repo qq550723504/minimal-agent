@@ -101,8 +101,12 @@ async def execute_structured_calls(
 
 
 def _bounded_json_dumps(value: Any) -> str:
+    return _bounded_json_dumps_with_limit(value, enforce_limit=True)
+
+
+def _bounded_json_dumps_with_limit(value: Any, *, enforce_limit: bool) -> str:
     rendered = json.dumps(value, ensure_ascii=False, sort_keys=True)
-    if len(rendered.encode("utf-8")) > MAX_TOOL_RESULT_BYTES:
+    if enforce_limit and len(rendered.encode("utf-8")) > MAX_TOOL_RESULT_BYTES:
         raise ValueError("rendered tool result exceeds size limit")
     return rendered
 
@@ -124,30 +128,50 @@ def _render_tool_result(result: ToolResult) -> str:
     if result.status == "success":
         if isinstance(result.content, str):
             if len(result.content.encode("utf-8")) > MAX_TOOL_RESULT_BYTES:
-                return _bounded_json_dumps(
+                return _bounded_json_dumps_with_limit(
                     _tool_result_error_payload(
                         error_code="tool_result_too_large",
                         retryable=False,
-                    )
+                    ),
+                    enforce_limit=False,
                 )
             return result.content
         try:
             return _bounded_json_dumps(result.content)
         except ValueError:
-            return _bounded_json_dumps(
+            return _bounded_json_dumps_with_limit(
                 _tool_result_error_payload(
                     error_code="tool_result_too_large",
                     retryable=False,
-                )
+                ),
+                enforce_limit=False,
             )
 
-    return _bounded_json_dumps(
+    return _bounded_json_dumps_with_limit(
         _tool_result_error_payload(
             status=str(result.status),
             error_code=result.error_code,
             retryable=result.retryable,
-        )
+        ),
+        enforce_limit=False,
     )
+
+
+def _restore_legacy_step(step: str) -> Any:
+    stripped = step.strip()
+    if not stripped.startswith("{"):
+        return step
+    try:
+        parsed = json.loads(stripped)
+    except json.JSONDecodeError:
+        return step
+    if not isinstance(parsed, dict):
+        return step
+    if isinstance(parsed.get("tool"), str):
+        return parsed
+    if any(isinstance(parsed.get(key), str) for key in ("action", "text", "step")):
+        return parsed
+    return step
 
 
 async def execute_plan_items(
@@ -176,7 +200,8 @@ async def execute_plan_items(
             results.append(_render_tool_result(tool_result))
             continue
 
-        results.append(await asyncio.to_thread(execute_step, step))
+        legacy_step = _restore_legacy_step(step) if isinstance(step, str) else step
+        results.append(await asyncio.to_thread(execute_step, legacy_step))
     return results
 
 

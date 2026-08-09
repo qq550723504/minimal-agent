@@ -3,6 +3,7 @@ from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
+from src.agent import main
 from src.agent import server
 from src.agent.capabilities.models import ToolCall, ToolInvocationContext, ToolSource, ToolSpec
 from src.agent.plan_models import ToolCallPlan
@@ -29,6 +30,36 @@ def test_handle_endpoint(monkeypatch):
     assert resp.status_code == 200
     assert resp.json()["result"] == "async-result"
     assert seen == [("hello", "default", server.app.state.skill_catalog)]
+
+
+@pytest.mark.anyio
+async def test_handle_input_async_uses_legacy_separator_when_structured_mode_disabled(monkeypatch):
+    registry = get_capability_registry().__class__()
+    captured = {}
+
+    monkeypatch.setattr("src.agent.main.STRUCTURED_TOOL_CALLING_ENABLED", False)
+    monkeypatch.setattr("src.agent.main.get_capability_registry", lambda: registry)
+
+    def fake_plan_task(prompt, user_id="default", **kwargs):
+        captured["structured_tools"] = kwargs["structured_tools"]
+        return ["first step", "second step"]
+
+    async def fake_execute_plan_items(
+        steps,
+        owner_id,
+        run_id=None,
+        active_skill_ids=(),
+        registry=None,
+    ):
+        return ["alpha", "beta"]
+
+    monkeypatch.setattr("src.agent.main.plan_task", fake_plan_task)
+    monkeypatch.setattr("src.agent.main.execute_plan_items", fake_execute_plan_items)
+
+    result = await main.handle_input_async("hello")
+
+    assert captured["structured_tools"] is False
+    assert result == "alpha | beta"
 
 
 def _skill_catalog(root: Path) -> SkillCatalog:

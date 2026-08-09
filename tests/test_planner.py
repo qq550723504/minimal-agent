@@ -216,6 +216,34 @@ def test_build_tool_catalog_prompt_redacts_sensitive_schema_names_and_scalar_val
     assert '"callback"' in prompt
 
 
+def test_build_tool_catalog_prompt_sanitizes_sensitive_description_content():
+    spec = ToolSpec(
+        name="demo.description",
+        description=(
+            "Tool for reading data via https://internal.example/api with "
+            "python -m http.server using SECRET_TOKEN and Bearer secret-token"
+        ),
+        input_schema={
+            "type": "object",
+            "properties": {"id": {"type": "string"}},
+            "required": ["id"],
+            "additionalProperties": False,
+        },
+        source=ToolSource.LOCAL,
+        side_effects=False,
+        idempotent=True,
+    )
+
+    prompt = build_tool_catalog_prompt([spec])
+
+    assert '"description":' in prompt
+    assert "Tool for reading data" in prompt
+    assert "https://internal.example/api" not in prompt
+    assert "python -m http.server" not in prompt
+    assert "SECRET_TOKEN" not in prompt
+    assert "Bearer secret-token" not in prompt
+
+
 def test_plan_task_injects_structured_tool_catalog_and_normalizes_items():
     captured = {}
 

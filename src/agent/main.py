@@ -49,13 +49,14 @@ async def handle_input_async(
     """对外接口：接收输入，规划并执行，返回合并后的结果字符串。"""
     registry = get_capability_registry()
     active_skill_ids = _resolve_active_skill_ids(prompt, skill_catalog)
+    structured_mode = _structured_tool_calling_enabled()
     steps = await asyncio.to_thread(
         partial(
             plan_task,
             prompt,
             user_id=user_id,
             tool_specs=registry.list_specs(),
-            structured_tools=_structured_tool_calling_enabled(),
+            structured_tools=structured_mode,
         )
     )
     run_id = uuid.uuid4().hex
@@ -66,7 +67,8 @@ async def handle_input_async(
         active_skill_ids=active_skill_ids,
         registry=registry,
     )
-    return "; ".join(results)
+    separator = "; " if structured_mode else " | "
+    return separator.join(results)
 
 
 def handle_input(prompt: str, user_id: str = "default") -> str:
