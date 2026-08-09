@@ -158,14 +158,18 @@ def test_compose_and_docs_cover_structured_mcp_tool_calling():
     assert "不支持结构化 MCP 工具调用" in readme
     activation_start = readme.index("如需启用结构化 MCP 工具调用")
     runtime_index = readme.index("AGENT_CAPABILITY_RUNTIME_ENABLED=true", activation_start)
-    allowlist_index = readme.index("AGENT_MCP_ALLOWED_HOSTS", activation_start)
+    hosts_allowlist_index = readme.index("AGENT_MCP_ALLOWED_HOSTS", activation_start)
+    stdio_allowlist_index = readme.index(
+        "AGENT_MCP_STDIO_ALLOWED_COMMANDS", activation_start
+    )
     structured_index = readme.index(
         "AGENT_STRUCTURED_TOOL_CALLING_ENABLED=true", activation_start
     )
     activation_end = readme.index("\n", activation_start)
     activation_line = readme[activation_start:activation_end]
 
-    assert runtime_index < allowlist_index < structured_index
+    assert runtime_index < hosts_allowlist_index < structured_index
+    assert runtime_index < stdio_allowlist_index < structured_index
     assert "默认值始终为 `false`" in activation_line
     assert (
         "请求/API Key\n"
