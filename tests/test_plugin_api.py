@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 import sys
 
@@ -262,9 +263,12 @@ mcp_servers:
         response = client.post("/api/handle", json={"prompt": "Read park energy"})
 
     assert response.status_code == 200
-    assert response.json()["result"] == (
-        '{"average_kw": 12.5, "park_id": "north-campus", "peak_kw": 18.0, "window_hours": 24}'
-    )
+    assert json.loads(response.json()["result"]) == {
+        "average_kw": 12.5,
+        "park_id": "north-campus",
+        "peak_kw": 18.0,
+        "window_hours": 24,
+    }
     assert seen == [
         ("demo.local.park_energy", {"park_id": "north-campus"}, "default")
     ]
