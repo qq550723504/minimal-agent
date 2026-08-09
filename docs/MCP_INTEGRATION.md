@@ -10,7 +10,7 @@
 | --- | --- |
 | 内置本地工具的结构化调用 | `AGENT_STRUCTURED_TOOL_CALLING_ENABLED=true` |
 | 插件 Skill / MCP 工具 | 上述开关 + `AGENT_CAPABILITY_RUNTIME_ENABLED=true` |
-| Streamable HTTP MCP | 另外配置 `AGENT_MCP_ALLOWED_HOSTS`，且生产环境使用 HTTPS |
+| Streamable HTTP MCP | 另外配置 `AGENT_MCP_ALLOWED_HOSTS`，所有环境都必须使用 HTTPS |
 | stdio MCP | 另外配置 `AGENT_MCP_STDIO_ALLOWED_COMMANDS` 精确可执行文件路径 |
 
 两个结构化开关默认都是 `false`。配置在服务启动时读取，修改后需要重启服务。当前只有同步 `/api/handle` 支持结构化 MCP 工具调用；`/api/handle/queue` 仍使用旧版字符串步骤语义。
@@ -65,7 +65,7 @@ $env:PARK_ENERGY_MCP_URL = "https://energy.example.com/mcp"
 $env:PARK_ENERGY_MCP_TOKEN = "<secret>"
 ```
 
-`url_env` 的值是环境变量名；`headers_env` 的键是发送给 MCP Server 的 HTTP Header，值是环境变量名。生产环境还必须启用 API Key 鉴权，并使用 `docker-compose.production.yml` 中要求的生产配置。
+`url_env` 的值是环境变量名；`headers_env` 的键是发送给 MCP Server 的 HTTP Header，值是环境变量名。所有环境的 Streamable HTTP MCP 都必须使用 HTTPS；生产环境还必须启用 API Key 鉴权，并使用 `docker-compose.production.yml` 中要求的生产配置。
 
 ### 2.2 stdio 示例
 
