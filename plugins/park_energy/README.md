@@ -1,8 +1,8 @@
-﻿# park-energy plugin
+# park-energy 插件
 
-`park-energy` is a minimal MCP server that exposes energy-related tools by wrapping REST endpoints.
+`park-energy` 是一个轻量级 MCP 服务端，通过封装 REST 接口对外提供能耗相关工具。
 
-## Environment Variables
+## 环境变量
 
 ```powershell
 $env:ENERGY_API_BASE_URL = "https://energy.example.com"
@@ -20,23 +20,21 @@ $env:PARK_ENERGY_MCP_PORT = "8100"
 $env:ENERGY_API_MAX_RESPONSE_BYTES = "1048576"
 ```
 
-- Override `ENERGY_*_PATH` values if your backend routes differ.
-- `ENERGY_API_TOKEN` is optional if the API is open.
+- 如果你的后端路由路径不同，请覆盖 `ENERGY_*_PATH` 相关变量。
+- 如果接口是公开的，`ENERGY_API_TOKEN` 可选。
 
-## Run locally
+## 本地运行
 
-From the repository root:
+在仓库根目录执行：
 
 ```powershell
 python -m plugins.park_energy.server.main
 ```
 
-The server listens on `PARK_ENERGY_MCP_HOST` and `PARK_ENERGY_MCP_PORT`.
-The default host is loopback so the unauthenticated MCP endpoint is not exposed
-to the network. If you set the host to `0.0.0.0`, put the server behind an
-authenticated, network-restricted gateway.
+服务会监听 `PARK_ENERGY_MCP_HOST` 与 `PARK_ENERGY_MCP_PORT`。
+默认监听本机地址，不会把未鉴权的 MCP 端点暴露到外网。若你将主机设置为 `0.0.0.0`，请将服务放在带有鉴权并受网络限制的网关之后。
 
-## MiniAgent integration
+## MiniAgent 集成
 
 ```powershell
 $env:AGENT_CAPABILITY_RUNTIME_ENABLED = "true"
@@ -46,20 +44,20 @@ $env:PARK_ENERGY_MCP_URL = "https://energy.example.com/mcp"
 $env:PARK_ENERGY_MCP_TOKEN = "<secret>"
 ```
 
-Start MiniAgent and check `/api/tools` to confirm registration.
+启动 MiniAgent 后访问 `/api/tools`，确认插件是否已注册。
 
-## Tools
+## 工具
 
 - `energy.query_trend`
-  - Required: `park_id`, `start_time`, `end_time`
-  - Optional: `building_id`, `energy_type` (`electricity` default), `granularity` (`day` default)
+  - 必填参数：`park_id`、`start_time`、`end_time`
+  - 可选参数：`building_id`、`energy_type`（默认 `electricity`）、`granularity`（默认 `day`）
 - `energy.query_ranking`
 - `energy.get_peak_value`
 - `energy.compare_period`
 - `energy.get_alarm_summary`
 
-## Plugin metadata
+## 插件信息
 
-- Plugin ID: `park-energy`
-- Transport: `streamable_http`
-- Default port: `8100`
+- 插件 ID：`park-energy`
+- 通信方式：`streamable_http`
+- 默认端口：`8100`
