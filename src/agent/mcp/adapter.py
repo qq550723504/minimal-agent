@@ -13,9 +13,9 @@ from typing import Any
 import httpx2
 from mcp.types import Tool
 
-from src.agent.capabilities.errors import ToolExecutionError
-from src.agent.capabilities.models import ToolInvocationContext, ToolSource, ToolSpec
-from src.agent.capabilities.registry import CapabilityHandler, CapabilityRegistry
+from src.agent.domain.capabilities.errors import ToolExecutionError
+from src.agent.domain.capabilities.models import ToolInvocationContext, ToolSource, ToolSpec
+from src.agent.domain.capabilities.registry import CapabilityHandler, CapabilityRegistry
 from src.agent.config import MAX_TOOL_RESULT_BYTES
 from src.agent.plugins.models import AllowedToolManifest
 from src.agent.namespaces import capability_namespaced_id

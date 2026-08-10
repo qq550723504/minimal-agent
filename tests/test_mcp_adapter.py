@@ -5,8 +5,8 @@ import asyncio
 import pytest
 from mcp.types import TextContent, Tool
 
-from src.agent.capabilities.models import ToolCall, ToolInvocationContext, ToolSource, ToolSpec
-from src.agent.capabilities.registry import CapabilityRegistry
+from src.agent.domain.capabilities.models import ToolCall, ToolInvocationContext, ToolSource, ToolSpec
+from src.agent.domain.capabilities.registry import CapabilityRegistry
 from src.agent.mcp.manager import MCPClientManager
 from src.agent.mcp.security import ResolvedHTTPConfig
 from src.agent.plugins.catalog import LoadedPlugin, PluginCatalog, PluginStatus

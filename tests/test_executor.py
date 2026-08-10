@@ -3,10 +3,10 @@ import socket
 import requests
 import pytest
 
-from src.agent.capabilities.errors import ToolExecutionError
-from src.agent.capabilities.models import ToolSource, ToolSpec
-from src.agent.capabilities.registry import CapabilityRegistry
-from src.agent.capabilities.models import ToolCall, ToolInvocationContext
+from src.agent.domain.capabilities.errors import ToolExecutionError
+from src.agent.domain.capabilities.models import ToolSource, ToolSpec
+from src.agent.domain.capabilities.registry import CapabilityRegistry
+from src.agent.domain.capabilities.models import ToolCall, ToolInvocationContext
 from src.agent.config import MAX_TOOL_RESULT_BYTES
 from src.agent.executor import (
     WorkflowExecutionError,
@@ -18,7 +18,7 @@ from src.agent.executor import (
     execute_tasks,
     execute_workflow,
 )
-from src.agent.plan_models import ToolCallPlan, normalize_plan_items
+from src.agent.domain.planning.models import ToolCallPlan, normalize_plan_items
 from src.agent.tool_registry import register_tool
 
 

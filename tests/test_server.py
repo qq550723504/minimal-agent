@@ -5,8 +5,8 @@ import pytest
 from fastapi.testclient import TestClient
 from src.agent import main
 from src.agent import server
-from src.agent.capabilities.models import ToolCall, ToolInvocationContext, ToolSource, ToolSpec
-from src.agent.plan_models import ToolCallPlan
+from src.agent.domain.capabilities.models import ToolCall, ToolInvocationContext, ToolSource, ToolSpec
+from src.agent.domain.planning.models import ToolCallPlan
 from src.agent.plugins.catalog import LoadedPlugin, PluginCatalog
 from src.agent.plugins.models import PluginManifest
 from src.agent.skills.loader import SkillCatalog

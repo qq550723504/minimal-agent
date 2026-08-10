@@ -4,9 +4,9 @@ import os
 from pathlib import Path, PureWindowsPath
 from typing import Any
 
-from src.agent.capabilities.errors import ToolExecutionError
-from src.agent.capabilities.models import ToolSource, ToolSpec
-from src.agent.capabilities.registry import CapabilityRegistry
+from src.agent.domain.capabilities.errors import ToolExecutionError
+from src.agent.domain.capabilities.models import ToolSource, ToolSpec
+from src.agent.domain.capabilities.registry import CapabilityRegistry
 
 from .loader import SkillCatalog
 

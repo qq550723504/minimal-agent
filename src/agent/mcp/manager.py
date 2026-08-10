@@ -13,7 +13,7 @@ import httpx2
 from mcp import Client
 
 from src.agent import config
-from src.agent.capabilities.registry import CapabilityRegistry
+from src.agent.domain.capabilities.registry import CapabilityRegistry
 from src.agent.plugins.catalog import LoadedPlugin, PluginCatalog
 from src.agent.plugins.loader import RequiredPluginError
 from src.agent.plugins.models import HTTPMCPServerManifest, MCPServerManifest, StdioMCPServerManifest

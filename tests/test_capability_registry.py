@@ -3,9 +3,9 @@ import time
 
 import pytest
 
-from src.agent.capabilities.errors import ToolExecutionError
-from src.agent.capabilities.models import ToolCall, ToolInvocationContext, ToolSpec, ToolSource
-from src.agent.capabilities.registry import CapabilityRegistry
+from src.agent.domain.capabilities.errors import ToolExecutionError
+from src.agent.domain.capabilities.models import ToolCall, ToolInvocationContext, ToolSpec, ToolSource
+from src.agent.domain.capabilities.registry import CapabilityRegistry
 
 
 def make_spec(name: str, **overrides) -> ToolSpec:
@@ -130,7 +130,7 @@ async def test_remote_schema_refs_are_rejected_without_retrieval():
 
 @pytest.mark.anyio
 async def test_schema_validation_runs_under_tool_timeout():
-    from src.agent.capabilities.registry import _RegistryEntry
+    from src.agent.domain.capabilities.registry import _RegistryEntry
 
     registry = CapabilityRegistry()
     registry.register(make_spec("demo.schema_slow", timeout_seconds=0.001), lambda *_: None)
@@ -171,7 +171,7 @@ async def test_non_json_result_is_rejected():
 
 @pytest.mark.anyio
 async def test_schema_timeout_is_not_unknown_outcome():
-    from src.agent.capabilities.registry import _RegistryEntry
+    from src.agent.domain.capabilities.registry import _RegistryEntry
 
     registry = CapabilityRegistry()
     spec = make_spec(

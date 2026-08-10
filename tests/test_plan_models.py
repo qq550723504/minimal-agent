@@ -5,7 +5,7 @@ import sys
 import pytest
 from pydantic import ValidationError
 
-from src.agent.plan_models import ToolCallPlan, normalize_plan_items
+from src.agent.domain.planning.models import ToolCallPlan, normalize_plan_items
 
 
 def test_tool_call_plan_validates_lowercase_tool_name():

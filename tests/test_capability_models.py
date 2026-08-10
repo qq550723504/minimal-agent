@@ -5,7 +5,7 @@ import sys
 import pytest
 from pydantic import ValidationError
 
-from src.agent.capabilities.models import ToolCall, ToolSpec, ToolSource
+from src.agent.domain.capabilities.models import ToolCall, ToolSpec, ToolSource
 
 
 def test_tool_spec_requires_retry_semantics():
@@ -23,7 +23,7 @@ def test_tool_call_rejects_non_object_arguments():
 
 
 def test_tool_execution_error_exposes_metadata_without_secret_message():
-    from src.agent.capabilities.errors import ToolExecutionError
+    from src.agent.domain.capabilities.errors import ToolExecutionError
 
     error = ToolExecutionError(
         error_code="remote_failure",

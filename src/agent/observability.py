@@ -4,10 +4,10 @@ from typing import TYPE_CHECKING
 from fastapi import Depends, FastAPI, Request, Response
 from prometheus_client import CONTENT_TYPE_LATEST, Counter, Gauge, Histogram, generate_latest
 
-from src.agent.auth import get_metrics_access
+from src.agent.security.auth import get_metrics_access
 
 if TYPE_CHECKING:
-    from src.agent.capabilities.models import ToolResult, ToolSpec
+    from src.agent.domain.capabilities.models import ToolResult, ToolSpec
     from src.agent.plugins.catalog import PluginCatalog
 
 REQUEST_COUNT = Counter(

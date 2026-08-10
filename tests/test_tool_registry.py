@@ -1,6 +1,6 @@
 import pytest
 
-from src.agent.capabilities.models import ToolCall, ToolInvocationContext, ToolSource, ToolSpec
+from src.agent.domain.capabilities.models import ToolCall, ToolInvocationContext, ToolSource, ToolSpec
 from src.agent.tool_registry import (
     get_capability_registry,
     get_tool,

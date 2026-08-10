@@ -1,6 +1,6 @@
 import json
 
-from src.agent.capabilities.models import ToolSource, ToolSpec
+from src.agent.domain.capabilities.models import ToolSource, ToolSpec
 from src.agent.memory import get_global_memory
 from src.agent.planner import build_tool_catalog_prompt, plan_task, _build_rag_prompt
 from src.agent.llm import MockLLM, LLMAdapter

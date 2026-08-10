@@ -2,7 +2,7 @@ import json
 import re
 from typing import Any, List, Union
 
-from src.agent.plan_models import PlanItem, ToolCallPlan, coerce_plan_items, normalize_plan_items
+from src.agent.domain.planning.models import PlanItem, ToolCallPlan, coerce_plan_items, normalize_plan_items
 
 
 def _normalize_plan_item(item: Any) -> Any:

@@ -4,7 +4,7 @@ import socket
 import pytest
 
 from src.agent.tools import _http_get_tool, _http_post_tool
-from src.agent.http_security import ParsedURL, pin_dns_resolution, validate_http_url
+from src.agent.security.http import ParsedURL, pin_dns_resolution, validate_http_url
 
 
 class FakeResponse:
@@ -287,7 +287,7 @@ def test_overlapping_dns_pinning_restores_original_resolver(monkeypatch):
         def __exit__(self, exc_type, exc_value, traceback):
             self._lock.release()
 
-    import src.agent.http_security as security
+    import src.agent.security.http as security
 
     original_resolver = socket.getaddrinfo
     gate = GateLock()

@@ -3,8 +3,8 @@ from pathlib import Path
 
 import pytest
 
-from src.agent.capabilities.models import ToolCall, ToolInvocationContext
-from src.agent.capabilities.registry import CapabilityRegistry
+from src.agent.domain.capabilities.models import ToolCall, ToolInvocationContext
+from src.agent.domain.capabilities.registry import CapabilityRegistry
 from src.agent.plugins.catalog import LoadedPlugin, PluginCatalog
 from src.agent.plugins.models import PluginManifest
 from src.agent.skills.loader import SkillCatalog

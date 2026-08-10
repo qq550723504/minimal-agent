@@ -2,13 +2,13 @@ import json
 import re
 from typing import Any, List, Optional, Sequence
 
-from src.agent.capabilities.models import ToolSpec
+from src.agent.domain.capabilities.models import ToolSpec
 from src.agent import config
 from src.agent.llm import LLMAdapter
 from src.agent.llm_factory import create_llm_adapter
 from src.agent.memory import get_global_memory
 from src.agent.memory_manager import add_memory, get_relevant_memory, initialize_memory, is_memory_enabled
-from src.agent.plan_models import coerce_plan_items
+from src.agent.domain.planning.models import coerce_plan_items
 from src.agent.tool_registry import get_capability_registry
 
 

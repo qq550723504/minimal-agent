@@ -1,6 +1,6 @@
 import os
 
-from src.agent.security import redact_sensitive_text, sanitize_input
+from src.agent.security.input import redact_sensitive_text, sanitize_input
 
 
 def test_sanitize_input_rejects_control_chars():
