@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass
+from typing import Literal
 
 
 def _float_env(name: str, default: float) -> float:
@@ -24,9 +25,14 @@ class Settings:
     alarms_path: str
     host: str
     port: int
+    data_mode: Literal["rest", "mock"]
 
     @classmethod
     def from_env(cls) -> "Settings":
+        data_mode = os.getenv("PARK_ENERGY_DATA_MODE", "rest").strip().lower()
+        if data_mode not in {"rest", "mock"}:
+            raise ValueError("PARK_ENERGY_DATA_MODE must be rest or mock")
+
         return cls(
             api_base_url=os.getenv("ENERGY_API_BASE_URL", "http://localhost:9000").rstrip("/"),
             api_token=os.getenv("ENERGY_API_TOKEN") or None,
@@ -41,4 +47,5 @@ class Settings:
             alarms_path=os.getenv("ENERGY_ALARMS_PATH", "/api/energy/alarms"),
             host=os.getenv("PARK_ENERGY_MCP_HOST", "127.0.0.1"),
             port=int(os.getenv("PARK_ENERGY_MCP_PORT", "8100")),
+            data_mode=data_mode,
         )
