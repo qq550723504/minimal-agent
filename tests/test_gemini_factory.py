@@ -8,26 +8,12 @@ def test_create_llm_adapter_selects_gemini(monkeypatch):
     assert factory.create_llm_adapter().__class__.__name__ == "GeminiAdapter"
 
 
-def test_create_llm_adapter_selects_qwen_with_compatible_configuration(monkeypatch):
+def test_create_llm_adapter_falls_back_for_removed_qwen_backend(monkeypatch):
     import src.agent.llm_factory as factory
 
     monkeypatch.setattr(factory, "LLM_BACKEND", "qwen")
-    monkeypatch.setattr(factory, "QWEN_MODEL", "qwen-test", raising=False)
-    monkeypatch.setattr(
-        factory,
-        "DASHSCOPE_BASE_URL",
-        "https://dashscope.test/compatible-mode/v1",
-        raising=False,
-    )
-    monkeypatch.setenv("DASHSCOPE_API_KEY", "dummy-key")
 
-    adapter = factory.create_llm_adapter()
-
-    assert adapter.__class__.__name__ == "OpenAICompatibleAdapter"
-    assert adapter.model == "qwen-test"
-    assert adapter.api_key_env == "DASHSCOPE_API_KEY"
-    assert adapter.base_url == "https://dashscope.test/compatible-mode/v1"
-    assert adapter.max_retries == 0
+    assert factory.create_llm_adapter().__class__.__name__ == "MockLLM"
 
 
 def test_create_llm_adapter_selects_generic_openai_compatible_backend(monkeypatch):
