@@ -10,7 +10,7 @@ from src.agent.infrastructure.plugins.loader import RequiredPluginError
 from src.agent.tool_registry import get_capability_registry
 
 
-MCP_FIXTURE = Path(__file__).parent / "fixtures" / "mcp_echo_server.py"
+MCP_FIXTURE = Path(__file__).parents[1] / "fixtures" / "mcp_echo_server.py"
 
 
 def _write_plugin(root: Path) -> None:

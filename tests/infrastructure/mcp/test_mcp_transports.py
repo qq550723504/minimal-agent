@@ -19,7 +19,7 @@ from src.agent.infrastructure.mcp.transport import PinnedHostAsyncTransport, htt
 from src.agent.infrastructure.plugins.models import HTTPMCPServerManifest, StdioMCPServerManifest
 
 
-FIXTURE_PATH = Path(__file__).parent / "fixtures" / "mcp_echo_server.py"
+FIXTURE_PATH = Path(__file__).parents[2] / "fixtures" / "mcp_echo_server.py"
 
 
 @pytest.mark.anyio

@@ -7,7 +7,7 @@ import sys
 import yaml
 
 
-ROOT = Path(__file__).parents[1]
+ROOT = Path(__file__).parents[2]
 
 _CONFIG_ENVIRONMENT_KEYS = {
     "AGENT_DEPLOYMENT_MODE",

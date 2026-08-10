@@ -13,7 +13,7 @@ from src.agent.application.requests import handle_input_async
 from src.agent.tool_registry import get_capability_registry
 
 
-MCP_FIXTURE = Path(__file__).parent / "fixtures" / "mcp_echo_server.py"
+MCP_FIXTURE = Path(__file__).parents[1] / "fixtures" / "mcp_echo_server.py"
 MCP_TOOL_NAME = "demo.local.park_energy"
 EXPECTED_RESULT = {
     "average_kw": 12.5,

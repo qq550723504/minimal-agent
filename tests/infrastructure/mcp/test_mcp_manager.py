@@ -15,7 +15,7 @@ from src.agent.infrastructure.mcp.transport import MCPResponseTooLarge, PinnedHo
 from src.agent.infrastructure.plugins.models import HTTPMCPServerManifest, StdioMCPServerManifest
 
 
-MCP_FIXTURE = Path(__file__).parent / "fixtures" / "mcp_echo_server.py"
+MCP_FIXTURE = Path(__file__).parents[2] / "fixtures" / "mcp_echo_server.py"
 
 
 @dataclass

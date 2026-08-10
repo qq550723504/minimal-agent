@@ -14,7 +14,7 @@ from src.agent.infrastructure.workflows.task_queue import enqueue_task
 from src.agent.tool_registry import get_capability_registry
 
 
-ROOT = Path(__file__).parents[1]
+ROOT = Path(__file__).parents[2]
 
 
 def test_handle_endpoint(monkeypatch):
