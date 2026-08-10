@@ -42,7 +42,7 @@
 - [ ] Run `docker compose config --quiet` before edits and confirm the current configuration is valid.
 - [ ] Change the agent mapping to `${AGENT_HOST_PORT:-8000}:8000`; add development defaults `AGENT_CAPABILITY_RUNTIME_ENABLED=true`, `AGENT_STRUCTURED_TOOL_CALLING_ENABLED=true`, `AGENT_MCP_ALLOWED_HOSTS=park_energy`, and `PARK_ENERGY_MCP_URL=http://park_energy:8100/mcp`.
 - [ ] Add `park_energy` using the existing build, command `python -m plugins.park_energy.server.main`, `PARK_ENERGY_DATA_MODE=mock`, `PARK_ENERGY_MCP_HOST=0.0.0.0`, port `8100`, loopback-only host mapping, and a Python TCP healthcheck; make agent depend on its health.
-- [ ] Set production `PARK_ENERGY_DATA_MODE` to `${PARK_ENERGY_DATA_MODE:-rest}` and run `docker compose -f docker-compose.yml -f docker-compose.production.yml config --quiet`.
+- [ ] Set production `PARK_ENERGY_DATA_MODE` to `${PARK_ENERGY_DATA_MODE:-rest}`, default production capability runtime and structured tool calling to `false` because production MCP HTTP requires HTTPS, and run `docker compose -f docker-compose.yml -f docker-compose.production.yml config --quiet`.
 - [ ] Inspect `docker compose -f docker-compose.yml config` and confirm internal URL `park_energy:8100`, container agent port `8000`, and production default `rest`.
 - [ ] Commit with `git add docker-compose.yml docker-compose.production.yml` and `git commit -m "feat: compose minimal agent with park energy"`.
 
