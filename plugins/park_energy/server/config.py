@@ -1,0 +1,42 @@
+from __future__ import annotations
+
+import os
+from dataclasses import dataclass
+
+
+def _float_env(name: str, default: float) -> float:
+    value = os.getenv(name)
+    return default if value is None else float(value)
+
+
+@dataclass(frozen=True)
+class Settings:
+    api_base_url: str
+    api_token: str | None
+    token_header: str
+    token_prefix: str
+    timeout_seconds: float
+    trend_path: str
+    ranking_path: str
+    peak_path: str
+    compare_path: str
+    alarms_path: str
+    host: str
+    port: int
+
+    @classmethod
+    def from_env(cls) -> "Settings":
+        return cls(
+            api_base_url=os.getenv("ENERGY_API_BASE_URL", "http://localhost:9000").rstrip("/"),
+            api_token=os.getenv("ENERGY_API_TOKEN") or None,
+            token_header=os.getenv("ENERGY_API_TOKEN_HEADER", "Authorization"),
+            token_prefix=os.getenv("ENERGY_API_TOKEN_PREFIX", "Bearer"),
+            timeout_seconds=_float_env("ENERGY_API_TIMEOUT_SECONDS", 10.0),
+            trend_path=os.getenv("ENERGY_TREND_PATH", "/api/energy/trend"),
+            ranking_path=os.getenv("ENERGY_RANKING_PATH", "/api/energy/ranking"),
+            peak_path=os.getenv("ENERGY_PEAK_PATH", "/api/energy/peak"),
+            compare_path=os.getenv("ENERGY_COMPARE_PATH", "/api/energy/compare"),
+            alarms_path=os.getenv("ENERGY_ALARMS_PATH", "/api/energy/alarms"),
+            host=os.getenv("PARK_ENERGY_MCP_HOST", "0.0.0.0"),
+            port=int(os.getenv("PARK_ENERGY_MCP_PORT", "8100")),
+        )

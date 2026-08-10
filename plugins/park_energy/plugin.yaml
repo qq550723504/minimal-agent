@@ -1,0 +1,39 @@
+api_version: minimal-agent/v1
+id: park-energy
+version: 0.1.0
+enabled: true
+required: false
+skills: []
+
+mcp_servers:
+  - id: energy
+    transport: streamable_http
+    url_env: PARK_ENERGY_MCP_URL
+    headers_env:
+      Authorization: PARK_ENERGY_MCP_TOKEN
+    allowed_tools:
+      - name: energy.query_trend
+        side_effects: false
+        idempotent: true
+        timeout_seconds: 10
+        result_size_limit: 262144
+      - name: energy.query_ranking
+        side_effects: false
+        idempotent: true
+        timeout_seconds: 10
+        result_size_limit: 262144
+      - name: energy.get_peak_value
+        side_effects: false
+        idempotent: true
+        timeout_seconds: 10
+        result_size_limit: 131072
+      - name: energy.compare_period
+        side_effects: false
+        idempotent: true
+        timeout_seconds: 10
+        result_size_limit: 262144
+      - name: energy.get_alarm_summary
+        side_effects: false
+        idempotent: true
+        timeout_seconds: 10
+        result_size_limit: 131072
