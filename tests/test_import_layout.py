@@ -8,6 +8,7 @@ from src.agent.infrastructure.mcp.manager import MCPClientManager
 from src.agent.infrastructure.plugins.loader import PluginLoader
 from src.agent.infrastructure.workflows.workflow_store import WorkflowStore
 from src.agent.security.input import sanitize_input
+from pathlib import Path
 
 
 def test_canonical_domain_and_security_imports():
@@ -32,3 +33,11 @@ def test_canonical_application_imports():
 
 def test_canonical_request_orchestration_import():
     assert callable(handle_input_async)
+
+
+def test_obsolete_root_modules_are_removed():
+    root = Path("src/agent")
+    assert not (root / "server.py").exists()
+    assert not (root / "main.py").exists()
+    assert not (root / "executor.py").exists()
+    assert not (root / "planner.py").exists()

@@ -32,7 +32,7 @@ $env:OPENAI_COMPATIBLE_MODEL="qwen-plus"
 python -m venv .venv
 .venv\Scripts\activate
 pip install -r requirements.txt
-python src/agent/main.py
+python -m src.agent.application.requests
 ```
 
 本地启动 HTTP 服务：
