@@ -126,6 +126,24 @@ def test_compatible_adapter_rejects_blank_explicit_base_url(monkeypatch):
         raise AssertionError("expected blank base URL to fail")
 
 
+def test_compatible_adapter_rejects_blank_model(monkeypatch):
+    monkeypatch.setenv("OPENAI_COMPATIBLE_API_KEY", "provider-key")
+
+    from src.agent.llm_compatible import OpenAICompatibleAdapter
+
+    try:
+        OpenAICompatibleAdapter(
+            model="   ",
+            api_key_env="OPENAI_COMPATIBLE_API_KEY",
+            base_url="https://provider.test/v1",
+            client=FakeClient("ignored"),
+        )
+    except ValueError as exc:
+        assert str(exc) == "model is not set"
+    else:
+        raise AssertionError("expected blank model to fail")
+
+
 def test_compatible_adapter_prefixes_strings_in_mixed_plan(monkeypatch):
     monkeypatch.setenv("DASHSCOPE_API_KEY", "dummy-key")
     client = FakeClient('["plain text", {"name": "http_get", "input": {}}]')
