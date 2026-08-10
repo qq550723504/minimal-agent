@@ -5,14 +5,14 @@ import pytest
 
 from src.agent.domain.capabilities.models import ToolCall, ToolInvocationContext
 from src.agent.domain.capabilities.registry import CapabilityRegistry
-from src.agent.plugins.catalog import LoadedPlugin, PluginCatalog
-from src.agent.plugins.models import PluginManifest
-from src.agent.skills.loader import SkillCatalog
-from src.agent.skills.reference_tool import (
+from src.agent.infrastructure.plugins.catalog import LoadedPlugin, PluginCatalog
+from src.agent.infrastructure.plugins.models import PluginManifest
+from src.agent.infrastructure.skills.loader import SkillCatalog
+from src.agent.infrastructure.skills.reference_tool import (
     _is_absolute_reference_path,
     register_skill_reference_tool,
 )
-from src.agent.skills.resolver import SkillResolver
+from src.agent.infrastructure.skills.resolver import SkillResolver
 
 
 def _catalog(root: Path, skills: list[dict]) -> PluginCatalog:
@@ -85,7 +85,7 @@ def test_unknown_explicit_skill_is_rejected(skill_catalog):
 
 
 def test_skill_resolver_uses_configured_active_limit(skill_catalog, monkeypatch):
-    monkeypatch.setattr("src.agent.skills.resolver.config.MAX_ACTIVE_SKILLS", 1)
+    monkeypatch.setattr("src.agent.infrastructure.skills.resolver.config.MAX_ACTIVE_SKILLS", 1)
 
     selected = SkillResolver(skill_catalog).resolve(
         "review pull request manual mode release", None

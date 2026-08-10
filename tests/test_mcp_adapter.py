@@ -7,12 +7,12 @@ from mcp.types import TextContent, Tool
 
 from src.agent.domain.capabilities.models import ToolCall, ToolInvocationContext, ToolSource, ToolSpec
 from src.agent.domain.capabilities.registry import CapabilityRegistry
-from src.agent.mcp.manager import MCPClientManager
-from src.agent.mcp.security import ResolvedHTTPConfig
-from src.agent.plugins.catalog import LoadedPlugin, PluginCatalog, PluginStatus
-from src.agent.plugins.loader import RequiredPluginError
-from src.agent.plugins.models import PluginManifest
-from src.agent.plugins.models import AllowedToolManifest
+from src.agent.infrastructure.mcp.manager import MCPClientManager
+from src.agent.infrastructure.mcp.security import ResolvedHTTPConfig
+from src.agent.infrastructure.plugins.catalog import LoadedPlugin, PluginCatalog, PluginStatus
+from src.agent.infrastructure.plugins.loader import RequiredPluginError
+from src.agent.infrastructure.plugins.models import PluginManifest
+from src.agent.infrastructure.plugins.models import AllowedToolManifest
 
 
 class FakeMCPClient:
@@ -100,7 +100,7 @@ def catalog_with_plugin(*, required: bool, servers: list[dict]) -> PluginCatalog
 
 @pytest.mark.anyio
 async def test_discovery_paginates_and_registers_only_allowlist() -> None:
-    from src.agent.mcp.adapter import register_server_tools
+    from src.agent.infrastructure.mcp.adapter import register_server_tools
 
     client = FakeMCPClient(
         {
@@ -127,7 +127,7 @@ async def test_discovery_paginates_and_registers_only_allowlist() -> None:
 
 @pytest.mark.anyio
 async def test_discovery_rejects_repeating_cursor() -> None:
-    from src.agent.mcp.adapter import MCPToolDiscoveryError, discover_tools
+    from src.agent.infrastructure.mcp.adapter import MCPToolDiscoveryError, discover_tools
 
     client = FakeMCPClient(
         {
@@ -144,8 +144,8 @@ async def test_discovery_rejects_repeating_cursor() -> None:
 
 @pytest.mark.anyio
 async def test_discovery_bounds_cumulative_tool_count(monkeypatch) -> None:
-    from src.agent.mcp import adapter
-    from src.agent.mcp.adapter import MCPToolDiscoveryError, discover_tools
+    from src.agent.infrastructure.mcp import adapter
+    from src.agent.infrastructure.mcp.adapter import MCPToolDiscoveryError, discover_tools
 
     monkeypatch.setattr(adapter, "_MAX_DISCOVERED_TOOLS", 1)
     client = FakeMCPClient({None: page([remote_tool("one"), remote_tool("two")])})
@@ -156,7 +156,7 @@ async def test_discovery_bounds_cumulative_tool_count(monkeypatch) -> None:
 
 @pytest.mark.anyio
 async def test_discovery_has_a_total_timeout() -> None:
-    from src.agent.mcp.adapter import MCPToolDiscoveryError, discover_tools
+    from src.agent.infrastructure.mcp.adapter import MCPToolDiscoveryError, discover_tools
 
     class HangingClient:
         async def list_tools(self, *, cursor=None):
@@ -169,7 +169,7 @@ async def test_discovery_has_a_total_timeout() -> None:
 @pytest.mark.anyio
 @pytest.mark.parametrize("timeout", [float("nan"), float("inf")])
 async def test_discovery_rejects_non_finite_timeout(timeout) -> None:
-    from src.agent.mcp.adapter import discover_tools
+    from src.agent.infrastructure.mcp.adapter import discover_tools
 
     with pytest.raises(
         ValueError, match="discovery timeout must be finite and positive"
@@ -179,7 +179,7 @@ async def test_discovery_rejects_non_finite_timeout(timeout) -> None:
 
 @pytest.mark.anyio
 async def test_remote_names_are_reversibly_encoded_but_invoked_raw() -> None:
-    from src.agent.mcp.adapter import decode_remote_tool_name, register_server_tools
+    from src.agent.infrastructure.mcp.adapter import decode_remote_tool_name, register_server_tools
 
     client = FakeMCPClient({None: page([remote_tool("GetWeather/foo/bar")])})
     registry = CapabilityRegistry()
@@ -208,7 +208,7 @@ async def test_remote_names_are_reversibly_encoded_but_invoked_raw() -> None:
 
 @pytest.mark.anyio
 async def test_remote_name_encoding_cannot_collide_with_reserved_prefix() -> None:
-    from src.agent.mcp.adapter import register_server_tools
+    from src.agent.infrastructure.mcp.adapter import register_server_tools
 
     unsafe = "GetWeather"
     prefix_lookalike = f"mcp-encoded-{unsafe.encode('utf-8').hex()}"
@@ -235,7 +235,7 @@ async def test_remote_name_encoding_cannot_collide_with_reserved_prefix() -> Non
 
 @pytest.mark.anyio
 async def test_missing_declared_tool_registers_nothing() -> None:
-    from src.agent.mcp.adapter import MCPToolDiscoveryError, register_server_tools
+    from src.agent.infrastructure.mcp.adapter import MCPToolDiscoveryError, register_server_tools
 
     registry = CapabilityRegistry()
     client = FakeMCPClient({None: page([])})
@@ -254,7 +254,7 @@ async def test_missing_declared_tool_registers_nothing() -> None:
 
 @pytest.mark.anyio
 async def test_remote_error_is_not_treated_as_success() -> None:
-    from src.agent.mcp.adapter import register_server_tools
+    from src.agent.infrastructure.mcp.adapter import register_server_tools
 
     client = FakeMCPClient({None: page([remote_tool("search")])})
     client.call_result = SimpleNamespace(
@@ -282,7 +282,7 @@ async def test_remote_error_is_not_treated_as_success() -> None:
 
 @pytest.mark.anyio
 async def test_non_idempotent_transport_failure_is_unknown_outcome() -> None:
-    from src.agent.mcp.adapter import register_server_tools
+    from src.agent.infrastructure.mcp.adapter import register_server_tools
 
     class DroppedConnectionClient(FakeMCPClient):
         async def call_tool(self, name: str, arguments: dict | None = None):
@@ -312,7 +312,7 @@ async def test_non_idempotent_transport_failure_is_unknown_outcome() -> None:
 
 @pytest.mark.anyio
 async def test_idempotent_transport_failure_is_retryable() -> None:
-    from src.agent.mcp.adapter import register_server_tools
+    from src.agent.infrastructure.mcp.adapter import register_server_tools
 
     class DroppedConnectionClient(FakeMCPClient):
         async def call_tool(self, name: str, arguments: dict | None = None):
@@ -342,7 +342,7 @@ async def test_idempotent_transport_failure_is_retryable() -> None:
 
 @pytest.mark.anyio
 async def test_structured_content_is_preserved() -> None:
-    from src.agent.mcp.adapter import register_server_tools
+    from src.agent.infrastructure.mcp.adapter import register_server_tools
 
     client = FakeMCPClient({None: page([remote_tool("search")])})
     client.call_result = SimpleNamespace(
@@ -369,7 +369,7 @@ async def test_structured_content_is_preserved() -> None:
 
 @pytest.mark.anyio
 async def test_text_blocks_remain_typed_list() -> None:
-    from src.agent.mcp.adapter import register_server_tools
+    from src.agent.infrastructure.mcp.adapter import register_server_tools
 
     client = FakeMCPClient({None: page([remote_tool("search")])})
     client.call_result = SimpleNamespace(
@@ -399,7 +399,7 @@ async def test_text_blocks_remain_typed_list() -> None:
 
 @pytest.mark.anyio
 async def test_namespace_collision_is_atomic() -> None:
-    from src.agent.mcp.adapter import register_server_tools
+    from src.agent.infrastructure.mcp.adapter import register_server_tools
 
     registry = CapabilityRegistry()
     registry.register(
@@ -717,7 +717,7 @@ async def test_catalog_reconnect_uses_default_production_revalidation(
         validation_count += 1
         return value
 
-    monkeypatch.setattr("src.agent.mcp.manager.validate_http_config", validate)
+    monkeypatch.setattr("src.agent.infrastructure.mcp.manager.validate_http_config", validate)
     manager = MCPClientManager(
         client_factory=CatalogClientFactory([first, second]),
     )

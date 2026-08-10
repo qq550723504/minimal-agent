@@ -13,14 +13,14 @@ from src.agent.security.auth import get_current_user
 from src.agent.main import enqueue_input, handle_input_async
 from src.agent.infrastructure.memory.memory_manager import initialize_memory, save_memory
 from src.agent.domain.capabilities.models import ToolSource
-from src.agent.mcp.manager import MCPClientManager
+from src.agent.infrastructure.mcp.manager import MCPClientManager
 from src.agent.observability import record_catalog_startup, setup_metrics
-from src.agent.plugins.catalog import PluginCatalog, PluginStatus
-from src.agent.plugins.loader import PluginLoader
+from src.agent.infrastructure.plugins.catalog import PluginCatalog, PluginStatus
+from src.agent.infrastructure.plugins.loader import PluginLoader
 from src.agent.security.input import ClientInputError, audit_log, sanitize_input
-from src.agent.skills.loader import SkillCatalog
-from src.agent.skills.reference_tool import register_skill_reference_tool
-from src.agent.task_queue import get_status, list_tasks, start_queue, stop_queue
+from src.agent.infrastructure.skills.loader import SkillCatalog
+from src.agent.infrastructure.skills.reference_tool import register_skill_reference_tool
+from src.agent.infrastructure.workflows.task_queue import get_status, list_tasks, start_queue, stop_queue
 from src.agent.tool_registry import get_capability_registry, list_tool_metadata
 from src.agent.version import __version__
 

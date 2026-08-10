@@ -7,7 +7,7 @@ from queue import Queue, Empty
 from typing import Callable, Any, Dict, Optional, List
 
 from src.agent.config import QUEUE_WORKER_COUNT, WORKFLOW_STORE_PATH
-from src.agent.workflow_store import WorkflowStore
+from src.agent.infrastructure.workflows.workflow_store import WorkflowStore
 
 logger = logging.getLogger(__name__)
 

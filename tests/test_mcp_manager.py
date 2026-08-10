@@ -9,10 +9,10 @@ import sys
 import httpx2
 import pytest
 
-from src.agent.mcp.manager import MCPClientManager, MCPConnectionError
-from src.agent.mcp.security import ResolvedHTTPConfig, validate_http_config, validate_stdio_config
-from src.agent.mcp.transport import MCPResponseTooLarge, PinnedHostAsyncTransport
-from src.agent.plugins.models import HTTPMCPServerManifest, StdioMCPServerManifest
+from src.agent.infrastructure.mcp.manager import MCPClientManager, MCPConnectionError
+from src.agent.infrastructure.mcp.security import ResolvedHTTPConfig, validate_http_config, validate_stdio_config
+from src.agent.infrastructure.mcp.transport import MCPResponseTooLarge, PinnedHostAsyncTransport
+from src.agent.infrastructure.plugins.models import HTTPMCPServerManifest, StdioMCPServerManifest
 
 
 MCP_FIXTURE = Path(__file__).parent / "fixtures" / "mcp_echo_server.py"
@@ -247,7 +247,7 @@ async def test_reconnect_uses_freshly_revalidated_http_config(
 
     fresh_config = resolved_http_config(address="127.0.0.2")
     monkeypatch.setattr(
-        "src.agent.mcp.manager.PinnedHostAsyncTransport", CapturingPinnedTransport
+        "src.agent.infrastructure.mcp.manager.PinnedHostAsyncTransport", CapturingPinnedTransport
     )
     manager = MCPClientManager(
         client_factory=FakeClientFactory(),
@@ -319,7 +319,7 @@ async def test_reconnect_rejects_changed_dns_before_closing_current_client(
 
     def refresh(_: ResolvedHTTPConfig) -> ResolvedHTTPConfig:
         monkeypatch.setattr(
-            "src.agent.mcp.security.socket.getaddrinfo",
+            "src.agent.infrastructure.mcp.security.socket.getaddrinfo",
             lambda *_args, **_kwargs: [
                 (socket.AF_INET, socket.SOCK_STREAM, 6, "", ("169.254.169.254", 443))
             ],
@@ -360,14 +360,14 @@ async def test_pinned_transport_uses_validated_address_after_dns_changes(
         url_env="DEMO_URL",
         allowed_tools=[],
     )
-    monkeypatch.setattr("src.agent.mcp.security.socket.getaddrinfo", resolve("127.0.0.1"))
+    monkeypatch.setattr("src.agent.infrastructure.mcp.security.socket.getaddrinfo", resolve("127.0.0.1"))
     config = validate_http_config(
         manifest,
         {"DEMO_URL": "https://mcp.example.test/tools"},
         {"mcp.example.test"},
         production=False,
     )
-    monkeypatch.setattr("src.agent.mcp.security.socket.getaddrinfo", resolve("169.254.169.254"))
+    monkeypatch.setattr("src.agent.infrastructure.mcp.security.socket.getaddrinfo", resolve("169.254.169.254"))
     delegate = RecordingTransport()
     transport = PinnedHostAsyncTransport(config, delegate=delegate)
     client = httpx2.AsyncClient(transport=transport, follow_redirects=False)

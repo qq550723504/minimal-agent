@@ -1,7 +1,7 @@
 import pytest
 from pydantic import ValidationError
 
-from src.agent.plugins.models import PluginManifest
+from src.agent.infrastructure.plugins.models import PluginManifest
 
 
 @pytest.mark.parametrize("timeout", [float("nan"), float("inf")])

@@ -1,7 +1,7 @@
 import time
 
 from src.agent.executor import WorkflowRunner, execute_workflow
-from src.agent.task_queue import TaskQueue
+from src.agent.infrastructure.workflows.task_queue import TaskQueue
 
 
 def test_enqueue_and_execute_task():

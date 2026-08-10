@@ -1,9 +1,9 @@
 import pytest
 
 from src.agent.executor import DurableWorkflowRunner, WorkflowExecutionError, enqueue_task_execution
-from src.agent.task_queue import TaskQueue
+from src.agent.infrastructure.workflows.task_queue import TaskQueue
 from src.agent.tool_registry import register_tool
-from src.agent.workflow_store import WorkflowStore
+from src.agent.infrastructure.workflows.workflow_store import WorkflowStore
 
 
 def test_durable_runner_commits_steps_in_order(tmp_path):

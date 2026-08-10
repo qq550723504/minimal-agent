@@ -6,9 +6,9 @@ from typing import Any, List, Optional
 
 from src.agent.config import MAX_TOOL_RESULT_BYTES
 from src.agent.domain.planning.models import PlanItem, ToolCallPlan
-from src.agent.task_queue import enqueue_task, get_workflow_queue, get_workflow_store
+from src.agent.infrastructure.workflows.task_queue import enqueue_task, get_workflow_queue, get_workflow_store
 from src.agent.tool_registry import get_capability_registry, get_tool
-from src.agent.workflow_store import WorkflowStore
+from src.agent.infrastructure.workflows.workflow_store import WorkflowStore
 from src.agent.domain.capabilities.models import ToolCall, ToolInvocationContext, ToolResult
 from src.agent.domain.capabilities.registry import CapabilityRegistry
 

@@ -1,6 +1,9 @@
 from src.agent.domain.capabilities.models import ToolCall, ToolSpec
 from src.agent.infrastructure.llm.llm import MockLLM
 from src.agent.infrastructure.memory.vector_memory import VectorMemory
+from src.agent.infrastructure.mcp.manager import MCPClientManager
+from src.agent.infrastructure.plugins.loader import PluginLoader
+from src.agent.infrastructure.workflows.workflow_store import WorkflowStore
 from src.agent.security.input import sanitize_input
 
 
@@ -13,3 +16,7 @@ def test_canonical_domain_and_security_imports():
 def test_canonical_model_and_memory_imports():
     assert MockLLM is not None
     assert VectorMemory is not None
+
+
+def test_canonical_runtime_infrastructure_imports():
+    assert all((WorkflowStore, PluginLoader, MCPClientManager))

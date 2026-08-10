@@ -1,4 +1,4 @@
-from src.agent.workflow_store import WorkflowStore
+from src.agent.infrastructure.workflows.workflow_store import WorkflowStore
 
 
 def test_workflow_round_trip_survives_reopen(tmp_path):

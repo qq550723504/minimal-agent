@@ -2,7 +2,7 @@
 
 from dataclasses import dataclass, field
 
-from src.agent.plugins.catalog import PluginCatalog
+from src.agent.infrastructure.plugins.catalog import PluginCatalog
 from src.agent.namespaces import namespaced_id
 
 from .models import SkillDefinition

@@ -14,9 +14,9 @@ from mcp import Client
 
 from src.agent import config
 from src.agent.domain.capabilities.registry import CapabilityRegistry
-from src.agent.plugins.catalog import LoadedPlugin, PluginCatalog
-from src.agent.plugins.loader import RequiredPluginError
-from src.agent.plugins.models import HTTPMCPServerManifest, MCPServerManifest, StdioMCPServerManifest
+from src.agent.infrastructure.plugins.catalog import LoadedPlugin, PluginCatalog
+from src.agent.infrastructure.plugins.loader import RequiredPluginError
+from src.agent.infrastructure.plugins.models import HTTPMCPServerManifest, MCPServerManifest, StdioMCPServerManifest
 from src.agent.namespaces import namespaced_id
 
 from .adapter import ClientResolver, MCPToolDiscoveryError, prepare_server_tools

@@ -13,7 +13,7 @@ from urllib.parse import urlsplit
 
 from mcp.client.stdio import get_default_environment
 
-from src.agent.plugins.models import HTTPMCPServerManifest, StdioMCPServerManifest
+from src.agent.infrastructure.plugins.models import HTTPMCPServerManifest, StdioMCPServerManifest
 
 
 class MCPSecurityError(ValueError):

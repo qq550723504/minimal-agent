@@ -1,8 +1,8 @@
 import time
 
-from src.agent.task_queue import TaskQueue
+from src.agent.infrastructure.workflows.task_queue import TaskQueue
 from src.agent.tool_registry import register_tool
-from src.agent.workflow_store import WorkflowStore
+from src.agent.infrastructure.workflows.workflow_store import WorkflowStore
 
 
 def _wait_for_workflow(store, workflow_id, status, timeout=1.0):

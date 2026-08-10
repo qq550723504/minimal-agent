@@ -5,12 +5,12 @@ from pathlib import Path
 
 import pytest
 
-from src.agent.mcp.security import (
+from src.agent.infrastructure.mcp.security import (
     MCPSecurityError,
     validate_http_config,
     validate_stdio_config,
 )
-from src.agent.plugins.models import HTTPMCPServerManifest, StdioMCPServerManifest
+from src.agent.infrastructure.plugins.models import HTTPMCPServerManifest, StdioMCPServerManifest
 
 
 def _tool() -> list[dict[str, object]]:

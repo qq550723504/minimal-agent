@@ -8,7 +8,7 @@ from src.agent.security.auth import get_metrics_access
 
 if TYPE_CHECKING:
     from src.agent.domain.capabilities.models import ToolResult, ToolSpec
-    from src.agent.plugins.catalog import PluginCatalog
+    from src.agent.infrastructure.plugins.catalog import PluginCatalog
 
 REQUEST_COUNT = Counter(
     "agent_request_count",

@@ -5,8 +5,8 @@ import sys
 from fastapi.testclient import TestClient
 
 from src.agent import server
-from src.agent.task_queue import TaskQueue
-from src.agent.workflow_store import WorkflowStore
+from src.agent.infrastructure.workflows.task_queue import TaskQueue
+from src.agent.infrastructure.workflows.workflow_store import WorkflowStore
 
 
 ROOT = os.path.dirname(os.path.dirname(__file__))

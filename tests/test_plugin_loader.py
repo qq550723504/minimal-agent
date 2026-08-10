@@ -6,7 +6,7 @@ import subprocess
 
 import pytest
 
-from src.agent.plugins.loader import PluginLoader, RequiredPluginError
+from src.agent.infrastructure.plugins.loader import PluginLoader, RequiredPluginError
 
 
 def write_plugin(

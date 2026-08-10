@@ -14,9 +14,9 @@ from pathlib import Path
 import httpx2
 import pytest
 
-from src.agent.mcp.security import ResolvedHTTPConfig, validate_http_config, validate_stdio_config
-from src.agent.mcp.transport import PinnedHostAsyncTransport, http_transport, stdio_transport
-from src.agent.plugins.models import HTTPMCPServerManifest, StdioMCPServerManifest
+from src.agent.infrastructure.mcp.security import ResolvedHTTPConfig, validate_http_config, validate_stdio_config
+from src.agent.infrastructure.mcp.transport import PinnedHostAsyncTransport, http_transport, stdio_transport
+from src.agent.infrastructure.plugins.models import HTTPMCPServerManifest, StdioMCPServerManifest
 
 
 FIXTURE_PATH = Path(__file__).parent / "fixtures" / "mcp_echo_server.py"

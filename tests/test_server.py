@@ -7,10 +7,10 @@ from src.agent import main
 from src.agent import server
 from src.agent.domain.capabilities.models import ToolCall, ToolInvocationContext, ToolSource, ToolSpec
 from src.agent.domain.planning.models import ToolCallPlan
-from src.agent.plugins.catalog import LoadedPlugin, PluginCatalog
-from src.agent.plugins.models import PluginManifest
-from src.agent.skills.loader import SkillCatalog
-from src.agent.task_queue import enqueue_task
+from src.agent.infrastructure.plugins.catalog import LoadedPlugin, PluginCatalog
+from src.agent.infrastructure.plugins.models import PluginManifest
+from src.agent.infrastructure.skills.loader import SkillCatalog
+from src.agent.infrastructure.workflows.task_queue import enqueue_task
 from src.agent.tool_registry import get_capability_registry
 
 
