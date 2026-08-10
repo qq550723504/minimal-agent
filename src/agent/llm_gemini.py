@@ -18,7 +18,7 @@ class GeminiAdapter(LLMAdapter):
         if not self.api_key:
             raise ValueError("GEMINI_API_KEY is not set")
         self._client = client if client is not None else genai.Client(api_key=self.api_key)
-        self.model = model or "gemini-2.5-flash"
+        self.model = model or "gemini-3.6-flash"
 
     def plan(self, prompt: str) -> List[Any]:
         response = self._client.models.generate_content(
