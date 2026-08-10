@@ -28,4 +28,6 @@ def create_llm_adapter():
             base_url=OPENAI_COMPATIBLE_BASE_URL,
             max_retries=0,
         )
-    return MockLLM()
+    if backend == "mock":
+        return MockLLM()
+    raise ValueError(f"Unsupported LLM backend: {backend}")

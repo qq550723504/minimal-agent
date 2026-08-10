@@ -8,12 +8,17 @@ def test_create_llm_adapter_selects_gemini(monkeypatch):
     assert factory.create_llm_adapter().__class__.__name__ == "GeminiAdapter"
 
 
-def test_create_llm_adapter_falls_back_for_removed_qwen_backend(monkeypatch):
+def test_create_llm_adapter_rejects_removed_qwen_backend(monkeypatch):
     import src.agent.llm_factory as factory
 
     monkeypatch.setattr(factory, "LLM_BACKEND", "qwen")
 
-    assert factory.create_llm_adapter().__class__.__name__ == "MockLLM"
+    try:
+        factory.create_llm_adapter()
+    except ValueError as exc:
+        assert str(exc) == "Unsupported LLM backend: qwen"
+    else:
+        raise AssertionError("expected removed qwen backend to fail explicitly")
 
 
 def test_create_llm_adapter_selects_generic_openai_compatible_backend(monkeypatch):
