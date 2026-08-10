@@ -68,7 +68,7 @@ async def test_structured_runtime_discovers_mcp_tool_executes_it_and_cleans_up_l
     _write_runtime_plugin(plugin_dir)
     _configure_runtime(monkeypatch, plugin_dir)
     monkeypatch.setattr(
-        "src.agent.planner.create_llm_adapter",
+        "src.agent.application.planning.service.create_llm_adapter",
         lambda: StaticPlanLLM(
             [
                 {
@@ -132,7 +132,7 @@ async def test_structured_runtime_rejects_unallowlisted_and_invalid_mcp_tool_cal
     _write_runtime_plugin(plugin_dir)
     _configure_runtime(monkeypatch, plugin_dir)
     monkeypatch.setattr(
-        "src.agent.planner.create_llm_adapter",
+        "src.agent.application.planning.service.create_llm_adapter",
         lambda: StaticPlanLLM([plan_item]),
     )
 

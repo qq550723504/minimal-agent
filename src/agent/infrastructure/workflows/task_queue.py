@@ -231,7 +231,7 @@ class TaskQueue:
             self._release_workflow(workflow_id)
             return
 
-        from src.agent.executor import DurableWorkflowRunner, WorkflowExecutionError
+        from src.agent.application.execution.service import DurableWorkflowRunner, WorkflowExecutionError
 
         retry = False
         try:

@@ -248,7 +248,7 @@ mcp_servers:
                 }
             ]
 
-    monkeypatch.setattr("src.agent.planner.create_llm_adapter", lambda: FakeStructuredLLM())
+    monkeypatch.setattr("src.agent.application.planning.service.create_llm_adapter", lambda: FakeStructuredLLM())
     registry = get_capability_registry()
     seen = []
     original_invoke = registry.invoke

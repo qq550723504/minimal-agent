@@ -8,7 +8,7 @@ from src.agent.domain.capabilities.models import ToolSource, ToolSpec
 from src.agent.domain.capabilities.registry import CapabilityRegistry
 from src.agent.domain.capabilities.models import ToolCall, ToolInvocationContext
 from src.agent.config import MAX_TOOL_RESULT_BYTES
-from src.agent.executor import (
+from src.agent.application.execution.service import (
     WorkflowExecutionError,
     WorkflowRunner,
     enqueue_task_execution,
@@ -353,7 +353,7 @@ async def test_execute_plan_items_returns_stable_error_when_rendered_success_exc
 
 @pytest.mark.anyio
 async def test_execute_plan_items_keeps_stable_error_envelope_at_smallest_positive_limit(monkeypatch):
-    monkeypatch.setattr("src.agent.executor.MAX_TOOL_RESULT_BYTES", 1)
+    monkeypatch.setattr("src.agent.application.execution.service.MAX_TOOL_RESULT_BYTES", 1)
 
     result = await execute_plan_items(
         [
@@ -412,8 +412,8 @@ def test_enqueue_task_execution_creates_one_workflow_task(monkeypatch):
         calls.append((func, args, kwargs))
         return "workflow-task"
 
-    monkeypatch.setattr("src.agent.executor.enqueue_task", fake_enqueue)
-    monkeypatch.setattr("src.agent.executor.get_workflow_store", lambda: None)
+    monkeypatch.setattr("src.agent.application.execution.service.enqueue_task", fake_enqueue)
+    monkeypatch.setattr("src.agent.application.execution.service.get_workflow_store", lambda: None)
 
     result = enqueue_task_execution(["echo: first", "echo: second"], owner_id="alice")
 

@@ -14,9 +14,9 @@ if __package__ is None and __name__ == "__main__":
         sys.path.insert(0, root)
 
 from src.agent import config
-from src.agent.executor import enqueue_task_execution, execute_plan_items
+from src.agent.application.execution.service import enqueue_task_execution, execute_plan_items
 from src.agent.infrastructure.memory.memory_manager import initialize_memory, save_memory
-from src.agent.planner import plan_task
+from src.agent.application.planning.service import plan_task
 from src.agent.infrastructure.skills.loader import SkillCatalog
 from src.agent.infrastructure.skills.resolver import SkillResolver
 from src.agent.tool_registry import get_capability_registry

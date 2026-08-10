@@ -2,7 +2,7 @@ import json
 
 from src.agent.domain.capabilities.models import ToolSource, ToolSpec
 from src.agent.infrastructure.memory.memory import get_global_memory
-from src.agent.planner import build_tool_catalog_prompt, plan_task, _build_rag_prompt
+from src.agent.application.planning.service import build_tool_catalog_prompt, plan_task, _build_rag_prompt
 from src.agent.infrastructure.llm.llm import MockLLM, LLMAdapter
 
 
@@ -91,7 +91,7 @@ def test_plan_task_skips_default_user_history(monkeypatch):
     llm = RecordingLLM()
     mem = get_global_memory()
     mem.add("default", {"prompt": "Earlier request about deployment."})
-    monkeypatch.setattr("src.agent.planner.get_relevant_memory", lambda *args, **kwargs: [])
+    monkeypatch.setattr("src.agent.application.planning.service.get_relevant_memory", lambda *args, **kwargs: [])
 
     steps = plan_task("Now summarize the deployment plan.", llm=llm)
     assert steps == [llm.prompt]
@@ -107,7 +107,7 @@ def test_plan_task_passes_user_id_to_relevant_memory(monkeypatch):
         captured.update(text=text, top_k=top_k, user_id=user_id)
         return []
 
-    monkeypatch.setattr("src.agent.planner.get_relevant_memory", fake_relevant_memory)
+    monkeypatch.setattr("src.agent.application.planning.service.get_relevant_memory", fake_relevant_memory)
     plan_task("alice request", user_id="alice", llm=MockLLM())
 
     assert captured["user_id"] == "alice"
@@ -434,7 +434,7 @@ def test_plan_task_structured_mode_coerces_malformed_tool_calls_to_text():
 def test_plan_task_omits_tool_catalog_when_structured_mode_disabled(monkeypatch):
     captured = {}
 
-    monkeypatch.setattr("src.agent.planner.get_relevant_memory", lambda *args, **kwargs: [])
+    monkeypatch.setattr("src.agent.application.planning.service.get_relevant_memory", lambda *args, **kwargs: [])
 
     class RecordingLLM(LLMAdapter):
         def plan(self, prompt: str):

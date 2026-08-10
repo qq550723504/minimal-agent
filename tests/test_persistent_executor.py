@@ -1,6 +1,6 @@
 import pytest
 
-from src.agent.executor import DurableWorkflowRunner, WorkflowExecutionError, enqueue_task_execution
+from src.agent.application.execution.service import DurableWorkflowRunner, WorkflowExecutionError, enqueue_task_execution
 from src.agent.infrastructure.workflows.task_queue import TaskQueue
 from src.agent.tool_registry import register_tool
 from src.agent.infrastructure.workflows.workflow_store import WorkflowStore

@@ -1,6 +1,6 @@
 import time
 
-from src.agent.executor import WorkflowRunner, execute_workflow
+from src.agent.application.execution.service import WorkflowRunner, execute_workflow
 from src.agent.infrastructure.workflows.task_queue import TaskQueue
 
 
