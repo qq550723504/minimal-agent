@@ -1,10 +1,12 @@
 # park-energy 插件
 
-`park-energy` 是一个轻量级 MCP 服务端，通过封装 REST 接口对外提供能耗相关工具。
+`park-energy` 是一个轻量级 MCP 服务端，通过封装 REST 接口或确定性的本地
+mock 数据，对外提供园区能耗相关工具。
 
 ## 环境变量
 
 ```powershell
+$env:PARK_ENERGY_DATA_MODE = "rest"
 $env:ENERGY_API_BASE_URL = "https://energy.example.com"
 $env:ENERGY_API_TOKEN = "<secret>"
 $env:ENERGY_API_TOKEN_HEADER = "Authorization"
@@ -22,6 +24,8 @@ $env:ENERGY_API_MAX_RESPONSE_BYTES = "1048576"
 
 - 如果你的后端路由路径不同，请覆盖 `ENERGY_*_PATH` 相关变量。
 - 如果接口是公开的，`ENERGY_API_TOKEN` 可选。
+- `PARK_ENERGY_DATA_MODE` 取值为 `rest` 或 `mock`，默认是 `rest`。
+- `mock` 模式下，五个工具返回可重复的示例数据，不会请求上游 API。
 
 ## 本地运行
 
@@ -32,9 +36,40 @@ python -m plugins.park_energy.server.main
 ```
 
 服务会监听 `PARK_ENERGY_MCP_HOST` 与 `PARK_ENERGY_MCP_PORT`。
-默认监听本机地址，不会把未鉴权的 MCP 端点暴露到外网。若你将主机设置为 `0.0.0.0`，请将服务放在带有鉴权并受网络限制的网关之后。
+默认监听本机地址，不会把未鉴权的 MCP 端点暴露到外网。若你将主机设置为
+`0.0.0.0`，请将服务放在带有鉴权并受网络限制的网关之后。
+
+没有真实能耗 API 时，可以使用 mock 数据：
+
+```powershell
+$env:PARK_ENERGY_DATA_MODE = "mock"
+$env:PARK_ENERGY_MCP_HOST = "127.0.0.1"
+$env:PARK_ENERGY_MCP_PORT = "8100"
+python -m plugins.park_energy.server.main
+```
+
+mock 服务地址为 `http://127.0.0.1:8100/mcp`。
+
+## 与 minimal-agent 一起使用 Compose
+
+仓库的 Compose 配置会同时启动 `agent`、`park_energy` 和 Prometheus。
+开发环境默认使用 mock 数据；如果宿主机 `8000` 已被占用，可以只调整
+agent 的宿主机端口：
+
+```powershell
+$env:AGENT_HOST_PORT = "8001"
+docker compose up --build
+```
+
+agent 地址为 `http://localhost:8001/`，park-energy 的直接 MCP 地址为
+`http://127.0.0.1:8100/mcp`。两个服务会并行运行，但 minimal-agent 当前对
+HTTP MCP 目标统一要求 HTTPS，因此本地 HTTP 端点不宣称已注册为 agent 插件。
+若要接入 agent，请在 park-energy 前配置 HTTPS 网关。直接 MCP 客户端可以在
+开发/测试环境显式允许回环 HTTP。
 
 ## MiniAgent 集成
+
+对于 HTTPS MCP 服务：
 
 ```powershell
 $env:AGENT_CAPABILITY_RUNTIME_ENABLED = "true"

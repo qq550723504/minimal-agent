@@ -6,11 +6,12 @@ from mcp.server import MCPServer
 
 from .config import Settings
 from .models import EnergyCompareQuery, EnergyQuery
+from .mock_client import MockEnergyClient
 from .rest_client import EnergyRESTClient
 
 
 settings = Settings.from_env()
-client = EnergyRESTClient(settings)
+client = MockEnergyClient(settings) if settings.data_mode == "mock" else EnergyRESTClient(settings)
 mcp = MCPServer("park-energy")
 Granularity = Literal["hour", "day", "month"]
 

@@ -2,7 +2,7 @@ services:
   agent:
     build: .
     ports:
-      - "8000:8000"
+      - "${AGENT_HOST_PORT:-8000}:8000"
     environment:
       OPENAI_API_KEY: ${OPENAI_API_KEY}
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
@@ -27,6 +27,8 @@ services:
       AGENT_STRUCTURED_TOOL_CALLING_ENABLED: ${AGENT_STRUCTURED_TOOL_CALLING_ENABLED:-false}
       AGENT_PLUGIN_DIR: /app/plugins
       AGENT_MCP_ALLOWED_HOSTS: ${AGENT_MCP_ALLOWED_HOSTS:-}
+      PARK_ENERGY_MCP_URL: ${PARK_ENERGY_MCP_URL:-http://park_energy:8100/mcp}
+      PARK_ENERGY_MCP_TOKEN: ${PARK_ENERGY_MCP_TOKEN:-}
       AGENT_MCP_STDIO_ALLOWED_COMMANDS: ${AGENT_MCP_STDIO_ALLOWED_COMMANDS:-}
       AGENT_MCP_STARTUP_TIMEOUT_SECONDS: ${AGENT_MCP_STARTUP_TIMEOUT_SECONDS:-30}
       AGENT_MCP_DISCOVERY_TIMEOUT_SECONDS: ${AGENT_MCP_DISCOVERY_TIMEOUT_SECONDS:-30}
@@ -36,6 +38,28 @@ services:
     volumes:
       - ./data:/app/data
       - ./plugins:/app/plugins:ro
+    depends_on:
+      park_energy:
+        condition: service_healthy
+  park_energy:
+    build: .
+    command: ["python", "-m", "plugins.park_energy.server.main"]
+    ports:
+      - "127.0.0.1:8100:8100"
+    environment:
+      PARK_ENERGY_DATA_MODE: ${PARK_ENERGY_DATA_MODE:-mock}
+      PARK_ENERGY_MCP_HOST: 0.0.0.0
+      PARK_ENERGY_MCP_PORT: "8100"
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import socket; s = socket.create_connection(('127.0.0.1', 8100), 2); s.close()"
+      interval: 2s
+      timeout: 3s
+      retries: 15
+      start_period: 3s
   prometheus:
     image: prom/prometheus:v3.5.0
     ports:
