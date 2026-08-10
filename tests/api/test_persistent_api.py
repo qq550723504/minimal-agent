@@ -9,7 +9,7 @@ from src.agent.infrastructure.workflows.task_queue import TaskQueue
 from src.agent.infrastructure.workflows.workflow_store import WorkflowStore
 
 
-ROOT = os.path.dirname(os.path.dirname(__file__))
+ROOT = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
 
 
 def test_workflow_store_path_is_read_from_environment(tmp_path):
