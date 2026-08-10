@@ -3,7 +3,7 @@ import os
 import re
 from typing import Any, List, Optional
 
-from src.agent.llm import LLMAdapter, parse_plan_output
+from src.agent.infrastructure.llm.llm import LLMAdapter, parse_plan_output
 
 
 class OpenAICompatibleAdapter(LLMAdapter):

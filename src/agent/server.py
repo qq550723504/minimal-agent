@@ -11,7 +11,7 @@ from fastapi.responses import JSONResponse
 from src.agent import config
 from src.agent.security.auth import get_current_user
 from src.agent.main import enqueue_input, handle_input_async
-from src.agent.memory_manager import initialize_memory, save_memory
+from src.agent.infrastructure.memory.memory_manager import initialize_memory, save_memory
 from src.agent.domain.capabilities.models import ToolSource
 from src.agent.mcp.manager import MCPClientManager
 from src.agent.observability import record_catalog_startup, setup_metrics

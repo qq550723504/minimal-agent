@@ -15,7 +15,7 @@ if __package__ is None and __name__ == "__main__":
 
 from src.agent import config
 from src.agent.executor import enqueue_task_execution, execute_plan_items
-from src.agent.memory_manager import initialize_memory, save_memory
+from src.agent.infrastructure.memory.memory_manager import initialize_memory, save_memory
 from src.agent.planner import plan_task
 from src.agent.skills.loader import SkillCatalog
 from src.agent.skills.resolver import SkillResolver

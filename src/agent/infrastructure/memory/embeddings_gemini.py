@@ -1,7 +1,7 @@
 import os
 from typing import Any, List, Optional
 
-from src.agent.embeddings import EmbeddingAdapter
+from src.agent.infrastructure.memory.embeddings import EmbeddingAdapter
 
 
 class GeminiEmbeddingAdapter(EmbeddingAdapter):

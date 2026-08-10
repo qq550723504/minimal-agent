@@ -1,6 +1,6 @@
 from typing import Any, Optional
 
-from src.agent.llm_compatible import OpenAICompatibleAdapter
+from src.agent.infrastructure.llm.llm_compatible import OpenAICompatibleAdapter
 
 
 class OpenAIAdapter(OpenAICompatibleAdapter):

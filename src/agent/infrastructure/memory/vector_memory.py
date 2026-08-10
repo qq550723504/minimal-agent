@@ -1,8 +1,8 @@
 from typing import List, Optional
 
-from src.agent.embeddings import EmbeddingAdapter
-from src.agent.embeddings_factory import create_embedding_adapter
-from src.agent.vector_store import VectorStore
+from src.agent.infrastructure.memory.embeddings import EmbeddingAdapter
+from src.agent.infrastructure.memory.embeddings_factory import create_embedding_adapter
+from src.agent.infrastructure.memory.vector_store import VectorStore
 
 
 class VectorMemory:

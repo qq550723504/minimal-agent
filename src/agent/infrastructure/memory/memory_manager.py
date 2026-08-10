@@ -2,7 +2,7 @@ import os
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from src.agent.vector_memory import VectorMemory
+from src.agent.infrastructure.memory.vector_memory import VectorMemory
 
 _vector_memory = VectorMemory()
 _initialized = False

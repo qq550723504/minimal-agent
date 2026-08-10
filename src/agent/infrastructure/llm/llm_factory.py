@@ -6,21 +6,21 @@ from src.agent.config import (
     OPENAI_COMPATIBLE_BASE_URL,
     OPENAI_COMPATIBLE_MODEL,
 )
-from src.agent.llm import MockLLM
+from src.agent.infrastructure.llm.llm import MockLLM
 
 
 def create_llm_adapter():
     backend = LLM_BACKEND
     if backend == "openai":
-        from src.agent.llm_openai import OpenAIAdapter
+        from src.agent.infrastructure.llm.llm_openai import OpenAIAdapter
 
         return OpenAIAdapter(model=OPENAI_MODEL)
     if backend == "gemini":
-        from src.agent.llm_gemini import GeminiAdapter
+        from src.agent.infrastructure.llm.llm_gemini import GeminiAdapter
 
         return GeminiAdapter(model=GEMINI_MODEL)
     if backend == "openai-compatible":
-        from src.agent.llm_compatible import OpenAICompatibleAdapter
+        from src.agent.infrastructure.llm.llm_compatible import OpenAICompatibleAdapter
 
         return OpenAICompatibleAdapter(
             model=OPENAI_COMPATIBLE_MODEL,

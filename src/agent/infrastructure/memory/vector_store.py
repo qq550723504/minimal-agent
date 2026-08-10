@@ -5,7 +5,7 @@ import threading
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from src.agent.embeddings import EmbeddingAdapter
+from src.agent.infrastructure.memory.embeddings import EmbeddingAdapter
 
 
 class VectorStore:
