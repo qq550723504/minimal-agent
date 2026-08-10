@@ -238,7 +238,7 @@ class MCPClientManager:
                 server,
                 os.environ,
                 config.MCP_ALLOWED_HOSTS,
-                production=True,
+                production=config.DEPLOYMENT_MODE == "production",
             )
         raise MCPConnectionError("mcp_server_config_invalid")
 

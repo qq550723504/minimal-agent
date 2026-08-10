@@ -9,10 +9,12 @@ import sys
 import httpx2
 import pytest
 
+from src.agent import config
 from src.agent.infrastructure.mcp.manager import MCPClientManager, MCPConnectionError
 from src.agent.infrastructure.mcp.security import ResolvedHTTPConfig, validate_http_config, validate_stdio_config
 from src.agent.infrastructure.mcp.transport import MCPResponseTooLarge, PinnedHostAsyncTransport
-from src.agent.infrastructure.plugins.models import HTTPMCPServerManifest, StdioMCPServerManifest
+from src.agent.infrastructure.plugins.catalog import LoadedPlugin
+from src.agent.infrastructure.plugins.models import HTTPMCPServerManifest, PluginManifest, StdioMCPServerManifest
 
 
 MCP_FIXTURE = Path(__file__).parents[2] / "fixtures" / "mcp_echo_server.py"
@@ -90,6 +92,47 @@ def resolved_http_config(*, address: str = "127.0.0.1") -> ResolvedHTTPConfig:
         headers={"Authorization": "Bearer test"},
         addresses=(address,),
     )
+
+
+@pytest.mark.parametrize("deployment_mode", ["development", "production"])
+def test_catalog_http_validation_follows_deployment_mode(
+    monkeypatch: pytest.MonkeyPatch, deployment_mode: str
+) -> None:
+    observed: list[bool] = []
+
+    def fake_validate_http_config(*_args: object, production: bool) -> ResolvedHTTPConfig:
+        observed.append(production)
+        return resolved_http_config()
+
+    monkeypatch.setattr(config, "DEPLOYMENT_MODE", deployment_mode)
+    monkeypatch.setattr(
+        "src.agent.infrastructure.mcp.manager.validate_http_config",
+        fake_validate_http_config,
+    )
+    plugin = LoadedPlugin(
+        installation_name="demo",
+        root=Path("."),
+        manifest=PluginManifest.model_validate(
+            {
+                "api_version": "minimal-agent/v1",
+                "id": "demo",
+                "version": "1.0.0",
+                "mcp_servers": [
+                    {
+                        "id": "remote",
+                        "transport": "streamable_http",
+                        "url_env": "DEMO_MCP_URL",
+                        "allowed_tools": [],
+                    }
+                ],
+            }
+        ),
+        skill_paths={},
+    )
+
+    MCPClientManager._resolve_catalog_server(plugin, plugin.manifest.mcp_servers[0])
+
+    assert observed == [deployment_mode == "production"]
 
 
 @pytest.mark.parametrize(

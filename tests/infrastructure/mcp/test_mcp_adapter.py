@@ -5,6 +5,7 @@ import asyncio
 import pytest
 from mcp.types import TextContent, Tool
 
+from src.agent import config
 from src.agent.domain.capabilities.models import ToolCall, ToolInvocationContext, ToolSource, ToolSpec
 from src.agent.domain.capabilities.registry import CapabilityRegistry
 from src.agent.infrastructure.mcp.manager import MCPClientManager
@@ -682,7 +683,7 @@ async def test_registered_handler_uses_manager_client_after_reconnect() -> None:
 
 
 @pytest.mark.anyio
-async def test_catalog_reconnect_uses_default_production_revalidation(
+async def test_catalog_reconnect_uses_current_deployment_mode_revalidation(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     catalog = catalog_with_plugin(
@@ -712,7 +713,7 @@ async def test_catalog_reconnect_uses_default_production_revalidation(
 
     def validate(_server, _environ, _allowed_hosts, *, production):
         nonlocal validation_count
-        assert production is True
+        assert production is (config.DEPLOYMENT_MODE == "production")
         value = resolved[validation_count]
         validation_count += 1
         return value
