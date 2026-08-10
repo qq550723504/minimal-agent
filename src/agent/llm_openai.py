@@ -1,41 +1,17 @@
-import json
-import os
-import re
-from typing import Any, List, Optional
+from typing import Any, Optional
 
-from src.agent.llm import LLMAdapter, parse_plan_output
+from src.agent.llm_compatible import OpenAICompatibleAdapter
 
 
-class OpenAIAdapter(LLMAdapter):
-    """OpenAI 适配器。需要在环境变量 `OPENAI_API_KEY` 中提供 API key。"""
+class OpenAIAdapter(OpenAICompatibleAdapter):
+    """OpenAI adapter using the shared OpenAI-compatible implementation."""
 
     def __init__(self, model: Optional[str] = None, client: Optional[Any] = None):
-        try:
-            from openai import OpenAI
-        except Exception as e:
-            raise RuntimeError("openai package is required for OpenAIAdapter") from e
-
-        self.api_key = os.getenv("OPENAI_API_KEY")
-        if not self.api_key:
-            raise ValueError("OPENAI_API_KEY is not set")
-        self._client = client if client is not None else OpenAI(api_key=self.api_key)
-        self.model = model or "gpt-3.5-turbo"
-
-    def plan(self, prompt: str) -> List[Any]:
-        resp = self._client.chat.completions.create(
-            model=self.model,
-            messages=[{"role": "user", "content": prompt}],
-            max_tokens=512,
+        super().__init__(
+            model=model or "gpt-3.5-turbo",
+            api_key_env="OPENAI_API_KEY",
+            client=client,
         )
-        text = resp.choices[0].message.content
-        parsed = parse_plan_output(text)
-        if parsed:
-            if all(isinstance(item, str) for item in parsed):
-                return [item if item.startswith("echo: ") else f"echo: {item}" for item in parsed]
-            return parsed
-
-        parts = [p.strip() for p in re.split(r"[。.?!]", text) if p.strip()]
-        return [f"echo: {p}" for p in parts]
 
 
 __all__ = ["OpenAIAdapter"]
