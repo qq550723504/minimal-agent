@@ -3,11 +3,26 @@
 [![CI](https://github.com/qq550723504/minimal-agent/actions/workflows/ci.yml/badge.svg)](https://github.com/qq550723504/minimal-agent/actions/workflows/ci.yml)
 [![Release](https://github.com/qq550723504/minimal-agent/actions/workflows/release.yml/badge.svg)](https://github.com/qq550723504/minimal-agent/actions/workflows/release.yml)
 
-Minimal Agent 是一个可配置、可观测、支持多步骤规划与工具执行的 FastAPI Agent 原型，默认使用 mock 后端，支持 OpenAI、Gemini、Qwen、向量记忆、持久化工作流以及可选的 Plugin、Skill 和 MCP 运行时。
+Minimal Agent 是一个可配置、可观测、支持多步骤规划与工具执行的 FastAPI Agent 原型，默认使用 mock 后端，支持 OpenAI、OpenAI-compatible 模型、Gemini、向量记忆、持久化工作流以及可选的 Plugin、Skill 和 MCP 运行时。
 
-### Qwen（阿里云百炼/DashScope）
+### OpenAI-compatible 模型
 
-Qwen 通过通用 OpenAI-compatible Chat Completions 适配器调用，不需要单独的模型适配器。设置 `AGENT_LLM_BACKEND=qwen` 后，配置 `DASHSCOPE_API_KEY`；`QWEN_MODEL` 默认为 `qwen-plus`，`DASHSCOPE_BASE_URL` 默认为 `https://dashscope.aliyuncs.com/compatible-mode/v1`，可按地域或业务空间覆盖。
+兼容 OpenAI Chat Completions 协议的模型共用同一个适配器，不需要为每个供应商增加单独代码。任意兼容服务可以这样配置：
+
+```powershell
+$env:AGENT_LLM_BACKEND="openai-compatible"
+$env:OPENAI_COMPATIBLE_API_KEY="your-api-key"
+$env:OPENAI_COMPATIBLE_BASE_URL="https://provider.example/v1"
+$env:OPENAI_COMPATIBLE_MODEL="your-model"
+```
+
+例如使用阿里云百炼/DashScope 的 Qwen 时，只需把通用配置指向百炼端点，并将模型名设置为 `qwen-plus`：
+
+```powershell
+$env:OPENAI_COMPATIBLE_API_KEY="your-dashscope-api-key"
+$env:OPENAI_COMPATIBLE_BASE_URL="https://dashscope.aliyuncs.com/compatible-mode/v1"
+$env:OPENAI_COMPATIBLE_MODEL="qwen-plus"
+```
 
 运行示例：
 
@@ -18,6 +33,12 @@ python -m venv .venv
 .venv\Scripts\activate
 pip install -r requirements.txt
 python src/agent/main.py
+```
+
+本地启动 HTTP 服务：
+
+```bash
+python -m uvicorn src.agent.server:app --host 0.0.0.0 --port 8000
 ```
 
 2. Docker 运行：
@@ -41,7 +62,10 @@ curl http://localhost:8000/
 
 4. 环境变量说明：
 
-- `AGENT_LLM_BACKEND`: 选择后端，默认 `mock`，可设置为 `openai`、`gemini` 或 `qwen`。
+- `AGENT_LLM_BACKEND`: 选择后端，默认 `mock`，可设置为 `openai`、`gemini` 或 `openai-compatible`。
+- `OPENAI_COMPATIBLE_API_KEY`: 通用 OpenAI-compatible 后端的 API key。
+- `OPENAI_COMPATIBLE_BASE_URL`: 通用 OpenAI-compatible 后端的 Base URL。
+- `OPENAI_COMPATIBLE_MODEL`: 通用 OpenAI-compatible 后端的模型名称。
 - `OPENAI_MODEL`: OpenAI 模型名称，默认 `gpt-3.5-turbo`。
 - `OPENAI_API_KEY`: OpenAI API key（仅当 `AGENT_LLM_BACKEND=openai` 或 `AGENT_EMBEDDING_BACKEND=openai` 时需要）。
 - `GEMINI_MODEL`: Gemini 模型名称，默认 `gemini-3.6-flash`。

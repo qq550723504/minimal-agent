@@ -8,26 +8,33 @@ def test_create_llm_adapter_selects_gemini(monkeypatch):
     assert factory.create_llm_adapter().__class__.__name__ == "GeminiAdapter"
 
 
-def test_create_llm_adapter_selects_qwen_with_compatible_configuration(monkeypatch):
+def test_create_llm_adapter_rejects_removed_qwen_backend(monkeypatch):
     import src.agent.llm_factory as factory
 
     monkeypatch.setattr(factory, "LLM_BACKEND", "qwen")
-    monkeypatch.setattr(factory, "QWEN_MODEL", "qwen-test", raising=False)
-    monkeypatch.setattr(
-        factory,
-        "DASHSCOPE_BASE_URL",
-        "https://dashscope.test/compatible-mode/v1",
-        raising=False,
-    )
-    monkeypatch.setenv("DASHSCOPE_API_KEY", "dummy-key")
+
+    try:
+        factory.create_llm_adapter()
+    except ValueError as exc:
+        assert str(exc) == "Unsupported LLM backend: qwen"
+    else:
+        raise AssertionError("expected removed qwen backend to fail explicitly")
+
+
+def test_create_llm_adapter_selects_generic_openai_compatible_backend(monkeypatch):
+    import src.agent.llm_factory as factory
+
+    monkeypatch.setattr(factory, "LLM_BACKEND", "openai-compatible")
+    monkeypatch.setattr(factory, "OPENAI_COMPATIBLE_MODEL", "provider-model", raising=False)
+    monkeypatch.setattr(factory, "OPENAI_COMPATIBLE_BASE_URL", "https://provider.test/v1", raising=False)
+    monkeypatch.setenv("OPENAI_COMPATIBLE_API_KEY", "provider-key")
 
     adapter = factory.create_llm_adapter()
 
     assert adapter.__class__.__name__ == "OpenAICompatibleAdapter"
-    assert adapter.model == "qwen-test"
-    assert adapter.api_key_env == "DASHSCOPE_API_KEY"
-    assert adapter.base_url == "https://dashscope.test/compatible-mode/v1"
-    assert adapter.max_retries == 0
+    assert adapter.model == "provider-model"
+    assert adapter.api_key_env == "OPENAI_COMPATIBLE_API_KEY"
+    assert adapter.base_url == "https://provider.test/v1"
 
 
 def test_create_embedding_adapter_selects_gemini(monkeypatch):

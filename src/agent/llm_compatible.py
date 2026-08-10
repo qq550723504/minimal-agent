@@ -25,9 +25,12 @@ class OpenAICompatibleAdapter(LLMAdapter):
             ) from exc
 
         self.api_key_env = api_key_env
-        self.api_key = os.getenv(api_key_env)
+        self.api_key = os.getenv(api_key_env, "").strip()
         if not self.api_key:
             raise ValueError(f"{api_key_env} is not set")
+        self.model = model.strip()
+        if not self.model:
+            raise ValueError("model is not set")
         if base_url is not None and not base_url.strip():
             raise ValueError("base_url is not set")
         self.base_url = base_url
@@ -41,7 +44,6 @@ class OpenAICompatibleAdapter(LLMAdapter):
             if max_retries is not None:
                 client_kwargs["max_retries"] = max_retries
             self._client = OpenAI(**client_kwargs)
-        self.model = model
 
     def plan(self, prompt: str) -> List[Any]:
         response = self._client.chat.completions.create(

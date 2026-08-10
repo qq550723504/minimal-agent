@@ -97,27 +97,27 @@ def test_compose_forwards_gemini_configuration():
     assert "AGENT_EMBEDDING_BACKEND: ${AGENT_EMBEDDING_BACKEND:-mock}" in compose
 
 
-def test_compose_forwards_qwen_configuration():
+def test_compose_forwards_generic_openai_compatible_configuration():
     compose = (ROOT / "docker-compose.yml").read_text(encoding="utf-8")
     readme = (ROOT / "README.md").read_text(encoding="utf-8")
 
-    assert "DASHSCOPE_API_KEY: ${DASHSCOPE_API_KEY:-}" in compose
-    assert "QWEN_MODEL: ${QWEN_MODEL:-qwen-plus}" in compose
-    assert (
-        "DASHSCOPE_BASE_URL: ${DASHSCOPE_BASE_URL:-https://dashscope.aliyuncs.com/compatible-mode/v1}"
-        in compose
-    )
-    assert "AGENT_LLM_BACKEND=qwen" in readme
-    assert "DASHSCOPE_API_KEY" in readme
-    assert "QWEN_MODEL" in readme
-    assert "DASHSCOPE_BASE_URL" in readme
+    assert "OPENAI_COMPATIBLE_API_KEY: ${OPENAI_COMPATIBLE_API_KEY:-}" in compose
+    assert "OPENAI_COMPATIBLE_MODEL: ${OPENAI_COMPATIBLE_MODEL:-}" in compose
+    assert "OPENAI_COMPATIBLE_BASE_URL: ${OPENAI_COMPATIBLE_BASE_URL:-}" in compose
+    assert '$env:AGENT_LLM_BACKEND="openai-compatible"' in readme
+    assert "OPENAI_COMPATIBLE_API_KEY" in readme
+    assert "OPENAI_COMPATIBLE_MODEL" in readme
+    assert "OPENAI_COMPATIBLE_BASE_URL" in readme
+    assert "DASHSCOPE_API_KEY" not in compose
+    assert "QWEN_MODEL" not in compose
+    assert "AGENT_LLM_BACKEND=qwen" not in readme
 
 
-def test_readme_lists_qwen_as_an_llm_backend():
+def test_readme_lists_openai_compatible_backends():
     readme = (ROOT / "README.md").read_text(encoding="utf-8")
 
     assert (
-        "`AGENT_LLM_BACKEND`: 选择后端，默认 `mock`，可设置为 `openai`、`gemini` 或 `qwen`。"
+        "`AGENT_LLM_BACKEND`: 选择后端，默认 `mock`，可设置为 `openai`、`gemini` 或 `openai-compatible`。"
         in readme
     )
 

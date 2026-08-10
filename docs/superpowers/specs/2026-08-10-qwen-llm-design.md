@@ -1,24 +1,22 @@
-# Qwen LLM Support Design
+# OpenAI-Compatible LLM Support Design
 
 ## Goal
 
-Add Alibaba Cloud Model Studio (DashScope) Qwen support for the project's
-conversation and planning LLM. Embedding support is explicitly out of scope.
+Add a generic OpenAI-compatible backend for the project's conversation and
+planning LLM. Any compatible provider, including Alibaba Cloud Model Studio
+(DashScope) Qwen, is configured through the same backend. Embedding support is
+explicitly out of scope.
 
 ## Approach
 
 Extract a reusable `OpenAICompatibleAdapter` for providers that implement the
 OpenAI Chat Completions contract. Keep `OpenAIAdapter` as the existing OpenAI
-configuration, and configure the `qwen` backend through the same reusable
-adapter with Qwen-specific credentials, endpoint, and model defaults. Gemini
-continues to use its native adapter because it does not use this contract.
+configuration, and route every other compatible provider through the generic
+backend. Gemini continues to use its native adapter because it does not use
+this contract.
 
-The default deployment targets the Beijing DashScope compatible endpoint:
-
-`https://dashscope.aliyuncs.com/compatible-mode/v1`
-
-The endpoint remains configurable for a Model Studio workspace or another
-region.
+The compatible backend requires an explicit provider endpoint and model, so it
+can target any region, workspace, or third-party gateway.
 
 ## Configuration
 
@@ -26,19 +24,17 @@ The following environment variables will be added:
 
 | Variable | Default | Purpose |
 | --- | --- | --- |
-| `AGENT_LLM_BACKEND` | `mock` | Accepts `qwen` to select the adapter. |
-| `DASHSCOPE_API_KEY` | none | Required API key for the Qwen adapter. |
-| `QWEN_MODEL` | `qwen-plus` | Chat model to invoke. |
-| `DASHSCOPE_BASE_URL` | Beijing compatible endpoint | Override for another region or workspace endpoint. |
-
-No Qwen embedding backend or embedding-related variables will be added.
+| `AGENT_LLM_BACKEND` | `mock` | Accepts `openai-compatible` for any compatible provider. |
+| `OPENAI_COMPATIBLE_API_KEY` | none | API key for the generic compatible backend. |
+| `OPENAI_COMPATIBLE_BASE_URL` | none | Base URL for the generic compatible backend. |
+| `OPENAI_COMPATIBLE_MODEL` | none | Model identifier for the generic compatible backend. |
 
 ## Components and Data Flow
 
-1. `config.py` reads the Qwen model and compatible API base URL.
-2. `llm_factory.py` recognizes `AGENT_LLM_BACKEND=qwen` and constructs
-   `OpenAICompatibleAdapter` with Qwen's API-key environment variable, model,
-   and base URL.
+1. `config.py` reads generic compatible settings.
+2. `llm_factory.py` recognizes `AGENT_LLM_BACKEND=openai-compatible` and
+   constructs `OpenAICompatibleAdapter` with the configured environment
+   variables, model, and base URL.
 3. `OpenAICompatibleAdapter` builds an OpenAI client and calls
    `chat.completions.create` using the provider configuration.
 4. The shared adapter parses returned text with the existing `parse_plan_output`
@@ -66,15 +62,14 @@ Add isolated unit tests using a fake OpenAI-compatible client to verify:
   Completions.
 - The client receives the DashScope base URL when the adapter creates it.
 - Empty output produces an empty plan.
-- The factory selects the shared adapter with Qwen configuration when the
-  backend is `qwen`.
+- The factory selects the shared adapter with generic configuration when the
+  backend is `openai-compatible`.
 
-Update deployment configuration tests and README documentation to cover the
-new environment variables. Run the focused Qwen tests and the full test suite.
+Update deployment configuration tests and README documentation to cover both
+the generic backend. Run focused adapter/factory tests and the full test suite.
 
 ## Out of Scope
 
 - DashScope native SDK integration.
-- Qwen embedding models.
 - Tool calling, web search, thinking mode, streaming, multimodal inputs, and
   automatic retries.
