@@ -62,10 +62,8 @@ docker compose up --build
 ```
 
 agent 地址为 `http://localhost:8001/`，park-energy 的直接 MCP 地址为
-`http://127.0.0.1:8100/mcp`。两个服务会并行运行，但 minimal-agent 当前对
-HTTP MCP 目标统一要求 HTTPS，因此本地 HTTP 端点不宣称已注册为 agent 插件。
-若要接入 agent，请在 park-energy 前配置 HTTPS 网关。直接 MCP 客户端可以在
-开发/测试环境显式允许回环 HTTP。
+`http://127.0.0.1:8100/mcp`。两个服务会并行运行；开发模式下 minimal-agent
+允许显式 allowlist 的本机 HTTP MCP，生产模式仍要求 HTTPS。
 
 ## MiniAgent 集成
 
@@ -80,6 +78,11 @@ $env:PARK_ENERGY_MCP_TOKEN = "<secret>"
 ```
 
 启动 MiniAgent 后访问 `/api/tools`，确认插件是否已注册。
+
+本地 mock 接入 agent 时，先设置 `AGENT_DEPLOYMENT_MODE=development`、
+`AGENT_MCP_ALLOWED_HOSTS=127.0.0.1`、`PARK_ENERGY_MCP_URL=http://127.0.0.1:8100/mcp`
+和空的 `PARK_ENERGY_MCP_TOKEN`，同时开启两个 capability 开关，然后重启
+MiniAgent。Docker Compose 内请使用 `park_energy` 作为 URL 主机名和 allowlist 值。
 
 ## 工具
 

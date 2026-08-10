@@ -57,9 +57,9 @@ docker compose up --build
 
 Compose 会同时启动 `agent`、`park_energy` 和 Prometheus；开发环境默认让
 `park_energy` 返回确定性的 mock 数据。agent 可在 `8001` 访问，park-energy
-的直接 MCP 地址是 `http://127.0.0.1:8100/mcp`。当前 agent MCP 管理器对
-HTTP MCP 统一要求 HTTPS，因此本地 HTTP 服务不会被宣称为已注册的 agent
-插件；如需接入 agent，应在 park-energy 前配置 HTTPS 网关。如果宿主机
+的直接 MCP 地址是 `http://127.0.0.1:8100/mcp`。开发模式允许显式
+allowlist 的本机 HTTP MCP；生产模式仍强制 HTTPS。如需在本机接入 agent，
+请配置 `AGENT_MCP_ALLOWED_HOSTS=127.0.0.1`。如果宿主机
 `8000` 未被占用，可以省略 `AGENT_HOST_PORT`，否则通过该变量改宿主机端口，
 容器内端口仍是 `8000`。
 
@@ -98,7 +98,7 @@ curl http://localhost:8001/
 - `AGENT_CAPABILITY_RUNTIME_ENABLED`: 是否加载管理员安装的插件与 Skill 目录，默认 `false`。
 - `AGENT_STRUCTURED_TOOL_CALLING_ENABLED`: 是否允许规划器输出结构化工具调用并在 `/api/handle` 请求路径执行，默认 `false`。
 - `AGENT_PLUGIN_DIR`: 插件根目录，默认 `plugins`；Compose 将项目的 `./plugins` 以只读方式挂载到 `/app/plugins`。
-- `AGENT_MCP_ALLOWED_HOSTS`: 生产环境 Streamable HTTP MCP Server 的精确主机名 allowlist，逗号分隔；为空时不允许远程 MCP 连接。
+- `AGENT_MCP_ALLOWED_HOSTS`: Streamable HTTP MCP Server 的精确主机名 allowlist，逗号分隔；开发环境本机接入可填写 `127.0.0.1`，为空时不允许 MCP 连接。
 - `AGENT_MCP_STDIO_ALLOWED_COMMANDS`: 允许启动的 MCP stdio 可执行文件路径 allowlist，逗号分隔；必须填写解析后的实际可执行文件，shell 包装器始终拒绝。
 - `AGENT_MCP_STARTUP_TIMEOUT_SECONDS`: MCP 配置解析和连接握手各阶段的超时上限，默认每阶段 `30` 秒；必须是有限正数。
 - `AGENT_MCP_DISCOVERY_TIMEOUT_SECONDS`: MCP 全部分页工具发现的总超时，默认 `30` 秒；必须是有限正数。
@@ -112,7 +112,7 @@ curl http://localhost:8001/
 - 默认关闭。设置 `AGENT_CAPABILITY_RUNTIME_ENABLED=true` 后，服务从 `AGENT_PLUGIN_DIR`（默认 `plugins`）下的每个 `<installation>/plugin.yaml` 加载插件。
 - 插件目录建议使用只读挂载。每个 Skill 的 `path` 必须指向插件目录内的 UTF-8 `SKILL.md`；参考资料只能通过内置的 `internal.skill_read_reference` 工具读取，且受 `AGENT_MAX_SKILL_REFERENCE_BYTES` 限制。
 - MCP stdio 连接必须同时满足 `AGENT_MCP_STDIO_ALLOWED_COMMANDS` 精确可执行文件 allowlist、插件目录内 cwd 和安全环境变量规则；shell 包装器（包括 `.cmd`/`.bat`）始终拒绝。
-- MCP Streamable HTTP 连接必须使用 HTTPS、精确主机 allowlist（`AGENT_MCP_ALLOWED_HOSTS`）和安全 DNS 地址；不会跟随重定向或使用代理环境变量。
+- MCP Streamable HTTP 连接必须使用精确主机 allowlist（`AGENT_MCP_ALLOWED_HOSTS`）和安全 DNS 地址；开发模式仅允许 allowlist 中的本机 HTTP，生产模式必须使用 HTTPS；不会跟随重定向或使用代理环境变量。
 - `enabled: false` 的插件会记录为 disabled；`required: true` 的插件启动失败会阻止服务启动，普通插件失败只会被禁用。`/api/plugins`、`/api/skills` 和 `/api/tools` 需要鉴权，并且不会返回密钥、命令参数、Skill 正文或参考文件内容。
 
 结构化工具调用首个切片：
