@@ -9,7 +9,9 @@ import uuid
 from functools import partial
 
 if __package__ is None and __name__ == "__main__":
-    root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    root = os.path.dirname(
+        os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    )
     if root not in sys.path:
         sys.path.insert(0, root)
 

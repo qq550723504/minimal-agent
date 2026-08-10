@@ -24,10 +24,10 @@ jobs:
         run: python -m pytest -q
       - name: Run service self-check
         run: |
-          python -m uvicorn src.agent.server:app --host 127.0.0.1 --port 8001 --lifespan off &
+          python -m uvicorn src.agent.api.app:app --host 127.0.0.1 --port 8001 --lifespan off &
           sleep 3
           curl -f http://127.0.0.1:8001/
-          pkill -f "uvicorn src.agent.server:app"
+          pkill -f "uvicorn src.agent.api.app:app"
       - name: Create GitHub Release
         uses: ncipollo/release-action@v1
         with:
