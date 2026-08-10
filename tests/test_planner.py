@@ -79,7 +79,7 @@ def test_plan_task_includes_conversation_history():
     assert "Task:\nNow summarize the deployment plan." in llm.prompt
 
 
-def test_plan_task_skips_default_user_history():
+def test_plan_task_skips_default_user_history(monkeypatch):
     class RecordingLLM(LLMAdapter):
         def __init__(self):
             self.prompt = None
@@ -91,6 +91,7 @@ def test_plan_task_skips_default_user_history():
     llm = RecordingLLM()
     mem = get_global_memory()
     mem.add("default", {"prompt": "Earlier request about deployment."})
+    monkeypatch.setattr("src.agent.planner.get_relevant_memory", lambda *args, **kwargs: [])
 
     steps = plan_task("Now summarize the deployment plan.", llm=llm)
     assert steps == [llm.prompt]

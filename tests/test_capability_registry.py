@@ -207,7 +207,7 @@ async def test_non_idempotent_side_effect_timeout_has_unknown_outcome():
     registry.register(
         make_spec(
             "demo.unsafe_timeout",
-            timeout_seconds=0.001,
+            timeout_seconds=0.05,
             side_effects=True,
             idempotent=False,
         ),
