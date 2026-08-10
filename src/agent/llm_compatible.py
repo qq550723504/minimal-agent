@@ -26,6 +26,8 @@ class OpenAICompatibleAdapter(LLMAdapter):
         self.api_key = os.getenv(api_key_env)
         if not self.api_key:
             raise ValueError(f"{api_key_env} is not set")
+        if base_url is not None and not base_url.strip():
+            raise ValueError("base_url is not set")
         self.base_url = base_url
         if client is not None:
             self._client = client
@@ -47,12 +49,12 @@ class OpenAICompatibleAdapter(LLMAdapter):
             return []
         parsed = parse_plan_output(text)
         if parsed:
-            if all(isinstance(item, str) for item in parsed):
-                return [
-                    item if item.startswith("echo: ") else f"echo: {item}"
-                    for item in parsed
-                ]
-            return parsed
+            return [
+                item
+                if not isinstance(item, str) or item.startswith("echo: ")
+                else f"echo: {item}"
+                for item in parsed
+            ]
 
         parts = [p.strip() for p in re.split(r"[。？！?!]", text) if p.strip()]
         return [f"echo: {p}" for p in parts]

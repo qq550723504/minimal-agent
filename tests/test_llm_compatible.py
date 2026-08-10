@@ -78,6 +78,43 @@ def test_compatible_adapter_configures_openai_client_base_url(monkeypatch):
     ]
 
 
+def test_compatible_adapter_rejects_blank_explicit_base_url(monkeypatch):
+    monkeypatch.setenv("DASHSCOPE_API_KEY", "dummy-key")
+
+    from src.agent.llm_compatible import OpenAICompatibleAdapter
+
+    try:
+        OpenAICompatibleAdapter(
+            model="qwen-test",
+            api_key_env="DASHSCOPE_API_KEY",
+            base_url="   ",
+            client=FakeClient("ignored"),
+        )
+    except ValueError as exc:
+        assert str(exc) == "base_url is not set"
+    else:
+        raise AssertionError("expected blank base URL to fail")
+
+
+def test_compatible_adapter_prefixes_strings_in_mixed_plan(monkeypatch):
+    monkeypatch.setenv("DASHSCOPE_API_KEY", "dummy-key")
+    client = FakeClient('["plain text", {"name": "http_get", "input": {}}]')
+
+    from src.agent.llm_compatible import OpenAICompatibleAdapter
+
+    adapter = OpenAICompatibleAdapter(
+        model="qwen-test",
+        api_key_env="DASHSCOPE_API_KEY",
+        base_url="https://dashscope.test/v1",
+        client=client,
+    )
+
+    assert adapter.plan("prompt") == [
+        "echo: plain text",
+        {"name": "http_get", "input": {}},
+    ]
+
+
 def test_compatible_adapter_requires_configured_api_key(monkeypatch):
     monkeypatch.delenv("DASHSCOPE_API_KEY", raising=False)
 
