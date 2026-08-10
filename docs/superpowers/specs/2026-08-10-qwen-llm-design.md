@@ -7,11 +7,11 @@ conversation and planning LLM. Embedding support is explicitly out of scope.
 
 ## Approach
 
-Add a dedicated `qwen` LLM backend and adapter. The adapter uses DashScope's
-OpenAI-compatible Chat Completions endpoint through the existing `openai`
-Python dependency. This keeps the Qwen integration consistent with the
-existing `OpenAIAdapter` while giving Qwen its own credential and configuration
-names.
+Extract a reusable `OpenAICompatibleAdapter` for providers that implement the
+OpenAI Chat Completions contract. Keep `OpenAIAdapter` as the existing OpenAI
+configuration, and configure the `qwen` backend through the same reusable
+adapter with Qwen-specific credentials, endpoint, and model defaults. Gemini
+continues to use its native adapter because it does not use this contract.
 
 The default deployment targets the Beijing DashScope compatible endpoint:
 
@@ -37,10 +37,11 @@ No Qwen embedding backend or embedding-related variables will be added.
 
 1. `config.py` reads the Qwen model and compatible API base URL.
 2. `llm_factory.py` recognizes `AGENT_LLM_BACKEND=qwen` and constructs
-   `QwenAdapter` with `QWEN_MODEL`.
-3. `QwenAdapter` reads `DASHSCOPE_API_KEY`, builds an OpenAI client with
-   `base_url=DASHSCOPE_BASE_URL`, and calls `chat.completions.create`.
-4. The adapter parses the returned text with the existing `parse_plan_output`
+   `OpenAICompatibleAdapter` with Qwen's API-key environment variable, model,
+   and base URL.
+3. `OpenAICompatibleAdapter` builds an OpenAI client and calls
+   `chat.completions.create` using the provider configuration.
+4. The shared adapter parses returned text with the existing `parse_plan_output`
    helper, retaining the behavior of other LLM adapters: textual plan items
    receive the `echo: ` prefix, structured items are returned unchanged, and an
    empty response produces an empty plan.
@@ -50,7 +51,8 @@ common `LLMAdapter` contract.
 
 ## Errors
 
-- Missing `DASHSCOPE_API_KEY` raises a clear `ValueError` before a network call.
+- Missing the configured API-key environment variable raises a clear `ValueError`
+  before a network call.
 - An unavailable `openai` package raises a clear `RuntimeError`, matching the
   existing OpenAI adapter behavior.
 - Provider or network errors are not swallowed; the existing caller receives
@@ -64,7 +66,8 @@ Add isolated unit tests using a fake OpenAI-compatible client to verify:
   Completions.
 - The client receives the DashScope base URL when the adapter creates it.
 - Empty output produces an empty plan.
-- The factory selects `QwenAdapter` when the backend is `qwen`.
+- The factory selects the shared adapter with Qwen configuration when the
+  backend is `qwen`.
 
 Update deployment configuration tests and README documentation to cover the
 new environment variables. Run the focused Qwen tests and the full test suite.
