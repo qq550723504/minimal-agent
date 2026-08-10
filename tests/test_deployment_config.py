@@ -113,11 +113,24 @@ def test_compose_forwards_qwen_configuration():
     assert "DASHSCOPE_BASE_URL" in readme
 
 
-def test_readme_lists_qwen_as_an_llm_backend():
+def test_compose_forwards_generic_openai_compatible_configuration():
+    compose = (ROOT / "docker-compose.yml").read_text(encoding="utf-8")
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+
+    assert "OPENAI_COMPATIBLE_API_KEY: ${OPENAI_COMPATIBLE_API_KEY:-}" in compose
+    assert "OPENAI_COMPATIBLE_MODEL: ${OPENAI_COMPATIBLE_MODEL:-}" in compose
+    assert "OPENAI_COMPATIBLE_BASE_URL: ${OPENAI_COMPATIBLE_BASE_URL:-}" in compose
+    assert '$env:AGENT_LLM_BACKEND="openai-compatible"' in readme
+    assert "OPENAI_COMPATIBLE_API_KEY" in readme
+    assert "OPENAI_COMPATIBLE_MODEL" in readme
+    assert "OPENAI_COMPATIBLE_BASE_URL" in readme
+
+
+def test_readme_lists_openai_compatible_backends():
     readme = (ROOT / "README.md").read_text(encoding="utf-8")
 
     assert (
-        "`AGENT_LLM_BACKEND`: 选择后端，默认 `mock`，可设置为 `openai`、`gemini` 或 `qwen`。"
+        "`AGENT_LLM_BACKEND`: 选择后端，默认 `mock`，可设置为 `openai`、`gemini`、`openai-compatible` 或 `qwen`。"
         in readme
     )
 

@@ -3,6 +3,9 @@ from src.agent.config import (
     GEMINI_MODEL,
     LLM_BACKEND,
     OPENAI_MODEL,
+    OPENAI_COMPATIBLE_API_KEY,
+    OPENAI_COMPATIBLE_BASE_URL,
+    OPENAI_COMPATIBLE_MODEL,
     QWEN_MODEL,
 )
 from src.agent.llm import MockLLM
@@ -25,6 +28,15 @@ def create_llm_adapter():
             model=QWEN_MODEL,
             api_key_env="DASHSCOPE_API_KEY",
             base_url=DASHSCOPE_BASE_URL,
+            max_retries=0,
+        )
+    if backend == "openai-compatible":
+        from src.agent.llm_compatible import OpenAICompatibleAdapter
+
+        return OpenAICompatibleAdapter(
+            model=OPENAI_COMPATIBLE_MODEL,
+            api_key_env="OPENAI_COMPATIBLE_API_KEY",
+            base_url=OPENAI_COMPATIBLE_BASE_URL,
             max_retries=0,
         )
     return MockLLM()

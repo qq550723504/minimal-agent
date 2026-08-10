@@ -30,6 +30,22 @@ def test_create_llm_adapter_selects_qwen_with_compatible_configuration(monkeypat
     assert adapter.max_retries == 0
 
 
+def test_create_llm_adapter_selects_generic_openai_compatible_backend(monkeypatch):
+    import src.agent.llm_factory as factory
+
+    monkeypatch.setattr(factory, "LLM_BACKEND", "openai-compatible")
+    monkeypatch.setattr(factory, "OPENAI_COMPATIBLE_MODEL", "provider-model", raising=False)
+    monkeypatch.setattr(factory, "OPENAI_COMPATIBLE_BASE_URL", "https://provider.test/v1", raising=False)
+    monkeypatch.setenv("OPENAI_COMPATIBLE_API_KEY", "provider-key")
+
+    adapter = factory.create_llm_adapter()
+
+    assert adapter.__class__.__name__ == "OpenAICompatibleAdapter"
+    assert adapter.model == "provider-model"
+    assert adapter.api_key_env == "OPENAI_COMPATIBLE_API_KEY"
+    assert adapter.base_url == "https://provider.test/v1"
+
+
 def test_create_embedding_adapter_selects_gemini(monkeypatch):
     import src.agent.embeddings_factory as factory
 
