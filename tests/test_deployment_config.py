@@ -97,6 +97,22 @@ def test_compose_forwards_gemini_configuration():
     assert "AGENT_EMBEDDING_BACKEND: ${AGENT_EMBEDDING_BACKEND:-mock}" in compose
 
 
+def test_compose_forwards_qwen_configuration():
+    compose = (ROOT / "docker-compose.yml").read_text(encoding="utf-8")
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+
+    assert "DASHSCOPE_API_KEY: ${DASHSCOPE_API_KEY:-}" in compose
+    assert "QWEN_MODEL: ${QWEN_MODEL:-qwen-plus}" in compose
+    assert (
+        "DASHSCOPE_BASE_URL: ${DASHSCOPE_BASE_URL:-https://dashscope.aliyuncs.com/compatible-mode/v1}"
+        in compose
+    )
+    assert "AGENT_LLM_BACKEND=qwen" in readme
+    assert "DASHSCOPE_API_KEY" in readme
+    assert "QWEN_MODEL" in readme
+    assert "DASHSCOPE_BASE_URL" in readme
+
+
 def test_compose_configures_persistent_workflow_store():
     compose = (ROOT / "docker-compose.yml").read_text(encoding="utf-8")
     readme = (ROOT / "README.md").read_text(encoding="utf-8")
