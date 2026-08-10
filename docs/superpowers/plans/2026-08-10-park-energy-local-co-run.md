@@ -40,7 +40,7 @@
 - Modify: `docker-compose.production.yml`
 
 - [ ] Run `docker compose config --quiet` before edits and confirm the current configuration is valid.
-- [ ] Change the agent mapping to `${AGENT_HOST_PORT:-8000}:8000`; add development defaults `AGENT_CAPABILITY_RUNTIME_ENABLED=true`, `AGENT_STRUCTURED_TOOL_CALLING_ENABLED=true`, `AGENT_MCP_ALLOWED_HOSTS=park_energy`, and `PARK_ENERGY_MCP_URL=http://park_energy:8100/mcp`.
+- [ ] Change the agent mapping to `${AGENT_HOST_PORT:-8000}:8000`; retain the existing safe defaults for capability runtime, structured tool calling, and MCP allowlists, and expose the park-energy endpoint for direct MCP validation; agent registration requires an HTTPS gateway.
 - [ ] Add `park_energy` using the existing build, command `python -m plugins.park_energy.server.main`, `PARK_ENERGY_DATA_MODE=mock`, `PARK_ENERGY_MCP_HOST=0.0.0.0`, port `8100`, loopback-only host mapping, and a Python TCP healthcheck; make agent depend on its health.
 - [ ] Set production `PARK_ENERGY_DATA_MODE` to `${PARK_ENERGY_DATA_MODE:-rest}`, default production capability runtime and structured tool calling to `false` because production MCP HTTP requires HTTPS, and run `docker compose -f docker-compose.yml -f docker-compose.production.yml config --quiet`.
 - [ ] Inspect `docker compose -f docker-compose.yml config` and confirm internal URL `park_energy:8100`, container agent port `8000`, and production default `rest`.
@@ -55,7 +55,7 @@
 - [ ] Document mock mode, Compose topology, native URL `http://127.0.0.1:8100/mcp`, and PowerShell startup: `$env:AGENT_HOST_PORT = "8001"; docker compose up --build`.
 - [ ] Run `python -m pytest -q` and confirm 0 failures.
 - [ ] Set `$env:AGENT_HOST_PORT = "8001"`, run `docker compose up --build -d`, and confirm `agent`, `park_energy`, and `prometheus` are running while `rembg-api` remains untouched.
-- [ ] Verify `http://localhost:8001/` returns 200, `/api/plugins` reports park-energy enabled, and `/api/tools` lists five `energy.*` tools.
-- [ ] Invoke one trend tool through the structured API and verify `success: true`, requested `park_id`, and deterministic items.
+- [ ] Verify `http://localhost:8001/` returns 200 and direct MCP discovery from park-energy lists five `energy.*` tools; do not claim local HTTP MCP is registered in agent because the manager requires HTTPS for HTTP MCP.
+- [ ] Invoke one trend tool directly through the MCP client and verify `success: true`, requested `park_id`, and deterministic items.
 - [ ] Run `docker compose down`, `git status --short`, and `git diff --check`; confirm no unrelated state changed.
 - [ ] Commit documentation with `git add README.md plugins/park_energy/README.md` and `git commit -m "docs: document park energy mock co-run"`.

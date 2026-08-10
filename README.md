@@ -50,14 +50,23 @@ docker run -it --rm -p 8000:8000 minimal-agent
 
 3. Docker Compose 运行：
 
-```bash
+```powershell
+$env:AGENT_HOST_PORT="8001"
 docker compose up --build
 ```
+
+Compose 会同时启动 `agent`、`park_energy` 和 Prometheus；开发环境默认让
+`park_energy` 返回确定性的 mock 数据。agent 可在 `8001` 访问，park-energy
+的直接 MCP 地址是 `http://127.0.0.1:8100/mcp`。当前 agent MCP 管理器对
+HTTP MCP 统一要求 HTTPS，因此本地 HTTP 服务不会被宣称为已注册的 agent
+插件；如需接入 agent，应在 park-energy 前配置 HTTPS 网关。如果宿主机
+`8000` 未被占用，可以省略 `AGENT_HOST_PORT`，否则通过该变量改宿主机端口，
+容器内端口仍是 `8000`。
 
 服务运行后：
 
 ```bash
-curl http://localhost:8000/
+curl http://localhost:8001/
 ```
 
 4. 环境变量说明：
@@ -85,6 +94,7 @@ curl http://localhost:8000/
 - `AGENT_HTTP_TIMEOUT_SECONDS`: HTTP 工具连接和读取超时，默认 `5` 秒。
 - `AGENT_HTTP_MAX_RESPONSE_BYTES`: HTTP 工具最大响应体大小，默认 `1048576` 字节。
 - `AGENT_MAX_TOOL_RESULT_BYTES`: 所有能力结果的全局最大 JSON 大小，默认 `1048576` 字节；必须为正数。
+- `AGENT_HOST_PORT`: Compose 中 agent 的宿主机端口，默认 `8000`；容器内端口固定为 `8000`。
 - `AGENT_CAPABILITY_RUNTIME_ENABLED`: 是否加载管理员安装的插件与 Skill 目录，默认 `false`。
 - `AGENT_STRUCTURED_TOOL_CALLING_ENABLED`: 是否允许规划器输出结构化工具调用并在 `/api/handle` 请求路径执行，默认 `false`。
 - `AGENT_PLUGIN_DIR`: 插件根目录，默认 `plugins`；Compose 将项目的 `./plugins` 以只读方式挂载到 `/app/plugins`。
@@ -95,6 +105,7 @@ curl http://localhost:8000/
 - `AGENT_MCP_SHUTDOWN_TIMEOUT_SECONDS`: 每个 MCP 客户端关闭清理的超时，默认 `10` 秒；必须是有限正数。
 - `AGENT_MAX_ACTIVE_SKILLS`: 单次请求最多激活的 Skill 数，默认 `3`。
 - `AGENT_MAX_SKILL_REFERENCE_BYTES`: 单个 Skill 参考文件的最大读取字节数，默认 `262144`。
+- `PARK_ENERGY_DATA_MODE`: `park_energy` 数据模式，`rest` 或 `mock`；Compose 开发环境默认为 `mock`，生产覆盖配置默认为 `rest`。
 
 插件、Skill 与 MCP 运行时：
 
@@ -153,7 +164,7 @@ curl http://localhost:8000/api/skills
 更多文档：请参见 `docs/AGENT_GUIDE.md`，其中包含架构设计、部署建议、安全与维护策略。
 
 编排与监控：
-- `docker-compose.yml` 包含 `agent` 和 `prometheus` 服务。
+- `docker-compose.yml` 包含 `agent`、`park_energy` 和 `prometheus` 服务；`park_energy` 默认以 mock 模式运行。
 - 本地开发使用 `docker compose up --build`；生产环境使用 `docker compose -f docker-compose.yml -f docker-compose.production.yml up --build`，并必须提供 `AGENT_API_KEYS`、`AGENT_METRICS_API_KEY` 和 `AGENT_HTTP_ALLOWED_HOSTS`。
 - `AGENT_ENABLE_MEMORY=true` 和 `VECTOR_MEMORY_PATH=/app/data/vector_memory.json` 已在 Docker 环境中启用。
 - 升级旧版 Compose 部署时，请在首次启动新配置前迁移旧版向量记忆：如果项目根目录存在 `vector_memory.json` 且 `data/vector_memory.json` 不存在，PowerShell 执行 `New-Item -ItemType Directory -Force .\data; Copy-Item .\vector_memory.json .\data\vector_memory.json`。
