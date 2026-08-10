@@ -2,8 +2,8 @@ import re
 from dataclasses import dataclass
 from typing import Callable, Dict, List, Optional
 
-from src.agent.capabilities.models import ToolSource, ToolSpec
-from src.agent.capabilities.registry import CapabilityRegistry
+from src.agent.domain.capabilities.models import ToolSource, ToolSpec
+from src.agent.domain.capabilities.registry import CapabilityRegistry
 
 
 @dataclass

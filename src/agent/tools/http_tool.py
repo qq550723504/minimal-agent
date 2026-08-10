@@ -2,7 +2,7 @@ import json
 import os
 from typing import Any
 
-from src.agent.http_security import pin_dns_resolution, validate_http_url
+from src.agent.security.http import pin_dns_resolution, validate_http_url
 
 
 def _timeout() -> tuple[float, float]:
