@@ -4,7 +4,7 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 from src.agent.application import requests as main
-from src.agent import server
+from src.agent.api import app as server
 from src.agent.domain.capabilities.models import ToolCall, ToolInvocationContext, ToolSource, ToolSpec
 from src.agent.domain.planning.models import ToolCallPlan
 from src.agent.infrastructure.plugins.catalog import LoadedPlugin, PluginCatalog

@@ -5,7 +5,7 @@ import sys
 import pytest
 from fastapi.testclient import TestClient
 
-from src.agent import server
+from src.agent.api import app as server
 from src.agent.infrastructure.plugins.loader import RequiredPluginError
 from src.agent.tool_registry import get_capability_registry
 

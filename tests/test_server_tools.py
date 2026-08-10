@@ -1,6 +1,6 @@
 from fastapi.testclient import TestClient
 import pytest
-from src.agent import server
+from src.agent.api import app as server
 
 
 def test_tools_endpoint():

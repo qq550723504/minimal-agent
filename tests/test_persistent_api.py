@@ -4,7 +4,7 @@ import sys
 
 from fastapi.testclient import TestClient
 
-from src.agent import server
+from src.agent.api import app as server
 from src.agent.infrastructure.workflows.task_queue import TaskQueue
 from src.agent.infrastructure.workflows.workflow_store import WorkflowStore
 
