@@ -20,6 +20,12 @@ pip install -r requirements.txt
 python src/agent/main.py
 ```
 
+本地启动 HTTP 服务：
+
+```bash
+python -m uvicorn src.agent.server:app --host 0.0.0.0 --port 8000
+```
+
 2. Docker 运行：
 
 ```bash
