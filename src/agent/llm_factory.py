@@ -25,5 +25,6 @@ def create_llm_adapter():
             model=QWEN_MODEL,
             api_key_env="DASHSCOPE_API_KEY",
             base_url=DASHSCOPE_BASE_URL,
+            max_retries=0,
         )
     return MockLLM()

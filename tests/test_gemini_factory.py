@@ -27,6 +27,7 @@ def test_create_llm_adapter_selects_qwen_with_compatible_configuration(monkeypat
     assert adapter.model == "qwen-test"
     assert adapter.api_key_env == "DASHSCOPE_API_KEY"
     assert adapter.base_url == "https://dashscope.test/compatible-mode/v1"
+    assert adapter.max_retries == 0
 
 
 def test_create_embedding_adapter_selects_gemini(monkeypatch):

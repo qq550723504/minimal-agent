@@ -113,6 +113,15 @@ def test_compose_forwards_qwen_configuration():
     assert "DASHSCOPE_BASE_URL" in readme
 
 
+def test_readme_lists_qwen_as_an_llm_backend():
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+
+    assert (
+        "`AGENT_LLM_BACKEND`: 选择后端，默认 `mock`，可设置为 `openai`、`gemini` 或 `qwen`。"
+        in readme
+    )
+
+
 def test_compose_configures_persistent_workflow_store():
     compose = (ROOT / "docker-compose.yml").read_text(encoding="utf-8")
     readme = (ROOT / "README.md").read_text(encoding="utf-8")

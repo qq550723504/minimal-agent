@@ -27,8 +27,7 @@ def parse_plan_output(text: str) -> List[Union[str, dict]]:
             parsed = json.loads(snippet)
             if isinstance(parsed, list):
                 normalized = [_normalize_plan_item(item) for item in parsed if isinstance(item, (str, dict))]
-                if normalized:
-                    return normalized
+                return normalized
         except json.JSONDecodeError:
             pass
 

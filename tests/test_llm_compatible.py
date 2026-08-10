@@ -78,6 +78,36 @@ def test_compatible_adapter_configures_openai_client_base_url(monkeypatch):
     ]
 
 
+def test_compatible_adapter_can_disable_sdk_retries(monkeypatch):
+    monkeypatch.setenv("DASHSCOPE_API_KEY", "dummy-key")
+    created = []
+
+    class FakeOpenAI:
+        def __init__(self, **kwargs):
+            created.append(kwargs)
+
+    import openai
+
+    monkeypatch.setattr(openai, "OpenAI", FakeOpenAI)
+
+    from src.agent.llm_compatible import OpenAICompatibleAdapter
+
+    OpenAICompatibleAdapter(
+        model="qwen-test",
+        api_key_env="DASHSCOPE_API_KEY",
+        base_url="https://dashscope.test/v1",
+        max_retries=0,
+    )
+
+    assert created == [
+        {
+            "api_key": "dummy-key",
+            "base_url": "https://dashscope.test/v1",
+            "max_retries": 0,
+        }
+    ]
+
+
 def test_compatible_adapter_rejects_blank_explicit_base_url(monkeypatch):
     monkeypatch.setenv("DASHSCOPE_API_KEY", "dummy-key")
 
@@ -113,6 +143,21 @@ def test_compatible_adapter_prefixes_strings_in_mixed_plan(monkeypatch):
         "echo: plain text",
         {"name": "http_get", "input": {}},
     ]
+
+
+def test_compatible_adapter_preserves_empty_json_plan(monkeypatch):
+    monkeypatch.setenv("DASHSCOPE_API_KEY", "dummy-key")
+
+    from src.agent.llm_compatible import OpenAICompatibleAdapter
+
+    adapter = OpenAICompatibleAdapter(
+        model="qwen-test",
+        api_key_env="DASHSCOPE_API_KEY",
+        base_url="https://dashscope.test/v1",
+        client=FakeClient("[]"),
+    )
+
+    assert adapter.plan("prompt") == []
 
 
 def test_compatible_adapter_requires_configured_api_key(monkeypatch):
