@@ -194,3 +194,21 @@ def test_compatible_adapter_requires_configured_api_key(monkeypatch):
         assert str(exc) == "OPENAI_COMPATIBLE_API_KEY is not set"
     else:
         raise AssertionError("expected missing API key to fail")
+
+
+def test_compatible_adapter_rejects_whitespace_api_key(monkeypatch):
+    monkeypatch.setenv("OPENAI_COMPATIBLE_API_KEY", "   ")
+
+    from src.agent.llm_compatible import OpenAICompatibleAdapter
+
+    try:
+        OpenAICompatibleAdapter(
+            model="provider-test",
+            api_key_env="OPENAI_COMPATIBLE_API_KEY",
+            base_url="https://provider.test/v1",
+            client=FakeClient("ignored"),
+        )
+    except ValueError as exc:
+        assert str(exc) == "OPENAI_COMPATIBLE_API_KEY is not set"
+    else:
+        raise AssertionError("expected whitespace API key to fail")

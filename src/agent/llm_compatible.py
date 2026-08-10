@@ -25,7 +25,7 @@ class OpenAICompatibleAdapter(LLMAdapter):
             ) from exc
 
         self.api_key_env = api_key_env
-        self.api_key = os.getenv(api_key_env)
+        self.api_key = os.getenv(api_key_env, "").strip()
         if not self.api_key:
             raise ValueError(f"{api_key_env} is not set")
         self.model = model.strip()
