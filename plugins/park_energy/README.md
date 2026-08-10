@@ -1,8 +1,9 @@
-﻿# park-energy plugin
+# park-energy 插件
 
-`park-energy` is a minimal MCP server that exposes energy-related tools through either an upstream REST API or deterministic local mock data.
+`park-energy` 是一个轻量级 MCP 服务端，通过封装 REST 接口或确定性的本地
+mock 数据，对外提供园区能耗相关工具。
 
-## Environment Variables
+## 环境变量
 
 ```powershell
 $env:PARK_ENERGY_DATA_MODE = "rest"
@@ -21,25 +22,24 @@ $env:PARK_ENERGY_MCP_PORT = "8100"
 $env:ENERGY_API_MAX_RESPONSE_BYTES = "1048576"
 ```
 
-- Override `ENERGY_*_PATH` values if your backend routes differ.
-- `ENERGY_API_TOKEN` is optional if the API is open.
-- `PARK_ENERGY_DATA_MODE` accepts `rest` or `mock` and defaults to `rest`.
-- In `mock` mode, all five tools return repeatable sample data and make no upstream request.
+- 如果你的后端路由路径不同，请覆盖 `ENERGY_*_PATH` 相关变量。
+- 如果接口是公开的，`ENERGY_API_TOKEN` 可选。
+- `PARK_ENERGY_DATA_MODE` 取值为 `rest` 或 `mock`，默认是 `rest`。
+- `mock` 模式下，五个工具返回可重复的示例数据，不会请求上游 API。
 
-## Run locally
+## 本地运行
 
-From the repository root:
+在仓库根目录执行：
 
 ```powershell
 python -m plugins.park_energy.server.main
 ```
 
-The server listens on `PARK_ENERGY_MCP_HOST` and `PARK_ENERGY_MCP_PORT`.
-The default host is loopback so the unauthenticated MCP endpoint is not exposed
-to the network. If you set the host to `0.0.0.0`, put the server behind an
-authenticated, network-restricted gateway.
+服务会监听 `PARK_ENERGY_MCP_HOST` 与 `PARK_ENERGY_MCP_PORT`。
+默认监听本机地址，不会把未鉴权的 MCP 端点暴露到外网。若你将主机设置为
+`0.0.0.0`，请将服务放在带有鉴权并受网络限制的网关之后。
 
-For local development without an energy API:
+没有真实能耗 API 时，可以使用 mock 数据：
 
 ```powershell
 $env:PARK_ENERGY_DATA_MODE = "mock"
@@ -48,29 +48,28 @@ $env:PARK_ENERGY_MCP_PORT = "8100"
 python -m plugins.park_energy.server.main
 ```
 
-The mock server remains available at `http://127.0.0.1:8100/mcp`.
+mock 服务地址为 `http://127.0.0.1:8100/mcp`。
 
-## Run with minimal-agent in Compose
+## 与 minimal-agent 一起使用 Compose
 
-The repository Compose file starts `agent`, `park_energy`, and Prometheus.
-The development default uses mock data and exposes park-energy at
-`http://park_energy:8100/mcp` over the Compose network. If host port `8000`
-is already occupied, use another host port without changing the container port:
+仓库的 Compose 配置会同时启动 `agent`、`park_energy` 和 Prometheus。
+开发环境默认使用 mock 数据；如果宿主机 `8000` 已被占用，可以只调整
+agent 的宿主机端口：
 
 ```powershell
 $env:AGENT_HOST_PORT = "8001"
 docker compose up --build
 ```
 
-The agent is then available at `http://localhost:8001/`, and park-energy is
-available directly at `http://127.0.0.1:8100/mcp`. The two services run in
-parallel, but the agent's current MCP manager requires HTTPS for HTTP MCP
-targets, so this local HTTP endpoint is not advertised as an agent plugin.
-Use an HTTPS gateway in front of park-energy before configuring agent plugin
-registration. For native processes, the same direct MCP URL can be used by an
-MCP client that explicitly permits loopback HTTP in development/test code.
+agent 地址为 `http://localhost:8001/`，park-energy 的直接 MCP 地址为
+`http://127.0.0.1:8100/mcp`。两个服务会并行运行，但 minimal-agent 当前对
+HTTP MCP 目标统一要求 HTTPS，因此本地 HTTP 端点不宣称已注册为 agent 插件。
+若要接入 agent，请在 park-energy 前配置 HTTPS 网关。直接 MCP 客户端可以在
+开发/测试环境显式允许回环 HTTP。
 
-## MiniAgent integration
+## MiniAgent 集成
+
+对于 HTTPS MCP 服务：
 
 ```powershell
 $env:AGENT_CAPABILITY_RUNTIME_ENABLED = "true"
@@ -80,20 +79,20 @@ $env:PARK_ENERGY_MCP_URL = "https://energy.example.com/mcp"
 $env:PARK_ENERGY_MCP_TOKEN = "<secret>"
 ```
 
-Start MiniAgent and check `/api/tools` to confirm registration.
+启动 MiniAgent 后访问 `/api/tools`，确认插件是否已注册。
 
-## Tools
+## 工具
 
 - `energy.query_trend`
-  - Required: `park_id`, `start_time`, `end_time`
-  - Optional: `building_id`, `energy_type` (`electricity` default), `granularity` (`day` default)
+  - 必填参数：`park_id`、`start_time`、`end_time`
+  - 可选参数：`building_id`、`energy_type`（默认 `electricity`）、`granularity`（默认 `day`）
 - `energy.query_ranking`
 - `energy.get_peak_value`
 - `energy.compare_period`
 - `energy.get_alarm_summary`
 
-## Plugin metadata
+## 插件信息
 
-- Plugin ID: `park-energy`
-- Transport: `streamable_http`
-- Default port: `8100`
+- 插件 ID：`park-energy`
+- 通信方式：`streamable_http`
+- 默认端口：`8100`
