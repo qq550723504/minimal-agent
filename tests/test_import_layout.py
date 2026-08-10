@@ -1,6 +1,7 @@
 from src.agent.domain.capabilities.models import ToolCall, ToolSpec
 from src.agent.application.execution.service import execute_plan_items
 from src.agent.application.planning.service import plan_task
+from src.agent.application.requests import handle_input_async
 from src.agent.infrastructure.llm.llm import MockLLM
 from src.agent.infrastructure.memory.vector_memory import VectorMemory
 from src.agent.infrastructure.mcp.manager import MCPClientManager
@@ -27,3 +28,7 @@ def test_canonical_runtime_infrastructure_imports():
 def test_canonical_application_imports():
     assert callable(plan_task)
     assert callable(execute_plan_items)
+
+
+def test_canonical_request_orchestration_import():
+    assert callable(handle_input_async)

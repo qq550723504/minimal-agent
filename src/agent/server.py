@@ -10,7 +10,7 @@ from pydantic import BaseModel
 from fastapi.responses import JSONResponse
 from src.agent import config
 from src.agent.security.auth import get_current_user
-from src.agent.main import enqueue_input, handle_input_async
+from src.agent.application.requests import enqueue_input, handle_input_async
 from src.agent.infrastructure.memory.memory_manager import initialize_memory, save_memory
 from src.agent.domain.capabilities.models import ToolSource
 from src.agent.infrastructure.mcp.manager import MCPClientManager

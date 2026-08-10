@@ -1,4 +1,4 @@
-from src.agent import main
+from src.agent.application import requests as main
 
 
 def test_handle_input_basic():

@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
-from src.agent import main
+from src.agent.application import requests as main
 from src.agent import server
 from src.agent.domain.capabilities.models import ToolCall, ToolInvocationContext, ToolSource, ToolSpec
 from src.agent.domain.planning.models import ToolCallPlan
@@ -37,8 +37,8 @@ async def test_handle_input_async_uses_legacy_separator_when_structured_mode_dis
     registry = get_capability_registry().__class__()
     captured = {}
 
-    monkeypatch.setattr("src.agent.main.STRUCTURED_TOOL_CALLING_ENABLED", False)
-    monkeypatch.setattr("src.agent.main.get_capability_registry", lambda: registry)
+    monkeypatch.setattr("src.agent.application.requests.STRUCTURED_TOOL_CALLING_ENABLED", False)
+    monkeypatch.setattr("src.agent.application.requests.get_capability_registry", lambda: registry)
 
     def fake_plan_task(prompt, user_id="default", **kwargs):
         captured["structured_tools"] = kwargs["structured_tools"]
@@ -53,8 +53,8 @@ async def test_handle_input_async_uses_legacy_separator_when_structured_mode_dis
     ):
         return ["alpha", "beta"]
 
-    monkeypatch.setattr("src.agent.main.plan_task", fake_plan_task)
-    monkeypatch.setattr("src.agent.main.execute_plan_items", fake_execute_plan_items)
+    monkeypatch.setattr("src.agent.application.requests.plan_task", fake_plan_task)
+    monkeypatch.setattr("src.agent.application.requests.execute_plan_items", fake_execute_plan_items)
 
     result = await main.handle_input_async("hello")
 
@@ -89,13 +89,13 @@ def _skill_catalog(root: Path) -> SkillCatalog:
 
 
 def test_handle_endpoint_preserves_active_skill_ids_for_async_tool_calls(monkeypatch, tmp_path):
-    monkeypatch.setattr("src.agent.main.STRUCTURED_TOOL_CALLING_ENABLED", True)
+    monkeypatch.setattr("src.agent.application.requests.STRUCTURED_TOOL_CALLING_ENABLED", True)
     monkeypatch.setattr(
-        "src.agent.main.get_capability_registry",
+        "src.agent.application.requests.get_capability_registry",
         lambda: get_capability_registry().__class__(),
     )
     monkeypatch.setattr(
-        "src.agent.main.plan_task",
+        "src.agent.application.requests.plan_task",
         lambda prompt, user_id="default", **kwargs: [
             ToolCallPlan(
                 kind="tool_call",
@@ -121,7 +121,7 @@ def test_handle_endpoint_preserves_active_skill_ids_for_async_tool_calls(monkeyp
         seen["active_skill_ids"] = active_skill_ids
         return ["skill-result"]
 
-    monkeypatch.setattr("src.agent.main.execute_plan_items", fake_execute_plan_items)
+    monkeypatch.setattr("src.agent.application.requests.execute_plan_items", fake_execute_plan_items)
     server.app.state.skill_catalog = _skill_catalog(tmp_path)
 
     client = TestClient(server.app)
