@@ -3,7 +3,11 @@
 [![CI](https://github.com/qq550723504/minimal-agent/actions/workflows/ci.yml/badge.svg)](https://github.com/qq550723504/minimal-agent/actions/workflows/ci.yml)
 [![Release](https://github.com/qq550723504/minimal-agent/actions/workflows/release.yml/badge.svg)](https://github.com/qq550723504/minimal-agent/actions/workflows/release.yml)
 
-Minimal Agent 是一个可配置、可观测、支持多步骤规划与工具执行的 FastAPI Agent 原型，默认使用 mock 后端，支持 OpenAI、Gemini、向量记忆、持久化工作流以及可选的 Plugin、Skill 和 MCP 运行时。
+Minimal Agent 是一个可配置、可观测、支持多步骤规划与工具执行的 FastAPI Agent 原型，默认使用 mock 后端，支持 OpenAI、Gemini、Qwen、向量记忆、持久化工作流以及可选的 Plugin、Skill 和 MCP 运行时。
+
+### Qwen（阿里云百炼/DashScope）
+
+Qwen 通过通用 OpenAI-compatible Chat Completions 适配器调用，不需要单独的模型适配器。设置 `AGENT_LLM_BACKEND=qwen` 后，配置 `DASHSCOPE_API_KEY`；`QWEN_MODEL` 默认为 `qwen-plus`，`DASHSCOPE_BASE_URL` 默认为 `https://dashscope.aliyuncs.com/compatible-mode/v1`，可按地域或业务空间覆盖。
 
 运行示例：
 
@@ -37,7 +41,7 @@ curl http://localhost:8000/
 
 4. 环境变量说明：
 
-- `AGENT_LLM_BACKEND`: 选择后端，默认 `mock`，可设置为 `openai` 或 `gemini`。
+- `AGENT_LLM_BACKEND`: 选择后端，默认 `mock`，可设置为 `openai`、`gemini` 或 `qwen`。
 - `OPENAI_MODEL`: OpenAI 模型名称，默认 `gpt-3.5-turbo`。
 - `OPENAI_API_KEY`: OpenAI API key（仅当 `AGENT_LLM_BACKEND=openai` 或 `AGENT_EMBEDDING_BACKEND=openai` 时需要）。
 - `GEMINI_MODEL`: Gemini 模型名称，默认 `gemini-3.6-flash`。
