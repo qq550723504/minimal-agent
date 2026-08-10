@@ -28,7 +28,7 @@ def test_openai_adapter_uses_v1_chat_client_contract(monkeypatch):
     monkeypatch.setenv("OPENAI_API_KEY", "dummy-key")
     client = FakeOpenAIClient()
 
-    from src.agent.llm_openai import OpenAIAdapter
+    from src.agent.infrastructure.llm.llm_openai import OpenAIAdapter
 
     adapter = OpenAIAdapter(model="dummy-model", client=client)
 

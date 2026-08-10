@@ -17,7 +17,7 @@ def test_gemini_embedding_adapter_uses_embed_content_contract(monkeypatch):
     monkeypatch.setenv("GEMINI_API_KEY", "dummy-key")
     client = FakeGeminiClient()
 
-    from src.agent.embeddings_gemini import GeminiEmbeddingAdapter
+    from src.agent.infrastructure.memory.embeddings_gemini import GeminiEmbeddingAdapter
 
     adapter = GeminiEmbeddingAdapter(model="gemini-embedding-test", client=client)
 

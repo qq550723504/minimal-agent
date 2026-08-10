@@ -8,7 +8,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from src.agent import server
-from src.agent.llm import LLMAdapter
+from src.agent.infrastructure.llm.llm import LLMAdapter
 from src.agent.main import handle_input_async
 from src.agent.tool_registry import get_capability_registry
 

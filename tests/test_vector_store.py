@@ -2,8 +2,8 @@ import json
 
 import pytest
 
-from src.agent.embeddings import EmbeddingAdapter
-from src.agent.vector_store import VectorStore
+from src.agent.infrastructure.memory.embeddings import EmbeddingAdapter
+from src.agent.infrastructure.memory.vector_store import VectorStore
 
 
 class FailsOnSecondEmbedding(EmbeddingAdapter):

@@ -1,7 +1,7 @@
 from pathlib import Path
 
-from src.agent.memory_manager import initialize_memory, save_memory, add_memory, reset_memory
-from src.agent.vector_memory import VectorMemory
+from src.agent.infrastructure.memory.memory_manager import initialize_memory, save_memory, add_memory, reset_memory
+from src.agent.infrastructure.memory.vector_memory import VectorMemory
 
 
 def test_memory_manager_save_load(tmp_path, monkeypatch):
@@ -26,7 +26,7 @@ def test_memory_manager_save_load(tmp_path, monkeypatch):
 
 
 def test_memory_manager_filters_relevant_memory_by_user(monkeypatch):
-    from src.agent.memory_manager import get_relevant_memory
+    from src.agent.infrastructure.memory.memory_manager import get_relevant_memory
 
     monkeypatch.setenv("AGENT_ENABLE_MEMORY", "true")
     reset_memory()

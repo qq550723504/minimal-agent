@@ -1,9 +1,9 @@
 import json
 
 from src.agent.domain.capabilities.models import ToolSource, ToolSpec
-from src.agent.memory import get_global_memory
+from src.agent.infrastructure.memory.memory import get_global_memory
 from src.agent.planner import build_tool_catalog_prompt, plan_task, _build_rag_prompt
-from src.agent.llm import MockLLM, LLMAdapter
+from src.agent.infrastructure.llm.llm import MockLLM, LLMAdapter
 
 
 def _catalog_from_prompt(prompt: str) -> list[dict]:

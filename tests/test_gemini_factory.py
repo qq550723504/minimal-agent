@@ -1,5 +1,5 @@
 def test_create_llm_adapter_selects_gemini(monkeypatch):
-    import src.agent.llm_factory as factory
+    import src.agent.infrastructure.llm.llm_factory as factory
 
     monkeypatch.setattr(factory, "LLM_BACKEND", "gemini")
     monkeypatch.setattr(factory, "GEMINI_MODEL", "gemini-test", raising=False)
@@ -9,7 +9,7 @@ def test_create_llm_adapter_selects_gemini(monkeypatch):
 
 
 def test_create_llm_adapter_rejects_removed_qwen_backend(monkeypatch):
-    import src.agent.llm_factory as factory
+    import src.agent.infrastructure.llm.llm_factory as factory
 
     monkeypatch.setattr(factory, "LLM_BACKEND", "qwen")
 
@@ -22,7 +22,7 @@ def test_create_llm_adapter_rejects_removed_qwen_backend(monkeypatch):
 
 
 def test_create_llm_adapter_selects_generic_openai_compatible_backend(monkeypatch):
-    import src.agent.llm_factory as factory
+    import src.agent.infrastructure.llm.llm_factory as factory
 
     monkeypatch.setattr(factory, "LLM_BACKEND", "openai-compatible")
     monkeypatch.setattr(factory, "OPENAI_COMPATIBLE_MODEL", "provider-model", raising=False)
@@ -38,7 +38,7 @@ def test_create_llm_adapter_selects_generic_openai_compatible_backend(monkeypatc
 
 
 def test_create_embedding_adapter_selects_gemini(monkeypatch):
-    import src.agent.embeddings_factory as factory
+    import src.agent.infrastructure.memory.embeddings_factory as factory
 
     monkeypatch.setattr(factory, "EMBEDDING_BACKEND", "gemini")
     monkeypatch.setattr(factory, "GEMINI_EMBEDDING_MODEL", "gemini-embedding-test", raising=False)

@@ -21,7 +21,7 @@ def test_gemini_adapter_uses_generate_content_contract(monkeypatch):
     monkeypatch.setenv("GEMINI_API_KEY", "dummy-key")
     client = FakeGeminiClient()
 
-    from src.agent.llm_gemini import GeminiAdapter
+    from src.agent.infrastructure.llm.llm_gemini import GeminiAdapter
 
     adapter = GeminiAdapter(model="gemini-test", client=client)
 
@@ -35,7 +35,7 @@ def test_gemini_adapter_returns_empty_plan_without_text(monkeypatch):
     monkeypatch.setenv("GEMINI_API_KEY", "dummy-key")
     client = type("Client", (), {"models": EmptyGeminiModels()})()
 
-    from src.agent.llm_gemini import GeminiAdapter
+    from src.agent.infrastructure.llm.llm_gemini import GeminiAdapter
 
     adapter = GeminiAdapter(model="gemini-test", client=client)
 

@@ -1,4 +1,4 @@
-from src.agent.memory import Memory
+from src.agent.infrastructure.memory.memory import Memory
 
 
 def test_memory_keeps_a_bounded_history_per_user():

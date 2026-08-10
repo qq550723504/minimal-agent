@@ -1,4 +1,4 @@
-from src.agent.embeddings_factory import create_embedding_adapter
+from src.agent.infrastructure.memory.embeddings_factory import create_embedding_adapter
 
 
 def test_create_embedding_adapter_default():

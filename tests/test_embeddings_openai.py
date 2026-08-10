@@ -20,7 +20,7 @@ def test_openai_embedding_adapter_uses_v1_embeddings_client_contract(monkeypatch
     monkeypatch.setenv("OPENAI_API_KEY", "dummy-key")
     client = FakeOpenAIClient()
 
-    from src.agent.embeddings_openai import OpenAIEmbeddingAdapter
+    from src.agent.infrastructure.memory.embeddings_openai import OpenAIEmbeddingAdapter
 
     adapter = OpenAIEmbeddingAdapter(model="dummy-embedding", client=client)
 

@@ -2,7 +2,7 @@ import json
 import tempfile
 import pytest
 
-from src.agent.vector_memory import VectorMemory
+from src.agent.infrastructure.memory.vector_memory import VectorMemory
 
 
 def test_vector_memory_save_and_load(tmp_path):

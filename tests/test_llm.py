@@ -3,7 +3,7 @@ import json
 import pytest
 from pydantic import ValidationError
 
-from src.agent.llm import (
+from src.agent.infrastructure.llm.llm import (
     ToolCallPlan,
     normalize_plan_items,
     parse_plan_output,
