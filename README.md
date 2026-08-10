@@ -40,7 +40,7 @@ curl http://localhost:8000/
 - `AGENT_LLM_BACKEND`: 选择后端，默认 `mock`，可设置为 `openai` 或 `gemini`。
 - `OPENAI_MODEL`: OpenAI 模型名称，默认 `gpt-3.5-turbo`。
 - `OPENAI_API_KEY`: OpenAI API key（仅当 `AGENT_LLM_BACKEND=openai` 或 `AGENT_EMBEDDING_BACKEND=openai` 时需要）。
-- `GEMINI_MODEL`: Gemini 模型名称，默认 `gemini-2.5-flash`。
+- `GEMINI_MODEL`: Gemini 模型名称，默认 `gemini-3.6-flash`。
 - `GEMINI_API_KEY`: Gemini API key（仅当 `AGENT_LLM_BACKEND=gemini` 或 `AGENT_EMBEDDING_BACKEND=gemini` 时需要）。
 - `AGENT_ENABLE_MEMORY`: 是否启用向量记忆，默认 `true`。
 - `AGENT_EMBEDDING_BACKEND`: 嵌入后端，默认 `mock`，可设置为 `openai` 或 `gemini`。

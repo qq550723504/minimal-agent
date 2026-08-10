@@ -39,15 +39,25 @@ build/
 # Logs and audit
 audit.log
 
-# Prometheus config
-prometheus.yml
-
 # Temporary directories
 .tmp
 .worktrees/
+
+# Test and type-check caches
+.coverage
+.coverage.*
+htmlcov/
+.mypy_cache/
+.ruff_cache/
 
 # Vector memory persistence
 vector_memory.json
 data/*.json
 data/*.log
 data/*.sqlite3
+data/*.sqlite3-*
+data/metrics-token
+
+.env
+.env.*
+!.env.example
