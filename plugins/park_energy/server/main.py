@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Literal
 
 from mcp.server import MCPServer
 
@@ -12,6 +12,7 @@ from .rest_client import EnergyRESTClient
 settings = Settings.from_env()
 client = EnergyRESTClient(settings)
 mcp = MCPServer("park-energy")
+Granularity = Literal["hour", "day", "month"]
 
 
 @mcp.tool(name="energy.query_trend")
@@ -21,7 +22,7 @@ async def query_trend(
     end_time: str,
     building_id: str | None = None,
     energy_type: str = "electricity",
-    granularity: str = "day",
+    granularity: Granularity = "day",
 ) -> dict[str, Any]:
     """Query energy consumption over time for a park or building."""
     query = EnergyQuery(
@@ -42,7 +43,7 @@ async def query_ranking(
     end_time: str,
     building_id: str | None = None,
     energy_type: str = "electricity",
-    granularity: str = "day",
+    granularity: Granularity = "day",
 ) -> dict[str, Any]:
     """Query energy ranking for the selected period."""
     return await client.query_ranking(EnergyQuery(
@@ -62,7 +63,7 @@ async def get_peak_value(
     end_time: str,
     building_id: str | None = None,
     energy_type: str = "electricity",
-    granularity: str = "day",
+    granularity: Granularity = "day",
 ) -> dict[str, Any]:
     """Query peak energy usage and its timestamp."""
     return await client.get_peak_value(EnergyQuery(
@@ -84,7 +85,7 @@ async def compare_period(
     compare_end_time: str,
     building_id: str | None = None,
     energy_type: str = "electricity",
-    granularity: str = "day",
+    granularity: Granularity = "day",
 ) -> dict[str, Any]:
     """Compare energy usage between two periods."""
     return await client.compare_period(EnergyCompareQuery(
@@ -106,7 +107,7 @@ async def get_alarm_summary(
     end_time: str,
     building_id: str | None = None,
     energy_type: str = "electricity",
-    granularity: str = "day",
+    granularity: Granularity = "day",
 ) -> dict[str, Any]:
     """Query energy anomaly and alarm summary."""
     return await client.get_alarm_summary(EnergyQuery(

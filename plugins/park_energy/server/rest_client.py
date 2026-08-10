@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 from typing import Any
 
@@ -28,21 +29,24 @@ class EnergyRESTClient:
     async def _get(self, path: str, params: dict[str, Any]) -> dict[str, Any]:
         url = f"{self.settings.api_base_url}/{path.lstrip('/')}"
         try:
-            async with httpx.AsyncClient(timeout=self.settings.timeout_seconds) as client:
-                async with client.stream("GET", url, params=params, headers=self._headers()) as response:
-                    response.raise_for_status()
-                    content_length = response.headers.get("content-length")
-                    if content_length and int(content_length) > self.settings.max_response_bytes:
-                        raise EnergyAPIError("energy API response exceeds configured limit")
-
-                    chunks: list[bytes] = []
-                    total_bytes = 0
-                    async for chunk in response.aiter_bytes():
-                        total_bytes += len(chunk)
-                        if total_bytes > self.settings.max_response_bytes:
+            async with asyncio.timeout(self.settings.timeout_seconds):
+                async with httpx.AsyncClient(timeout=self.settings.timeout_seconds) as client:
+                    async with client.stream("GET", url, params=params, headers=self._headers()) as response:
+                        response.raise_for_status()
+                        content_length = response.headers.get("content-length")
+                        if content_length and int(content_length) > self.settings.max_response_bytes:
                             raise EnergyAPIError("energy API response exceeds configured limit")
-                        chunks.append(chunk)
-                    payload = json.loads(b"".join(chunks))
+
+                        chunks: list[bytes] = []
+                        total_bytes = 0
+                        async for chunk in response.aiter_bytes():
+                            total_bytes += len(chunk)
+                            if total_bytes > self.settings.max_response_bytes:
+                                raise EnergyAPIError("energy API response exceeds configured limit")
+                            chunks.append(chunk)
+                        payload = json.loads(b"".join(chunks))
+        except asyncio.TimeoutError as exc:
+            raise EnergyAPIError("energy API request timed out") from exc
         except httpx.TimeoutException as exc:
             raise EnergyAPIError("energy API request timed out") from exc
         except httpx.HTTPStatusError as exc:
