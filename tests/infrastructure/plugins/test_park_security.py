@@ -200,6 +200,20 @@ def test_repository_exposes_three_correlated_mock_scenarios():
     assert {item.source for item in fire.timeline} >= {"fire", "device"}
 
 
+def test_correlation_classes_are_compatibly_exported_from_new_module():
+    from plugins.park_security.server.correlation import (
+        CorrelatedAlarmGroup as NewCorrelatedAlarmGroup,
+        EventCorrelator as NewEventCorrelator,
+    )
+    from plugins.park_security.server.mock_repository import (
+        CorrelatedAlarmGroup as LegacyCorrelatedAlarmGroup,
+        EventCorrelator as LegacyEventCorrelator,
+    )
+
+    assert LegacyCorrelatedAlarmGroup is NewCorrelatedAlarmGroup
+    assert LegacyEventCorrelator is NewEventCorrelator
+
+
 def test_correlator_and_risk_assessor_are_independently_callable():
     alarms = [
         SecurityAlarm(
