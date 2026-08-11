@@ -214,6 +214,20 @@ def test_correlation_classes_are_compatibly_exported_from_new_module():
     assert LegacyEventCorrelator is NewEventCorrelator
 
 
+def test_risk_classes_are_compatibly_exported_from_new_module():
+    from plugins.park_security.server.mock_repository import (
+        RiskAssessment as LegacyRiskAssessment,
+        RiskAssessor as LegacyRiskAssessor,
+    )
+    from plugins.park_security.server.risk import (
+        RiskAssessment as NewRiskAssessment,
+        RiskAssessor as NewRiskAssessor,
+    )
+
+    assert LegacyRiskAssessment is NewRiskAssessment
+    assert LegacyRiskAssessor is NewRiskAssessor
+
+
 def test_correlator_and_risk_assessor_are_independently_callable():
     alarms = [
         SecurityAlarm(
