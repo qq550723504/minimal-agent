@@ -168,7 +168,10 @@ def _is_sensitive_scalar(value: str) -> bool:
 
 def build_tool_catalog_prompt(specs: Sequence[ToolSpec]) -> str:
     catalog = []
-    for spec in sorted(specs, key=lambda item: item.name):
+    planner_visible_specs = [
+        spec for spec in specs if not (spec.side_effects and not spec.idempotent)
+    ]
+    for spec in sorted(planner_visible_specs, key=lambda item: item.name):
         entry = {}
         for field_name in _SAFE_TOOL_FIELDS:
             value = getattr(spec, field_name)

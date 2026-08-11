@@ -159,6 +159,10 @@ $env:PARK_SECURITY_APPROVAL_TOKEN = "<由人工审批系统签发的非空凭证
 Compose 也只将其传给 `park_security` 服务。`close_event` 还要求非空 `note` 作为处置
 说明；关闭关联事件时，Mock 工单会同步写为 `closed` 并记录固定关闭时间。
 
+Planner 的结构化工具目录会过滤 `side_effects: true` 且 `idempotent: false` 的工具，避免
+模型生成不可自动批准的写调用。此类工具必须由人工审批客户端在调用边界注入凭证；过滤不
+替代服务端的凭证、身份和权限校验。
+
 生产系统不应把原始视频、人脸或真实工单数据送入该 mock。实际安防 MCP Server 必须
 自行处理敏感数据最小化、园区/租户隔离、授权和工单系统的幂等控制。
 

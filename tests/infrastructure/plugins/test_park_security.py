@@ -276,12 +276,123 @@ def test_correlator_compares_alarm_instants_when_offsets_differ():
     assert EventCorrelator().correlate(alarms) == []
 
 
+def test_correlator_emits_each_matching_scenario_in_an_overlapping_window():
+    alarms = [
+        SecurityAlarm(
+            alarm_id="night-access",
+            source="access_control",
+            park_id="park-test",
+            building_id="building-test",
+            area_id="area-test",
+            occurred_at="2026-08-11T02:00:00Z",
+            alarm_type="after_hours_access",
+            severity="high",
+        ),
+        SecurityAlarm(
+            alarm_id="night-person",
+            source="video",
+            park_id="park-test",
+            building_id="building-test",
+            area_id="area-test",
+            occurred_at="2026-08-11T02:01:00Z",
+            alarm_type="person_detected",
+            severity="high",
+        ),
+        SecurityAlarm(
+            alarm_id="fire-smoke",
+            source="fire",
+            park_id="park-test",
+            building_id="building-test",
+            area_id="area-test",
+            occurred_at="2026-08-11T02:02:00Z",
+            alarm_type="smoke_detected",
+            severity="critical",
+        ),
+        SecurityAlarm(
+            alarm_id="fire-temperature",
+            source="fire",
+            park_id="park-test",
+            building_id="building-test",
+            area_id="area-test",
+            occurred_at="2026-08-11T02:03:00Z",
+            alarm_type="temperature_rise",
+            severity="critical",
+        ),
+        SecurityAlarm(
+            alarm_id="fire-fan",
+            source="fire",
+            park_id="park-test",
+            building_id="building-test",
+            area_id="area-test",
+            occurred_at="2026-08-11T02:04:00Z",
+            alarm_type="ventilation_device_fault",
+            severity="high",
+        ),
+    ]
+
+    groups = EventCorrelator().correlate(alarms)
+
+    assert [group.scenario for group in groups] == [
+        "night_abnormal_access",
+        "fire_alarm_and_equipment_fault",
+    ]
+    assert {alarm.alarm_id for alarm in groups[0].alarms} == {"night-access", "night-person"}
+    assert {alarm.alarm_id for alarm in groups[1].alarms} == {
+        "fire-smoke", "fire-temperature", "fire-fan"
+    }
+
+
+def test_event_boundaries_select_original_timestamp_by_instant():
+    alarms = [
+        SecurityAlarm(
+            alarm_id="late",
+            source="access_control",
+            park_id="park-test",
+            building_id="building-test",
+            area_id="area-test",
+            occurred_at="2026-08-11T08:00:00+08:00",
+            alarm_type="after_hours_access",
+            severity="high",
+        ),
+        SecurityAlarm(
+            alarm_id="early",
+            source="video",
+            park_id="park-test",
+            building_id="building-test",
+            area_id="area-test",
+            occurred_at="2026-08-11T00:05:00Z",
+            alarm_type="person_detected",
+            severity="high",
+        ),
+    ]
+
+    group = EventCorrelator().correlate(alarms)[0]
+    event = MockSecurityRepository._build_event(
+        group,
+        RiskAssessor().assess(group),
+    )
+
+    assert event.first_occurred_at == "2026-08-11T08:00:00+08:00"
+    assert event.last_occurred_at == "2026-08-11T00:05:00Z"
+
+
 def test_access_event_detail_includes_patrol_evidence():
     detail = asyncio.run(SecurityService(MockSecurityRepository()).get_event_detail(
         "event-access-002"
     ))
 
     assert any(item["source"] == "patrol" for item in detail["data"]["timeline"])
+
+
+def test_night_access_event_detail_includes_negative_appointment_evidence():
+    detail = asyncio.run(SecurityService(MockSecurityRepository()).get_event_detail(
+        "event-night-001"
+    ))
+
+    appointment = next(
+        item for item in detail["data"]["timeline"] if item["source"] == "appointment"
+    )
+    assert "No active visitor appointment" in appointment["summary"]
 
 
 def test_repository_returns_deep_copies_when_reading_and_saving_events():
@@ -439,6 +550,7 @@ def test_shift_context_returns_time_appropriate_duty_state():
     assert context["data"]["query_time"] == "2026-08-11T10:00:00Z"
     assert context["data"]["on_duty"] is False
     assert context["data"]["on_duty_guard"] is None
+    assert "guard-01" not in context["data"]["escalation_rules"]["level_1"]["notify"]
 
 
 def test_service_requires_confirmation_before_work_order_and_records_audit(monkeypatch):

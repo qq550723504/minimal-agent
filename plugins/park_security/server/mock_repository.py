@@ -64,24 +64,26 @@ class EventCorrelator:
             current: list[SecurityAlarm] = []
             for alarm in ordered:
                 if current and self._occurred_at(alarm) - self._occurred_at(current[0]) > self.window:
-                    group = self._classify(current)
-                    if group is not None:
-                        correlated.append(group)
+                    correlated.extend(self._classify(current))
                     current = []
                 current.append(alarm)
-            group = self._classify(current)
-            if group is not None:
-                correlated.append(group)
+            correlated.extend(self._classify(current))
 
         return sorted(correlated, key=lambda group: self._occurred_at(group.alarms[0]))
 
     @classmethod
-    def _classify(cls, alarms: list[SecurityAlarm]) -> CorrelatedAlarmGroup | None:
+    def _classify(cls, alarms: list[SecurityAlarm]) -> list[CorrelatedAlarmGroup]:
         alarm_types = {alarm.alarm_type for alarm in alarms}
+        groups: list[CorrelatedAlarmGroup] = []
         for scenario, required_types in cls._REQUIRED_ALARM_TYPES.items():
             if required_types <= alarm_types:
-                return CorrelatedAlarmGroup(scenario=scenario, alarms=tuple(alarms))
-        return None
+                scenario_alarms = tuple(
+                    alarm for alarm in alarms if alarm.alarm_type in required_types
+                )
+                groups.append(
+                    CorrelatedAlarmGroup(scenario=scenario, alarms=scenario_alarms)
+                )
+        return groups
 
     @staticmethod
     def _occurred_at(alarm: SecurityAlarm) -> datetime:
@@ -265,7 +267,7 @@ class MockSecurityRepository:
             "escalation_rules": {
                 "level_1": {
                     "condition": "high risk or access anomaly",
-                    "notify": ["guard-01", "team-night"],
+                    "notify": ["guard-01", "team-night"] if on_duty else ["team-night"],
                     "response_within_minutes": 5,
                 },
                 "level_2": {
@@ -397,8 +399,12 @@ class MockSecurityRepository:
             area_id=first.area_id,
             scenario=group.scenario,
             risk_level=assessment.risk_level,
-            first_occurred_at=min(alarm.occurred_at for alarm in group.alarms),
-            last_occurred_at=max(alarm.occurred_at for alarm in group.alarms),
+            first_occurred_at=min(
+                group.alarms, key=lambda alarm: parse_timestamp(alarm.occurred_at)
+            ).occurred_at,
+            last_occurred_at=max(
+                group.alarms, key=lambda alarm: parse_timestamp(alarm.occurred_at)
+            ).occurred_at,
             alarm_ids=[alarm.alarm_id for alarm in group.alarms],
             impact_scope=list(assessment.impact_scope),
             recommended_plan=assessment.recommended_plan,
@@ -444,6 +450,13 @@ class MockSecurityRepository:
                     "2026-08-11T00:15:00Z",
                     "Guard-01 is assigned to the north patrol route.",
                     "shift://2026-08-11/guard-01",
+                ),
+                _evidence(
+                    "evidence-night-appointment",
+                    "appointment",
+                    "2026-08-11T00:15:00Z",
+                    "No active visitor appointment matched the credential.",
+                    "appointment://lab-01/lookup/001",
                 ),
             ], "2026-08-11T00:15:00Z")
         if scenario == "access_failure_and_loitering":
