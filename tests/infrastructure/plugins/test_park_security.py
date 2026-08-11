@@ -3,8 +3,10 @@ from __future__ import annotations
 import asyncio
 from datetime import datetime
 import inspect
+from pathlib import Path
 
 import pytest
+import yaml
 from pydantic import ValidationError
 
 from plugins.park_security.server.config import Settings
@@ -17,6 +19,19 @@ from plugins.park_security.server.models import (
 )
 from plugins.park_security.server.mock_repository import MockSecurityRepository
 from plugins.park_security.server.service import SecurityService
+
+
+def test_compose_wires_agent_to_park_security_service():
+    compose = yaml.safe_load(Path("docker-compose.yml").read_text(encoding="utf-8"))
+    agent = compose["services"]["agent"]
+    security = compose["services"]["park_security"]
+
+    assert (
+        agent["environment"]["PARK_SECURITY_MCP_URL"]
+        == "${PARK_SECURITY_MCP_URL:-http://park_security:8200/mcp}"
+    )
+    assert agent["depends_on"]["park_security"]["condition"] == "service_healthy"
+    assert security["environment"]["PARK_SECURITY_DATA_MODE"] == "${PARK_SECURITY_DATA_MODE:-mock}"
 
 
 def test_mcp_handlers_have_explicit_parameters_and_expected_names():

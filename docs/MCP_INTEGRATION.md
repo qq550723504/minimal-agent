@@ -1,6 +1,6 @@
-# MCP 与园区能耗接入指南
+# MCP 与园区能耗和安防接入指南
 
-本文说明如何把已经提供 MCP Server 的园区能耗系统接入 Minimal Agent。框架负责插件加载、工具发现、参数校验、超时、结果大小、审计和用户任务归属；能耗 MCP Server 仍必须负责园区、楼栋、租户和数据权限校验。
+本文说明如何把已经提供 MCP Server 的园区能耗或安防系统接入 Minimal Agent。框架负责插件加载、工具发现、参数校验、超时、结果大小、审计和用户任务归属；远端 MCP Server 仍必须负责园区、楼栋、租户和数据权限校验。
 
 ## 一、能力边界
 
@@ -118,6 +118,44 @@ $env:PARK_ENERGY_TOKEN = "<secret>"
 
 `command` 必须与解析后的实际可执行文件路径精确匹配，`cwd` 必须位于插件目录内；shell、`.cmd` 和 `.bat` 包装器不会被接受。`env_vars` 只允许把已存在的宿主环境变量映射给子进程。
 
+### 2.3 园区安防 mock 示例
+
+`plugins/park_security/plugin.yaml` 使用 `PARK_SECURITY_MCP_URL` 和
+`PARK_SECURITY_MCP_TOKEN` 注入连接信息。Compose 默认在 agent 容器内将 URL
+设为 `http://park_security:8200/mcp`；因此使用 Compose 时，允许的 MCP 主机名
+应包含 `park_security`：
+
+```powershell
+$env:AGENT_CAPABILITY_RUNTIME_ENABLED = "true"
+$env:AGENT_STRUCTURED_TOOL_CALLING_ENABLED = "true"
+$env:AGENT_MCP_ALLOWED_HOSTS = "park_security"
+$env:PARK_SECURITY_MCP_URL = "http://park_security:8200/mcp"
+$env:PARK_SECURITY_MCP_TOKEN = ""
+$env:PARK_SECURITY_DATA_MODE = "mock"
+docker compose up --build
+```
+
+直接在宿主机运行时，把 URL 和 allowlist 改为 `127.0.0.1`：
+
+```powershell
+$env:AGENT_DEPLOYMENT_MODE = "development"
+$env:AGENT_CAPABILITY_RUNTIME_ENABLED = "true"
+$env:AGENT_STRUCTURED_TOOL_CALLING_ENABLED = "true"
+$env:AGENT_MCP_ALLOWED_HOSTS = "127.0.0.1"
+$env:PARK_SECURITY_MCP_URL = "http://127.0.0.1:8200/mcp"
+$env:PARK_SECURITY_MCP_TOKEN = ""
+$env:PARK_SECURITY_DATA_MODE = "mock"
+```
+
+安防 mock 提供夜间异常门禁、入口访问失败与徘徊、消防与设备故障三种关联告警场景，以及七个工具：
+`security.get_event_summary`、`security.list_events`、`security.get_event_detail`、
+`security.get_shift_context`、`security.confirm_event`、`security.create_work_order` 和
+`security.close_event`。前四个工具只读；后三个工具有副作用且非幂等，必须由调用方
+进行人工确认、权限校验和未知结果核查。
+
+生产系统不应把原始视频、人脸或真实工单数据送入该 mock。实际安防 MCP Server 必须
+自行处理敏感数据最小化、园区/租户隔离、授权和工单系统的幂等控制。
+
 ## 三、工具命名与调用流程
 
 MCP 工具必须同时满足以下条件才会注册：
@@ -168,6 +206,15 @@ curl -X POST http://localhost:8000/api/handle \
 
 ```json
 {"result":"..."}
+```
+
+安防事件查询可使用同一路径；以下 prompt 让规划器调用已注册的只读安防工具：
+
+```bash
+curl -X POST http://localhost:8000/api/handle \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: <api-key>" \
+  -d '{"prompt":"查询 park-1 的高风险安防事件，并给出夜班值守与升级建议"}'
 ```
 
 当前没有公开的直接工具调用 API。规划器可以在同一计划中混合文本步骤和工具调用，工具按计划顺序串行执行；无法通过结构化校验的模型输出会降级为文本，不会把任意 JSON 对象直接执行。
