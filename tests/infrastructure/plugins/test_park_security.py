@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from datetime import datetime
 
 import pytest
@@ -9,10 +10,12 @@ from plugins.park_security.server.config import Settings
 from plugins.park_security.server.models import (
     CreateWorkOrder,
     EventAction,
+    EventListQuery,
     SecurityAlarm,
     SecurityEvent,
 )
 from plugins.park_security.server.mock_repository import MockSecurityRepository
+from plugins.park_security.server.service import SecurityService
 
 
 def test_settings_defaults_to_loopback_mock(monkeypatch):
@@ -128,3 +131,103 @@ def test_night_shift_covers_the_night_access_event_timeline():
     ]
 
     assert all(shift_start <= occurred_at <= shift_end for occurred_at in event_times)
+
+
+def test_service_returns_event_timeline_and_summary():
+    """Catch a service that omits the repository's risk aggregation or event detail."""
+    service = SecurityService(MockSecurityRepository())
+
+    summary = asyncio.run(service.get_event_summary("park-1"))
+    detail = asyncio.run(service.get_event_detail("event-fire-003"))
+
+    assert summary["data"] == {
+        "park_id": "park-1",
+        "total_events": 3,
+        "risk_counts": {"high": 2, "critical": 1},
+        "status_counts": {"open": 3},
+        "raw_alarm_count": 8,
+        "merged_event_count": 3,
+        "duplicate_alarm_count": 5,
+        "effective_alarm_rate": 0.375,
+        "average_risk_score": pytest.approx(3.3333333333333335),
+    }
+    assert detail["data"]["recommended_plan"] == "activate_fire_response_and_inspect_ventilation"
+    assert len(detail["data"]["timeline"]) == 3
+    assert {item["source"] for item in detail["data"]["timeline"]} == {"fire", "device"}
+
+
+def test_service_filters_event_cards_by_every_query_condition():
+    """Catch filtering that ignores a supplied time, risk, or status condition."""
+    service = SecurityService(MockSecurityRepository())
+
+    result = asyncio.run(service.list_events(EventListQuery(
+        park_id="park-1",
+        start_time="2026-08-11T00:20:00Z",
+        end_time="2026-08-11T01:00:00Z",
+        risk_level="high",
+        status="open",
+    )))
+
+    assert result["data"] == [{
+        "event_id": "event-access-002",
+        "park_id": "park-1",
+        "building_id": "building-a",
+        "area_id": "area-gate-02",
+        "scenario": "access_failure_and_loitering",
+        "risk_level": "high",
+        "status": "open",
+        "first_occurred_at": "2026-08-11T00:42:00Z",
+        "last_occurred_at": "2026-08-11T00:49:00Z",
+        "impact_scope": ["building-a", "area-gate-02", "visitor-entry-route"],
+        "recommended_plan": "verify_visitor_appointment_and_dispatch_patrol",
+        "work_order_id": None,
+    }]
+
+
+def test_service_exposes_shift_context_in_response_envelope():
+    """Catch a service that leaks bare repository context instead of the public envelope."""
+    service = SecurityService(MockSecurityRepository())
+
+    context = asyncio.run(service.get_shift_context("park-1", "area-lab-01"))
+
+    assert context["success"] is True
+    assert context["data"]["focus_area"] == "area-lab-01"
+    assert context["raw"] == context["data"]
+
+
+def test_service_requires_confirmation_before_work_order_and_records_audit():
+    """Catch skipped state validation, persistence, audit entries, or review report creation."""
+    service = SecurityService(MockSecurityRepository())
+    action = EventAction(event_id="event-night-001", operator_id="guard-01", note="现场核验")
+    work_order_action = CreateWorkOrder(**action.model_dump(), assignee="team-night")
+
+    with pytest.raises(ValueError, match="event_not_confirmed"):
+        asyncio.run(service.create_work_order(work_order_action))
+    confirmed = asyncio.run(service.confirm_event(action))
+    created = asyncio.run(service.create_work_order(work_order_action))
+    closed = asyncio.run(service.close_event(action))
+
+    assert confirmed["data"]["status"] == "confirmed"
+    assert created["data"]["status"] == "work_order_created"
+    assert [record["action"] for record in closed["data"]["audit_records"]] == [
+        "event_created", "confirmed", "work_order_created", "closed"
+    ]
+    assert closed["data"]["status"] == "closed"
+    assert closed["data"]["review_report"] == {
+        "event_id": "event-night-001",
+        "final_risk_level": "high",
+        "handling_process": ["event_created", "confirmed", "work_order_created", "closed"],
+        "evidence_completeness": 0.92,
+        "closed_at": "2026-08-11T01:30:00Z",
+    }
+
+
+def test_service_rejects_invalid_closure_states_and_missing_events():
+    """Catch closure from open events and missing-event handling that returns partial data."""
+    service = SecurityService(MockSecurityRepository())
+    action = EventAction(event_id="event-access-002", operator_id="guard-01")
+
+    with pytest.raises(ValueError, match="event_not_closable"):
+        asyncio.run(service.close_event(action))
+    with pytest.raises(ValueError, match="event_not_found"):
+        asyncio.run(service.get_event_detail("event-unknown"))
