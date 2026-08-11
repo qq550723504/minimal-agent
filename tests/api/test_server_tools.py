@@ -38,8 +38,8 @@ def test_tools_endpoint_exposes_only_safe_tool_spec_metadata():
             "required": ["payload"],
             "additionalProperties": False,
         },
-        "side_effects": True,
-        "idempotent": False,
+        "side_effects": False,
+        "idempotent": True,
     }
     assert "handler" not in http_get
     assert "transport" not in http_get

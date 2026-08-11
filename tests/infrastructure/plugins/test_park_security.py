@@ -211,7 +211,7 @@ def test_correlator_and_risk_assessor_are_independently_callable():
             occurred_at="2026-08-11T02:00:00Z",
             alarm_type="repeated_access_failure",
             severity="medium",
-            payload={"attempt_count": 1},
+            payload={"attempt_count": 1, "subject_id": "visitor-1"},
         ),
         SecurityAlarm(
             alarm_id="patrol-1",
@@ -222,6 +222,7 @@ def test_correlator_and_risk_assessor_are_independently_callable():
             occurred_at="2026-08-11T02:04:00Z",
             alarm_type="loitering_report",
             severity="medium",
+            payload={"subject_id": "visitor-1"},
         ),
         SecurityAlarm(
             alarm_id="video-1",
@@ -232,6 +233,7 @@ def test_correlator_and_risk_assessor_are_independently_callable():
             occurred_at="2026-08-11T02:06:00Z",
             alarm_type="loitering_detected",
             severity="medium",
+            payload={"subject_id": "visitor-1"},
         ),
     ]
 
@@ -287,6 +289,7 @@ def test_correlator_emits_each_matching_scenario_in_an_overlapping_window():
             occurred_at="2026-08-11T02:00:00Z",
             alarm_type="after_hours_access",
             severity="high",
+            payload={"subject_id": "person-1"},
         ),
         SecurityAlarm(
             alarm_id="night-person",
@@ -297,6 +300,7 @@ def test_correlator_emits_each_matching_scenario_in_an_overlapping_window():
             occurred_at="2026-08-11T02:01:00Z",
             alarm_type="person_detected",
             severity="high",
+            payload={"subject_id": "person-1"},
         ),
         SecurityAlarm(
             alarm_id="fire-smoke",
@@ -307,6 +311,7 @@ def test_correlator_emits_each_matching_scenario_in_an_overlapping_window():
             occurred_at="2026-08-11T02:02:00Z",
             alarm_type="smoke_detected",
             severity="critical",
+            payload={"device_group_id": "plant-1"},
         ),
         SecurityAlarm(
             alarm_id="fire-temperature",
@@ -317,6 +322,7 @@ def test_correlator_emits_each_matching_scenario_in_an_overlapping_window():
             occurred_at="2026-08-11T02:03:00Z",
             alarm_type="temperature_rise",
             severity="critical",
+            payload={"device_group_id": "plant-1"},
         ),
         SecurityAlarm(
             alarm_id="fire-fan",
@@ -327,6 +333,7 @@ def test_correlator_emits_each_matching_scenario_in_an_overlapping_window():
             occurred_at="2026-08-11T02:04:00Z",
             alarm_type="ventilation_device_fault",
             severity="high",
+            payload={"device_group_id": "plant-1"},
         ),
     ]
 
@@ -342,6 +349,116 @@ def test_correlator_emits_each_matching_scenario_in_an_overlapping_window():
     }
 
 
+def test_correlator_uses_sliding_windows_after_unrelated_alarm():
+    alarms = [
+        SecurityAlarm(
+            alarm_id="unrelated",
+            source="video",
+            park_id="park-test",
+            building_id="building-test",
+            area_id="area-test",
+            occurred_at="2026-08-11T00:00:00Z",
+            alarm_type="person_detected",
+            severity="low",
+            payload={"subject_id": "other-person"},
+        ),
+        SecurityAlarm(
+            alarm_id="access",
+            source="access_control",
+            park_id="park-test",
+            building_id="building-test",
+            area_id="area-test",
+            occurred_at="2026-08-11T00:01:00Z",
+            alarm_type="after_hours_access",
+            severity="high",
+            payload={"subject_id": "person-1"},
+        ),
+        SecurityAlarm(
+            alarm_id="matching-person",
+            source="video",
+            park_id="park-test",
+            building_id="building-test",
+            area_id="area-test",
+            occurred_at="2026-08-11T00:11:00Z",
+            alarm_type="person_detected",
+            severity="high",
+            payload={"subject_id": "person-1"},
+        ),
+    ]
+
+    groups = EventCorrelator().correlate(alarms)
+
+    assert len(groups) == 1
+    assert groups[0].scenario == "night_abnormal_access"
+    assert {alarm.alarm_id for alarm in groups[0].alarms} == {"access", "matching-person"}
+
+
+def test_correlator_matches_configured_adjacent_areas():
+    alarms = [
+        SecurityAlarm(
+            alarm_id="adjacent-access",
+            source="access_control",
+            park_id="park-test",
+            building_id="building-test",
+            area_id="area-lab-01",
+            occurred_at="2026-08-11T02:00:00Z",
+            alarm_type="after_hours_access",
+            severity="high",
+            payload={"subject_id": "person-1"},
+        ),
+        SecurityAlarm(
+            alarm_id="adjacent-video",
+            source="video",
+            park_id="park-test",
+            building_id="building-test",
+            area_id="area-lab-corridor-01",
+            occurred_at="2026-08-11T02:01:00Z",
+            alarm_type="person_detected",
+            severity="high",
+            payload={"subject_id": "person-1"},
+        ),
+    ]
+
+    groups = EventCorrelator(
+        area_adjacency={
+            "area-lab-01": {"area-lab-corridor-01"},
+            "area-lab-corridor-01": {"area-lab-01"},
+        }
+    ).correlate(alarms)
+
+    assert len(groups) == 1
+    assert groups[0].scenario == "night_abnormal_access"
+
+
+def test_correlator_does_not_merge_different_subjects():
+    alarms = [
+        SecurityAlarm(
+            alarm_id="subject-access",
+            source="access_control",
+            park_id="park-test",
+            building_id="building-test",
+            area_id="area-test",
+            occurred_at="2026-08-11T02:00:00Z",
+            alarm_type="after_hours_access",
+            severity="high",
+            payload={"subject_id": "person-1"},
+        ),
+        SecurityAlarm(
+            alarm_id="subject-video",
+            source="video",
+            park_id="park-test",
+            building_id="building-test",
+            area_id="area-test",
+            occurred_at="2026-08-11T02:01:00Z",
+            alarm_type="person_detected",
+            severity="high",
+            payload={"subject_id": "person-2"},
+        ),
+    ]
+
+    assert EventCorrelator().correlate(alarms) == []
+
+
 def test_event_boundaries_select_original_timestamp_by_instant():
     alarms = [
         SecurityAlarm(
@@ -353,6 +470,7 @@ def test_event_boundaries_select_original_timestamp_by_instant():
             occurred_at="2026-08-11T08:00:00+08:00",
             alarm_type="after_hours_access",
             severity="high",
+            payload={"subject_id": "person-1"},
         ),
         SecurityAlarm(
             alarm_id="early",
@@ -363,6 +481,7 @@ def test_event_boundaries_select_original_timestamp_by_instant():
             occurred_at="2026-08-11T00:05:00Z",
             alarm_type="person_detected",
             severity="high",
+            payload={"subject_id": "person-1"},
         ),
     ]
 
@@ -374,6 +493,21 @@ def test_event_boundaries_select_original_timestamp_by_instant():
 
     assert event.first_occurred_at == "2026-08-11T08:00:00+08:00"
     assert event.last_occurred_at == "2026-08-11T00:05:00Z"
+
+
+def test_service_sorts_event_cards_by_timestamp_instant():
+    repository = MockSecurityRepository()
+    repository._events["event-offset"] = SecurityEvent(
+        event_id="event-offset",
+        park_id="park-1",
+        area_id="area-lab-01",
+        first_occurred_at="2026-08-11T08:00:00+08:00",
+        last_occurred_at="2026-08-11T08:00:00+08:00",
+    )
+
+    result = asyncio.run(SecurityService(repository).list_events(EventListQuery(park_id="park-1")))
+
+    assert result["data"][0]["event_id"] == "event-offset"
 
 
 def test_access_event_detail_includes_patrol_evidence():

@@ -65,7 +65,7 @@ class SecurityService:
     async def list_events(self, query: EventListQuery) -> dict[str, Any]:
         events = sorted(
             (event for event in self.repository.list_events(query.park_id) if self._matches(event, query)),
-            key=lambda event: event.first_occurred_at,
+            key=lambda event: parse_timestamp(event.first_occurred_at),
         )
         return wrap_response([self._event_card(event) for event in events])
 

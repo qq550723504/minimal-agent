@@ -37,6 +37,8 @@ register_tool(
     "http_get",
     _http_get_tool,
     description="Send an HTTP GET request with optional query parameters.",
+    side_effects=False,
+    idempotent=True,
 )
 register_tool(
     "http_post",
