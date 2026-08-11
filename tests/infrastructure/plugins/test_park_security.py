@@ -151,7 +151,7 @@ def test_service_returns_event_timeline_and_summary():
         "effective_alarm_rate": 0.375,
         "average_risk_score": pytest.approx(3.3333333333333335),
     }
-    assert detail["data"]["recommended_plan"] == "activate_fire_response_and_inspect_ventilation"
+    assert detail["data"]["recommended_plan"] == "fire_emergency_response"
     assert len(detail["data"]["timeline"]) == 3
     assert {item["source"] for item in detail["data"]["timeline"]} == {"fire", "device"}
 

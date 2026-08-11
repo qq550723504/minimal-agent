@@ -262,7 +262,7 @@ class MockSecurityRepository:
                 last_occurred_at="2026-08-11T01:04:00Z",
                 alarm_ids=["alarm-fire-001", "alarm-fire-002", "alarm-fire-003"],
                 impact_scope=["building-a", "area-plant-01", "mechanical-room", "evacuation-zone-a"],
-                recommended_plan="activate_fire_response_and_inspect_ventilation",
+                recommended_plan="fire_emergency_response",
                 responsible_party="team-fire",
                 evidence_completeness=0.97,
                 timeline=[
