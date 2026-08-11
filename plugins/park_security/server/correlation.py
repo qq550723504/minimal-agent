@@ -53,21 +53,58 @@ class EventCorrelator:
         correlated: list[CorrelatedAlarmGroup] = []
         for spatial_alarms in spatial_groups:
             ordered = sorted(spatial_alarms, key=self._occurred_at)
-            seen_groups: set[tuple[str, tuple[str, ...]]] = set()
             for index, anchor in enumerate(ordered):
                 window_end = self._occurred_at(anchor) + self.window
                 candidates = [
                     alarm
                     for alarm in ordered[index:]
                     if self._occurred_at(alarm) <= window_end
+                    and self._spatially_related(anchor, alarm)
                 ]
                 for group in self._classify(candidates):
-                    key = (group.scenario, tuple(sorted(alarm.alarm_id for alarm in group.alarms)))
-                    if key not in seen_groups:
+                    merged = False
+                    for existing_index, existing in enumerate(correlated):
+                        if not self._groups_can_merge(existing, group):
+                            continue
+                        alarm_ids = {
+                            alarm.alarm_id
+                            for alarm in (*existing.alarms, *group.alarms)
+                        }
+                        merged_alarms = tuple(
+                            alarm for alarm in ordered if alarm.alarm_id in alarm_ids
+                        )
+                        correlated[existing_index] = CorrelatedAlarmGroup(
+                            scenario=existing.scenario,
+                            alarms=merged_alarms,
+                        )
+                        merged = True
+                        break
+                    if not merged:
                         correlated.append(group)
-                        seen_groups.add(key)
 
         return sorted(correlated, key=lambda group: self._occurred_at(group.alarms[0]))
+
+    def _groups_can_merge(
+        self, left: CorrelatedAlarmGroup, right: CorrelatedAlarmGroup
+    ) -> bool:
+        """仅合并同场景、同关联键且时间窗口相互重叠的候选组。"""
+        if left.scenario != right.scenario:
+            return False
+        if not any(
+            self._spatially_related(left_alarm, right_alarm)
+            for left_alarm in left.alarms
+            for right_alarm in right.alarms
+        ):
+            return False
+        left_keys = set.intersection(*(self._associations(alarm) for alarm in left.alarms))
+        right_keys = set.intersection(*(self._associations(alarm) for alarm in right.alarms))
+        if not left_keys.intersection(right_keys):
+            return False
+        left_start = self._occurred_at(left.alarms[0])
+        left_end = self._occurred_at(left.alarms[-1])
+        right_start = self._occurred_at(right.alarms[0])
+        right_end = self._occurred_at(right.alarms[-1])
+        return left_start <= right_end + self.window and right_start <= left_end + self.window
 
     def _spatial_groups(
         self, alarms: Iterable[SecurityAlarm]
@@ -108,24 +145,17 @@ class EventCorrelator:
         groups: list[CorrelatedAlarmGroup] = []
         for scenario, required_types in cls._REQUIRED_ALARM_TYPES.items():
             if required_types <= alarm_types:
-                by_association: dict[str, dict[str, SecurityAlarm]] = {}
+                by_association: dict[str, list[SecurityAlarm]] = {}
                 for alarm in alarms:
                     if alarm.alarm_type not in required_types:
                         continue
                     for association in cls._associations(alarm):
-                        by_association.setdefault(association, {}).setdefault(
-                            alarm.alarm_type, alarm
-                        )
-                matching = next(
-                    (
-                        selected
-                        for selected in by_association.values()
-                        if required_types <= selected.keys()
-                    ),
-                    None,
-                )
-                if matching is not None:
-                    selected_ids = {alarm.alarm_id for alarm in matching.values()}
+                        by_association.setdefault(association, []).append(alarm)
+                for associated_alarms in by_association.values():
+                    associated_types = {alarm.alarm_type for alarm in associated_alarms}
+                    if not required_types <= associated_types:
+                        continue
+                    selected_ids = {alarm.alarm_id for alarm in associated_alarms}
                     groups.append(
                         CorrelatedAlarmGroup(
                             scenario=scenario,

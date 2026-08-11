@@ -506,6 +506,107 @@ def test_correlator_matches_configured_adjacent_areas():
     assert groups[0].scenario == "night_abnormal_access"
 
 
+def test_correlator_does_not_treat_area_adjacency_as_transitive():
+    alarms = [
+        SecurityAlarm(
+            alarm_id="chain-access",
+            source="access_control",
+            park_id="park-test",
+            building_id="building-test",
+            area_id="area-a",
+            occurred_at="2026-08-11T02:00:00Z",
+            alarm_type="after_hours_access",
+            severity="high",
+            payload={"subject_id": "person-chain"},
+        ),
+        SecurityAlarm(
+            alarm_id="chain-middle",
+            source="video",
+            park_id="park-test",
+            building_id="building-test",
+            area_id="area-b",
+            occurred_at="2026-08-11T02:01:00Z",
+            alarm_type="person_detected",
+            severity="low",
+            payload={"subject_id": "other-person"},
+        ),
+        SecurityAlarm(
+            alarm_id="chain-video",
+            source="video",
+            park_id="park-test",
+            building_id="building-test",
+            area_id="area-c",
+            occurred_at="2026-08-11T02:02:00Z",
+            alarm_type="person_detected",
+            severity="high",
+            payload={"subject_id": "person-chain"},
+        ),
+    ]
+
+    groups = EventCorrelator(
+        area_adjacency={"area-a": {"area-b"}, "area-b": {"area-c"}}
+    ).correlate(alarms)
+
+    assert groups == []
+
+
+def test_correlator_keeps_repeated_associated_failures_in_one_group():
+    alarms = [
+        SecurityAlarm(
+            alarm_id="failure-1",
+            source="access_control",
+            park_id="park-test",
+            building_id="building-test",
+            area_id="area-test",
+            occurred_at="2026-08-11T02:00:00Z",
+            alarm_type="repeated_access_failure",
+            severity="medium",
+            payload={"attempt_count": 1, "subject_id": "visitor-repeat"},
+        ),
+        SecurityAlarm(
+            alarm_id="failure-2",
+            source="access_control",
+            park_id="park-test",
+            building_id="building-test",
+            area_id="area-test",
+            occurred_at="2026-08-11T02:01:00Z",
+            alarm_type="repeated_access_failure",
+            severity="medium",
+            payload={"attempt_count": 1, "subject_id": "visitor-repeat"},
+        ),
+        SecurityAlarm(
+            alarm_id="repeat-patrol",
+            source="patrol",
+            park_id="park-test",
+            building_id="building-test",
+            area_id="area-test",
+            occurred_at="2026-08-11T02:02:00Z",
+            alarm_type="loitering_report",
+            severity="medium",
+            payload={"subject_id": "visitor-repeat"},
+        ),
+        SecurityAlarm(
+            alarm_id="repeat-video",
+            source="video",
+            park_id="park-test",
+            building_id="building-test",
+            area_id="area-test",
+            occurred_at="2026-08-11T02:03:00Z",
+            alarm_type="loitering_detected",
+            severity="medium",
+            payload={"subject_id": "visitor-repeat"},
+        ),
+    ]
+
+    groups = EventCorrelator().correlate(alarms)
+
+    assert len(groups) == 1
+    assert {alarm.alarm_id for alarm in groups[0].alarms} == {
+        "failure-1", "failure-2", "repeat-patrol", "repeat-video"
+    }
+    assert RiskAssessor().assess(groups[0]).risk_level == "high"
+
+
 def test_correlator_does_not_merge_different_subjects():
     alarms = [
         SecurityAlarm(
@@ -569,6 +670,39 @@ def test_event_boundaries_select_original_timestamp_by_instant():
 
     assert event.first_occurred_at == "2026-08-11T08:00:00+08:00"
     assert event.last_occurred_at == "2026-08-11T00:05:00Z"
+
+
+def test_adjacent_area_assessment_preserves_all_affected_areas():
+    alarms = [
+        SecurityAlarm(
+            alarm_id="scope-access",
+            source="access_control",
+            park_id="park-test",
+            building_id="building-test",
+            area_id="area-a",
+            occurred_at="2026-08-11T02:00:00Z",
+            alarm_type="after_hours_access",
+            severity="high",
+            payload={"subject_id": "person-scope"},
+        ),
+        SecurityAlarm(
+            alarm_id="scope-video",
+            source="video",
+            park_id="park-test",
+            building_id="building-test",
+            area_id="area-b",
+            occurred_at="2026-08-11T02:01:00Z",
+            alarm_type="person_detected",
+            severity="high",
+            payload={"subject_id": "person-scope"},
+        ),
+    ]
+    group = EventCorrelator(area_adjacency={"area-a": {"area-b"}}).correlate(alarms)[0]
+
+    assessment = RiskAssessor().assess(group)
+
+    assert "area-a" in assessment.impact_scope
+    assert "area-b" in assessment.impact_scope
 
 
 def test_service_sorts_event_cards_by_timestamp_instant():
@@ -726,6 +860,15 @@ def test_event_list_query_rejects_invalid_timestamps():
         EventListQuery(park_id="park-1", start_time="not-a-timestamp")
 
 
+def test_event_list_query_rejects_reversed_time_range():
+    with pytest.raises(ValidationError, match="start_time must not be after end_time"):
+        EventListQuery(
+            park_id="park-1",
+            start_time="2026-08-11T02:00:00Z",
+            end_time="2026-08-11T01:00:00Z",
+        )
+
+
 def test_service_exposes_shift_context_in_response_envelope():
     """Catch a service that leaks bare repository context instead of the public envelope."""
     service = SecurityService(MockSecurityRepository())
@@ -761,6 +904,9 @@ def test_shift_context_returns_time_appropriate_duty_state():
     assert context["data"]["on_duty"] is False
     assert context["data"]["on_duty_guard"] is None
     assert "guard-01" not in context["data"]["escalation_rules"]["level_1"]["notify"]
+
+    with pytest.raises(ValueError, match="valid ISO 8601 timestamp"):
+        asyncio.run(service.get_shift_context("park-1", "area-lab-01", ""))
 
 
 def test_service_requires_confirmation_before_work_order_and_records_audit(monkeypatch):

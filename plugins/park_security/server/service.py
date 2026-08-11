@@ -83,7 +83,7 @@ class SecurityService:
         at_time: str | None = None,
     ) -> dict[str, Any]:
         """读取指定区域和时间点的值班状态及升级规则。"""
-        query_time = normalize_timestamp(at_time) if at_time else None
+        query_time = normalize_timestamp(at_time) if at_time is not None else None
         return wrap_response(
             self.repository.list_shift_context(park_id, area_id, query_time)
         )

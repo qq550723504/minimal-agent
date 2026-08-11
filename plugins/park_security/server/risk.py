@@ -21,7 +21,13 @@ class RiskAssessor:
     def assess(self, group: CorrelatedAlarmGroup) -> RiskAssessment:
         """根据场景和告警载荷计算风险等级、影响范围及推荐预案。"""
         first = group.alarms[0]
-        base_scope = tuple(value for value in (first.building_id, first.area_id) if value)
+        building_scope = tuple(
+            value for value in dict.fromkeys(alarm.building_id for alarm in group.alarms) if value
+        )
+        area_scope = tuple(
+            value for value in dict.fromkeys(alarm.area_id for alarm in group.alarms) if value
+        )
+        base_scope = (*building_scope, *area_scope)
         if group.scenario == "night_abnormal_access":
             return RiskAssessment(
                 risk_level="high",
@@ -31,13 +37,10 @@ class RiskAssessor:
                 evidence_completeness=0.92,
             )
         if group.scenario == "access_failure_and_loitering":
-            attempts = max(
-                (
-                    int(alarm.payload.get("attempt_count", 1))
-                    for alarm in group.alarms
-                    if alarm.alarm_type == "repeated_access_failure"
-                ),
-                default=1,
+            attempts = sum(
+                int(alarm.payload.get("attempt_count", 1))
+                for alarm in group.alarms
+                if alarm.alarm_type == "repeated_access_failure"
             )
             return RiskAssessment(
                 risk_level="high" if attempts > 1 else "medium",

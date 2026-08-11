@@ -166,12 +166,14 @@ def _is_sensitive_scalar(value: str) -> bool:
     return any(pattern.search(stripped) for pattern in _CREDENTIAL_VALUE_PATTERNS)
 
 
+def planner_visible_specs(specs: Sequence[ToolSpec]) -> list[ToolSpec]:
+    """返回可由 Planner 生成的工具，隐藏非幂等副作用工具。"""
+    return [spec for spec in specs if not (spec.side_effects and not spec.idempotent)]
+
+
 def build_tool_catalog_prompt(specs: Sequence[ToolSpec]) -> str:
     catalog = []
-    planner_visible_specs = [
-        spec for spec in specs if not (spec.side_effects and not spec.idempotent)
-    ]
-    for spec in sorted(planner_visible_specs, key=lambda item: item.name):
+    for spec in sorted(planner_visible_specs(specs), key=lambda item: item.name):
         entry = {}
         for field_name in _SAFE_TOOL_FIELDS:
             value = getattr(spec, field_name)

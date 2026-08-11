@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, Field, StringConstraints, field_validator
+from pydantic import BaseModel, Field, StringConstraints, field_validator, model_validator
 
 
 EventStatus = Literal["open", "confirmed", "work_order_created", "closed"]
@@ -105,6 +105,13 @@ class EventListQuery(BaseModel):
     @classmethod
     def validate_query_timestamp(cls, value: str | None) -> str | None:
         return None if value is None else normalize_timestamp(value)
+
+    @model_validator(mode="after")
+    def validate_time_range(self) -> "EventListQuery":
+        """确保查询起始时刻不晚于结束时刻。"""
+        if self.start_time and self.end_time and parse_timestamp(self.start_time) > parse_timestamp(self.end_time):
+            raise ValueError("start_time must not be after end_time")
+        return self
 
 
 class EventAction(BaseModel):

@@ -176,6 +176,29 @@ async def test_execute_plan_items_runs_text_and_tool_call_in_order():
 
 
 @pytest.mark.anyio
+async def test_execute_plan_items_rejects_tool_outside_planner_allowlist():
+    called = False
+    registry = CapabilityRegistry()
+
+    async def handler(arguments, context):
+        nonlocal called
+        called = True
+        return "should not run"
+
+    registry.register(_make_capability_spec("security.write", side_effects=True, idempotent=False), handler)
+
+    result = await execute_plan_items(
+        [ToolCallPlan(kind="tool_call", call_id="call-1", tool="security.write", arguments={"value": "x"})],
+        owner_id="user-1",
+        registry=registry,
+        allowed_tools={"security.read"},
+    )
+
+    assert "tool_not_planner_visible" in result[0]
+    assert called is False
+
+
+@pytest.mark.anyio
 async def test_execute_plan_items_runs_normalized_legacy_echo_dict_step():
     steps = normalize_plan_items([{"text": "echo: legacy hello"}])
 
