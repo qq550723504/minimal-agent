@@ -14,6 +14,7 @@ class Settings:
 
     @classmethod
     def from_env(cls) -> "Settings":
+        """从环境变量读取服务地址、Mock 模式和人工审批凭证。"""
         data_mode = os.getenv("PARK_SECURITY_DATA_MODE", "mock").strip().lower()
         if data_mode != "mock":
             raise ValueError("PARK_SECURITY_DATA_MODE must be mock")

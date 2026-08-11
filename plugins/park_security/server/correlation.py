@@ -16,7 +16,7 @@ class CorrelatedAlarmGroup:
 
 
 class EventCorrelator:
-    """Correlate raw alarms by park, building, area, and a fixed time window."""
+    """按园区、楼宇、区域、时间窗口和关联键归并原始告警。"""
 
     _REQUIRED_ALARM_TYPES = {
         "night_abnormal_access": {"after_hours_access", "person_detected"},
@@ -37,6 +37,7 @@ class EventCorrelator:
         window: timedelta = timedelta(minutes=10),
         area_adjacency: Mapping[str, Iterable[str]] | None = None,
     ) -> None:
+        """初始化时间窗口和区域邻接关系；邻接关系会自动补齐反向边。"""
         self.window = window
         self.area_adjacency = {
             area: set(neighbors) | {area}
@@ -47,6 +48,7 @@ class EventCorrelator:
                 self.area_adjacency.setdefault(neighbor, {neighbor}).add(area)
 
     def correlate(self, alarms: Iterable[SecurityAlarm]) -> list[CorrelatedAlarmGroup]:
+        """按空间、时间和主体/设备关联键归并告警，并去除重复匹配。"""
         spatial_groups = self._spatial_groups(alarms)
         correlated: list[CorrelatedAlarmGroup] = []
         for spatial_alarms in spatial_groups:
@@ -70,6 +72,7 @@ class EventCorrelator:
     def _spatial_groups(
         self, alarms: Iterable[SecurityAlarm]
     ) -> list[list[SecurityAlarm]]:
+        """将同园区同楼宇且位于相同/相邻区域的告警组成空间连通分组。"""
         pending = [alarm.model_copy(deep=True) for alarm in alarms]
         groups: list[list[SecurityAlarm]] = []
         while pending:
@@ -89,6 +92,7 @@ class EventCorrelator:
         return groups
 
     def _spatially_related(self, left: SecurityAlarm, right: SecurityAlarm) -> bool:
+        """判断两条告警是否属于同一空间范围。"""
         if (left.park_id, left.building_id) != (right.park_id, right.building_id):
             return False
         if left.area_id == right.area_id:
@@ -99,6 +103,7 @@ class EventCorrelator:
 
     @classmethod
     def _classify(cls, alarms: list[SecurityAlarm]) -> list[CorrelatedAlarmGroup]:
+        """按场景所需告警类型和共享关联键生成一个或多个候选事件。"""
         alarm_types = {alarm.alarm_type for alarm in alarms}
         groups: list[CorrelatedAlarmGroup] = []
         for scenario, required_types in cls._REQUIRED_ALARM_TYPES.items():
@@ -135,6 +140,7 @@ class EventCorrelator:
 
     @staticmethod
     def _associations(alarm: SecurityAlarm) -> set[str]:
+        """提取主体、设备组、关联号和设备号等可用于关联的键。"""
         associations: set[str] = set()
         for key in ("subject_id", "person_id", "device_group_id", "correlation_id"):
             value = alarm.payload.get(key)
@@ -146,4 +152,5 @@ class EventCorrelator:
 
     @staticmethod
     def _occurred_at(alarm: SecurityAlarm) -> datetime:
+        """把告警时间解析为带时区的 datetime，避免按字符串比较。"""
         return parse_timestamp(alarm.occurred_at)

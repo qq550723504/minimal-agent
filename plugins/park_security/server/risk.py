@@ -16,9 +16,10 @@ class RiskAssessment:
 
 
 class RiskAssessor:
-    """Apply explicit deterministic risk and response rules to a correlated group."""
+    """根据显式规则为归并事件计算风险和处置建议。"""
 
     def assess(self, group: CorrelatedAlarmGroup) -> RiskAssessment:
+        """根据场景和告警载荷计算风险等级、影响范围及推荐预案。"""
         first = group.alarms[0]
         base_scope = tuple(value for value in (first.building_id, first.area_id) if value)
         if group.scenario == "night_abnormal_access":

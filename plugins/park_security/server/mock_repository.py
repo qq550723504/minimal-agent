@@ -19,13 +19,14 @@ from plugins.park_security.server.risk import RiskAssessment, RiskAssessor
 
 
 class MockSecurityRepository:
-    """Deterministic in-memory security data for the park-security mock server."""
+    """为安防 Mock 服务提供确定性的内存事件、工单和班次数据。"""
 
     def __init__(
         self,
         correlator: EventCorrelator | None = None,
         risk_assessor: RiskAssessor | None = None,
     ) -> None:
+        """初始化告警、归并器、风险评估器和内存工单状态。"""
         self._alarms = self._build_alarms()
         self._correlator = correlator or EventCorrelator()
         self._risk_assessor = risk_assessor or RiskAssessor()
@@ -33,6 +34,7 @@ class MockSecurityRepository:
         self._work_orders: dict[str, WorkOrder] = {}
 
     def list_events(self, park_id: str) -> list[SecurityEvent]:
+        """读取指定园区的事件副本，避免调用方修改仓储内部状态。"""
         return [
             event.model_copy(deep=True)
             for event in self._events.values()
@@ -40,16 +42,19 @@ class MockSecurityRepository:
         ]
 
     def get_event(self, event_id: str) -> SecurityEvent | None:
+        """按事件 ID 读取深拷贝；不存在时返回 None。"""
         event = self._events.get(event_id)
         return event.model_copy(deep=True) if event is not None else None
 
     def save_event(self, event: SecurityEvent) -> SecurityEvent:
+        """保存事件深拷贝并返回新的深拷贝。"""
         self._events[event.event_id] = event.model_copy(deep=True)
         return self._events[event.event_id].model_copy(deep=True)
 
     def create_work_order(
         self, event_id: str, assignee: str, operator_id: str, note: str | None
     ) -> WorkOrder:
+        """为事件创建唯一工单，并同步更新事件状态和关联工单。"""
         work_order_id = f"wo-{event_id}"
         if work_order_id in self._work_orders:
             raise ValueError("work_order_exists")
@@ -75,6 +80,7 @@ class MockSecurityRepository:
         return work_order.model_copy(deep=True)
 
     def close_work_order(self, work_order_id: str, closed_at: str) -> WorkOrder:
+        """关闭工单并将关闭状态同步回所属事件。"""
         work_order = self._work_orders.get(work_order_id)
         if work_order is None:
             raise ValueError("work_order_not_found")
@@ -99,6 +105,7 @@ class MockSecurityRepository:
         area_id: str | None,
         query_time: str | None = None,
     ) -> dict[str, Any]:
+        """返回指定时间点的重点区域、值班人员和升级通知规则。"""
         if park_id != "park-1":
             raise ValueError("park_not_found")
         known_areas = {"area-lab-01", "area-gate-02", "area-plant-01"}
@@ -143,9 +150,11 @@ class MockSecurityRepository:
 
     @staticmethod
     def _build_alarms() -> dict[str, SecurityAlarm]:
+        """兼容旧调用路径，委托给 Mock 告警构造器。"""
         return build_mock_alarms()
 
     def _build_events(self) -> dict[str, SecurityEvent]:
+        """归并种子告警并生成仓储初始事件索引。"""
         events = [
             self._build_event(group, self._risk_assessor.assess(group))
             for group in self._correlator.correlate(self._alarms.values())
@@ -156,10 +165,12 @@ class MockSecurityRepository:
     def _build_event(
         group: CorrelatedAlarmGroup, assessment: RiskAssessment
     ) -> SecurityEvent:
+        """兼容旧调用路径，委托给事件构造器。"""
         return fixture_build_event(group, assessment)
 
     @staticmethod
     def _build_timeline(
         scenario: str, alarms: dict[str, SecurityAlarm]
     ) -> tuple[list[EvidenceItem], str]:
+        """兼容旧调用路径，委托给证据时间线构造器。"""
         return fixture_build_timeline(scenario, alarms)

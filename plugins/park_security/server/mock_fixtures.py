@@ -14,6 +14,7 @@ from plugins.park_security.server.risk import RiskAssessment
 def _evidence(
     evidence_id: str, source: str, occurred_at: str, summary: str, reference: str
 ) -> EvidenceItem:
+    """构造一条统一格式的证据时间线记录。"""
     return EvidenceItem(
         evidence_id=evidence_id,
         source=source,
@@ -26,6 +27,7 @@ def _evidence(
 def _audit(
     audit_id: str, event_id: str, operator_id: str, action: str, occurred_at: str
 ) -> AuditRecord:
+    """构造事件创建或处置过程中的审计记录。"""
     return AuditRecord(
         audit_id=audit_id,
         event_id=event_id,
@@ -36,6 +38,7 @@ def _audit(
 
 
 def build_mock_alarms() -> dict[str, SecurityAlarm]:
+    """返回确定性的八条视频、门禁、消防和巡更 Mock 告警。"""
     return {
         "alarm-access-001": SecurityAlarm(
             alarm_id="alarm-access-001", source="access_control", park_id="park-1",
@@ -91,6 +94,7 @@ def build_mock_alarms() -> dict[str, SecurityAlarm]:
 def build_event(
     group: CorrelatedAlarmGroup, assessment: RiskAssessment
 ) -> SecurityEvent:
+    """将归并结果和风险评估组装为对外展示的事件卡片。"""
     event_ids = {
         "night_abnormal_access": "event-night-001",
         "access_failure_and_loitering": "event-access-002",
@@ -134,6 +138,7 @@ def build_event(
 def build_timeline(
     scenario: str, alarms: dict[str, SecurityAlarm]
 ) -> tuple[list[EvidenceItem], str]:
+    """根据场景生成证据时间线及对应的审计时间。"""
     if scenario == "night_abnormal_access":
         access = alarms["after_hours_access"]
         video = alarms["person_detected"]

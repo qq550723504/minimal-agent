@@ -24,7 +24,7 @@ mcp = MCPServer("park-security")
 
 @mcp.tool(name="security.get_event_summary")
 async def get_event_summary(park_id: str) -> dict[str, Any]:
-    """Return the security-event risk summary for a park."""
+    """返回指定园区的安防事件风险汇总。"""
     return await service.get_event_summary(park_id)
 
 
@@ -36,7 +36,7 @@ async def list_events(
     risk_level: RiskLevel | None = None,
     status: EventStatus | None = None,
 ) -> dict[str, Any]:
-    """List event cards after applying the supplied filters."""
+    """按时间、风险等级和状态筛选并返回事件卡片。"""
     return await service.list_events(EventListQuery(
         park_id=park_id,
         start_time=start_time,
@@ -48,7 +48,7 @@ async def list_events(
 
 @mcp.tool(name="security.get_event_detail")
 async def get_event_detail(event_id: str) -> dict[str, Any]:
-    """Return all correlated evidence and workflow state for an event."""
+    """返回事件的关联证据、时间线和处置状态。"""
     return await service.get_event_detail(event_id)
 
 
@@ -58,7 +58,7 @@ async def get_shift_context(
     area_id: str | None = None,
     at_time: str | None = None,
 ) -> dict[str, Any]:
-    """Return duty coverage, escalation rules, and area context."""
+    """返回区域值班覆盖、升级规则和空间上下文。"""
     return await service.get_shift_context(park_id, area_id, at_time)
 
 
@@ -69,7 +69,7 @@ async def confirm_event(
     approval_token: str,
     note: str | None = None,
 ) -> dict[str, Any]:
-    """Confirm an open security event after human review."""
+    """在人工复核后确认一个开放状态的安防事件。"""
     return await service.confirm_event(EventAction(
         event_id=event_id,
         operator_id=operator_id,
@@ -86,7 +86,7 @@ async def create_work_order(
     approval_token: str,
     note: str | None = None,
 ) -> dict[str, Any]:
-    """Create a work order for a confirmed security event."""
+    """为已确认的安防事件创建处置工单。"""
     return await service.create_work_order(CreateWorkOrder(
         event_id=event_id,
         operator_id=operator_id,
@@ -103,7 +103,7 @@ async def close_event(
     approval_token: str,
     note: str,
 ) -> dict[str, Any]:
-    """Close a confirmed or remediated security event."""
+    """关闭已确认或已完成处置的安防事件。"""
     return await service.close_event(CloseEventAction(
         event_id=event_id,
         operator_id=operator_id,

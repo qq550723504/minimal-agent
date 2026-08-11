@@ -12,7 +12,7 @@ NonBlankText = Annotated[str, StringConstraints(strip_whitespace=True, min_lengt
 
 
 def normalize_timestamp(value: str) -> str:
-    """Normalize a timezone-aware ISO 8601 timestamp to UTC with a Z suffix."""
+    """将带时区的 ISO 8601 时间统一转换为 UTC 的 Z 后缀格式。"""
     if not isinstance(value, str):
         raise ValueError("valid ISO 8601 timestamp is required")
     try:
@@ -25,7 +25,7 @@ def normalize_timestamp(value: str) -> str:
 
 
 def parse_timestamp(value: str) -> datetime:
-    """Parse a stored timestamp as an aware datetime for instant comparisons."""
+    """解析存储时间为带时区 datetime，用于真实时刻比较。"""
     return datetime.fromisoformat(normalize_timestamp(value).replace("Z", "+00:00"))
 
 
@@ -123,4 +123,5 @@ class CloseEventAction(EventAction):
 
 
 def wrap_response(payload: Any) -> dict[str, Any]:
+    """将业务数据包装为统一的 success/data/raw 响应信封。"""
     return {"success": True, "data": payload, "raw": payload}

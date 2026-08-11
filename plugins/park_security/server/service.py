@@ -31,6 +31,7 @@ class SecurityService:
         repository: MockSecurityRepository,
         approval_token: str | None = None,
     ) -> None:
+        """注入仓储并读取服务端审批凭证，凭证只保存在服务内存中。"""
         self.repository = repository
         configured_token = (
             approval_token
@@ -40,6 +41,7 @@ class SecurityService:
         self._approval_token = configured_token.strip() or None
 
     async def get_event_summary(self, park_id: str) -> dict[str, Any]:
+        """汇总园区事件数量、风险分布、重复告警和有效告警率。"""
         events = self.repository.list_events(park_id)
         raw_alarm_count = sum(len(event.alarm_ids) for event in events)
         merged_event_count = len(events)
@@ -63,6 +65,7 @@ class SecurityService:
         })
 
     async def list_events(self, query: EventListQuery) -> dict[str, Any]:
+        """按时间、风险等级和状态筛选事件卡片，并按发生时刻排序。"""
         events = sorted(
             (event for event in self.repository.list_events(query.park_id) if self._matches(event, query)),
             key=lambda event: parse_timestamp(event.first_occurred_at),
@@ -70,6 +73,7 @@ class SecurityService:
         return wrap_response([self._event_card(event) for event in events])
 
     async def get_event_detail(self, event_id: str) -> dict[str, Any]:
+        """返回单个事件的完整证据时间线、影响范围和处置状态。"""
         return wrap_response(self._event_detail(self._require_event(event_id)))
 
     async def get_shift_context(
@@ -78,12 +82,14 @@ class SecurityService:
         area_id: str | None = None,
         at_time: str | None = None,
     ) -> dict[str, Any]:
+        """读取指定区域和时间点的值班状态及升级规则。"""
         query_time = normalize_timestamp(at_time) if at_time else None
         return wrap_response(
             self.repository.list_shift_context(park_id, area_id, query_time)
         )
 
     async def confirm_event(self, action: EventAction) -> dict[str, Any]:
+        """在审批凭证有效且事件仍开放时，将事件置为已确认。"""
         self._require_approval(action)
         event = self._require_event(action.event_id)
         if event.status != "open":
@@ -94,6 +100,7 @@ class SecurityService:
         return wrap_response(self._event_detail(self.repository.save_event(event)))
 
     async def create_work_order(self, action: CreateWorkOrder) -> dict[str, Any]:
+        """为已人工确认的事件建单，并记录责任人和审计信息。"""
         self._require_approval(action)
         event = self._require_event(action.event_id)
         if event.status != "confirmed":
@@ -110,6 +117,7 @@ class SecurityService:
         return wrap_response(self._event_detail(self.repository.save_event(event)))
 
     async def close_event(self, action: CloseEventAction) -> dict[str, Any]:
+        """关闭已确认或已建单事件，并生成复盘报告。"""
         self._require_approval(action)
         event = self._require_event(action.event_id)
         if event.status not in {"confirmed", "work_order_created"}:
@@ -130,12 +138,14 @@ class SecurityService:
         return wrap_response(self._event_detail(self.repository.save_event(event)))
 
     def _require_approval(self, action: EventAction) -> None:
+        """校验服务端配置的审批凭证，拒绝缺失或不匹配的写操作。"""
         if self._approval_token is None:
             raise ValueError("approval_not_configured")
         if not secrets.compare_digest(action.approval_token, self._approval_token):
             raise ValueError("approval_denied")
 
     def _require_event(self, event_id: str) -> SecurityEvent:
+        """读取事件，不存在时统一抛出稳定错误码。"""
         event = self.repository.get_event(event_id)
         if event is None:
             raise ValueError("event_not_found")
@@ -143,6 +153,7 @@ class SecurityService:
 
     @staticmethod
     def _matches(event: SecurityEvent, query: EventListQuery) -> bool:
+        """使用时刻、风险和状态条件判断事件是否命中查询。"""
         first_occurred_at = parse_timestamp(event.first_occurred_at)
         last_occurred_at = parse_timestamp(event.last_occurred_at)
         start_time = parse_timestamp(query.start_time) if query.start_time else None
@@ -156,6 +167,7 @@ class SecurityService:
 
     @staticmethod
     def _event_card(event: SecurityEvent) -> dict[str, Any]:
+        """将完整事件压缩为列表接口使用的轻量事件卡片。"""
         return {
             "event_id": event.event_id,
             "park_id": event.park_id,
@@ -172,6 +184,7 @@ class SecurityService:
         }
 
     def _event_detail(self, event: SecurityEvent) -> dict[str, Any]:
+        """序列化事件详情，并在关闭后附加复盘报告。"""
         detail = event.model_dump(mode="json")
         if event.status == "closed":
             detail["review_report"] = self._review_report(event)
@@ -179,6 +192,7 @@ class SecurityService:
 
     @staticmethod
     def _audit(action_name: str, action: EventAction, occurred_at: str) -> AuditRecord:
+        """根据写操作生成统一格式的审计记录。"""
         return AuditRecord(
             audit_id=f"audit-{action.event_id}-{action_name}",
             event_id=action.event_id,
@@ -190,6 +204,7 @@ class SecurityService:
 
     @staticmethod
     def _review_report(event: SecurityEvent) -> dict[str, Any]:
+        """从事件审计链和证据时间线生成简版复盘结果。"""
         closed_record = next(
             record for record in reversed(event.audit_records) if record.action == "closed"
         )
