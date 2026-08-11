@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import asyncio
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 import inspect
 from pathlib import Path
 from typing import get_type_hints
@@ -548,6 +548,111 @@ def test_correlator_does_not_treat_area_adjacency_as_transitive():
     ).correlate(alarms)
 
     assert groups == []
+
+
+def test_correlator_requires_all_candidate_areas_to_be_directly_compatible():
+    """候选事件的每个区域都必须与其他区域直接相同或相邻。"""
+    alarms = [
+        SecurityAlarm(
+            alarm_id="fire-middle",
+            source="fire",
+            park_id="park-test",
+            building_id="building-test",
+            area_id="area-b",
+            occurred_at="2026-08-11T02:00:00Z",
+            alarm_type="smoke_detected",
+            severity="high",
+            payload={"device_group_id": "fire-group"},
+        ),
+        SecurityAlarm(
+            alarm_id="fire-left",
+            source="fire",
+            park_id="park-test",
+            building_id="building-test",
+            area_id="area-a",
+            occurred_at="2026-08-11T02:01:00Z",
+            alarm_type="temperature_rise",
+            severity="high",
+            payload={"device_group_id": "fire-group"},
+        ),
+        SecurityAlarm(
+            alarm_id="fire-right",
+            source="fire",
+            park_id="park-test",
+            building_id="building-test",
+            area_id="area-c",
+            occurred_at="2026-08-11T02:02:00Z",
+            alarm_type="ventilation_device_fault",
+            severity="high",
+            payload={"device_group_id": "fire-group"},
+        ),
+    ]
+
+    groups = EventCorrelator(
+        area_adjacency={"area-a": {"area-b"}, "area-b": {"area-c"}}
+    ).correlate(alarms)
+
+    assert groups == []
+
+
+def test_correlator_does_not_merge_candidate_groups_beyond_configured_window():
+    """滚动窗口生成的候选组再次合并时，整体跨度不能超过窗口。"""
+    alarms = [
+        SecurityAlarm(
+            alarm_id="access-1",
+            source="access_control",
+            park_id="park-test",
+            building_id="building-test",
+            area_id="area-test",
+            occurred_at="2026-08-11T02:00:00Z",
+            alarm_type="after_hours_access",
+            severity="high",
+            payload={"subject_id": "person-window"},
+        ),
+        SecurityAlarm(
+            alarm_id="access-2",
+            source="access_control",
+            park_id="park-test",
+            building_id="building-test",
+            area_id="area-test",
+            occurred_at="2026-08-11T02:05:00Z",
+            alarm_type="after_hours_access",
+            severity="high",
+            payload={"subject_id": "person-window"},
+        ),
+        SecurityAlarm(
+            alarm_id="person-1",
+            source="video",
+            park_id="park-test",
+            building_id="building-test",
+            area_id="area-test",
+            occurred_at="2026-08-11T02:10:00Z",
+            alarm_type="person_detected",
+            severity="high",
+            payload={"subject_id": "person-window"},
+        ),
+        SecurityAlarm(
+            alarm_id="person-2",
+            source="video",
+            park_id="park-test",
+            building_id="building-test",
+            area_id="area-test",
+            occurred_at="2026-08-11T02:15:00Z",
+            alarm_type="person_detected",
+            severity="high",
+            payload={"subject_id": "person-window"},
+        ),
+    ]
+
+    groups = EventCorrelator().correlate(alarms)
+
+    assert groups
+    for group in groups:
+        occurred = [
+            datetime.fromisoformat(alarm.occurred_at.replace("Z", "+00:00"))
+            for alarm in group.alarms
+        ]
+        assert max(occurred) - min(occurred) <= timedelta(minutes=10)
 
 
 def test_correlator_keeps_repeated_associated_failures_in_one_group():

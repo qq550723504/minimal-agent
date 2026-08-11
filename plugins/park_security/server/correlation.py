@@ -62,6 +62,10 @@ class EventCorrelator:
                     and self._spatially_related(anchor, alarm)
                 ]
                 for group in self._classify(candidates):
+                    # 候选组不能借助锚点跨越非直接相邻区域，避免 A-B-C
+                    # 这样的邻接链被误判为同一空间事件。
+                    if not self._group_spatially_compatible(group.alarms):
+                        continue
                     merged = False
                     for existing_index, existing in enumerate(correlated):
                         if not self._groups_can_merge(existing, group):
@@ -90,21 +94,31 @@ class EventCorrelator:
         """仅合并同场景、同关联键且时间窗口相互重叠的候选组。"""
         if left.scenario != right.scenario:
             return False
-        if not any(
-            self._spatially_related(left_alarm, right_alarm)
-            for left_alarm in left.alarms
-            for right_alarm in right.alarms
-        ):
+        merged_alarms = (*left.alarms, *right.alarms)
+        if not self._group_spatially_compatible(merged_alarms):
             return False
         left_keys = set.intersection(*(self._associations(alarm) for alarm in left.alarms))
         right_keys = set.intersection(*(self._associations(alarm) for alarm in right.alarms))
         if not left_keys.intersection(right_keys):
+            return False
+        merged_start = min(self._occurred_at(alarm) for alarm in merged_alarms)
+        merged_end = max(self._occurred_at(alarm) for alarm in merged_alarms)
+        if merged_end - merged_start > self.window:
             return False
         left_start = self._occurred_at(left.alarms[0])
         left_end = self._occurred_at(left.alarms[-1])
         right_start = self._occurred_at(right.alarms[0])
         right_end = self._occurred_at(right.alarms[-1])
         return left_start <= right_end + self.window and right_start <= left_end + self.window
+
+    def _group_spatially_compatible(self, alarms: Iterable[SecurityAlarm]) -> bool:
+        """确认组内任意两条告警都处于直接兼容的空间范围。"""
+        alarms = tuple(alarms)
+        return all(
+            self._spatially_related(left, right)
+            for index, left in enumerate(alarms)
+            for right in alarms[index + 1 :]
+        )
 
     def _spatial_groups(
         self, alarms: Iterable[SecurityAlarm]
