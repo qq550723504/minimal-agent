@@ -254,6 +254,28 @@ def test_mock_fixture_builders_are_importable_and_preserve_seeded_events():
     assert {item.source for item in fire_timeline} == {"fire", "device"}
 
 
+def test_mock_repository_facade_exports_moved_domain_classes():
+    from plugins.park_security.server.correlation import (
+        CorrelatedAlarmGroup as CorrelationGroup,
+        EventCorrelator as Correlator,
+    )
+    from plugins.park_security.server.mock_repository import (
+        CorrelatedAlarmGroup as FacadeGroup,
+        EventCorrelator as FacadeCorrelator,
+        RiskAssessment as FacadeAssessment,
+        RiskAssessor as FacadeAssessor,
+    )
+    from plugins.park_security.server.risk import (
+        RiskAssessment as Assessment,
+        RiskAssessor as Assessor,
+    )
+
+    assert FacadeGroup is CorrelationGroup
+    assert FacadeCorrelator is Correlator
+    assert FacadeAssessment is Assessment
+    assert FacadeAssessor is Assessor
+
+
 def test_correlator_and_risk_assessor_are_independently_callable():
     alarms = [
         SecurityAlarm(
