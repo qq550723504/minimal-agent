@@ -228,6 +228,32 @@ def test_risk_classes_are_compatibly_exported_from_new_module():
     assert LegacyRiskAssessor is NewRiskAssessor
 
 
+def test_mock_fixture_builders_are_importable_and_preserve_seeded_events():
+    from plugins.park_security.server.mock_fixtures import (
+        build_event,
+        build_mock_alarms,
+        build_timeline,
+    )
+
+    alarms = build_mock_alarms()
+    groups = EventCorrelator().correlate(alarms.values())
+    events = [build_event(group, RiskAssessor().assess(group)) for group in groups]
+    fire_alarms = {
+        alarm.alarm_type: alarm
+        for alarm in alarms.values()
+        if alarm.area_id == "area-plant-01"
+    }
+    fire_timeline, _ = build_timeline("fire_alarm_and_equipment_fault", fire_alarms)
+
+    assert len(alarms) == 8
+    assert [event.event_id for event in events] == [
+        "event-night-001",
+        "event-access-002",
+        "event-fire-003",
+    ]
+    assert {item.source for item in fire_timeline} == {"fire", "device"}
+
+
 def test_correlator_and_risk_assessor_are_independently_callable():
     alarms = [
         SecurityAlarm(
