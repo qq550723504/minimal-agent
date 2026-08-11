@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 from datetime import datetime
+import inspect
 
 import pytest
 from pydantic import ValidationError
@@ -16,6 +17,38 @@ from plugins.park_security.server.models import (
 )
 from plugins.park_security.server.mock_repository import MockSecurityRepository
 from plugins.park_security.server.service import SecurityService
+
+
+def test_mcp_handlers_have_explicit_parameters_and_expected_names():
+    from mcp.server import MCPServer
+    from plugins.park_security.server.main import (
+        close_event,
+        confirm_event,
+        create_work_order,
+        get_event_detail,
+        get_event_summary,
+        get_shift_context,
+        list_events,
+        mcp,
+    )
+
+    handlers = [
+        get_event_summary,
+        list_events,
+        get_event_detail,
+        get_shift_context,
+        confirm_event,
+        create_work_order,
+        close_event,
+    ]
+    assert isinstance(mcp, MCPServer)
+    assert all(
+        parameter.kind is not inspect.Parameter.VAR_KEYWORD
+        for handler in handlers
+        for parameter in inspect.signature(handler).parameters.values()
+    )
+    assert "operator_id" in inspect.signature(confirm_event).parameters
+    assert "assignee" in inspect.signature(create_work_order).parameters
 
 
 def test_settings_defaults_to_loopback_mock(monkeypatch):
