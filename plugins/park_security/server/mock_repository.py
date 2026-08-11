@@ -1,14 +1,131 @@
 from __future__ import annotations
 
-from typing import Any
+from dataclasses import dataclass
+from datetime import datetime, timedelta
+from typing import Any, Iterable
 
 from plugins.park_security.server.models import (
     AuditRecord,
     EvidenceItem,
+    RiskLevel,
     SecurityAlarm,
     SecurityEvent,
     WorkOrder,
 )
+
+
+@dataclass(frozen=True)
+class CorrelatedAlarmGroup:
+    """A time-and-space-associated alarm group with a classified scenario."""
+
+    scenario: str
+    alarms: tuple[SecurityAlarm, ...]
+
+
+@dataclass(frozen=True)
+class RiskAssessment:
+    risk_level: RiskLevel
+    impact_scope: tuple[str, ...]
+    recommended_plan: str
+    responsible_party: str
+    evidence_completeness: float
+
+
+class EventCorrelator:
+    """Correlate raw alarms by park, building, area, and a fixed time window."""
+
+    _REQUIRED_ALARM_TYPES = {
+        "night_abnormal_access": {"after_hours_access", "person_detected"},
+        "access_failure_and_loitering": {
+            "repeated_access_failure",
+            "loitering_report",
+            "loitering_detected",
+        },
+        "fire_alarm_and_equipment_fault": {
+            "smoke_detected",
+            "temperature_rise",
+            "ventilation_device_fault",
+        },
+    }
+
+    def __init__(self, window: timedelta = timedelta(minutes=10)) -> None:
+        self.window = window
+
+    def correlate(self, alarms: Iterable[SecurityAlarm]) -> list[CorrelatedAlarmGroup]:
+        spatial_groups: dict[tuple[str, str | None, str | None], list[SecurityAlarm]] = {}
+        for alarm in alarms:
+            key = (alarm.park_id, alarm.building_id, alarm.area_id)
+            spatial_groups.setdefault(key, []).append(alarm.model_copy(deep=True))
+
+        correlated: list[CorrelatedAlarmGroup] = []
+        for spatial_alarms in spatial_groups.values():
+            ordered = sorted(spatial_alarms, key=lambda alarm: alarm.occurred_at)
+            current: list[SecurityAlarm] = []
+            for alarm in ordered:
+                if current and self._occurred_at(alarm) - self._occurred_at(current[0]) > self.window:
+                    group = self._classify(current)
+                    if group is not None:
+                        correlated.append(group)
+                    current = []
+                current.append(alarm)
+            group = self._classify(current)
+            if group is not None:
+                correlated.append(group)
+
+        return sorted(correlated, key=lambda group: group.alarms[0].occurred_at)
+
+    @classmethod
+    def _classify(cls, alarms: list[SecurityAlarm]) -> CorrelatedAlarmGroup | None:
+        alarm_types = {alarm.alarm_type for alarm in alarms}
+        for scenario, required_types in cls._REQUIRED_ALARM_TYPES.items():
+            if required_types <= alarm_types:
+                return CorrelatedAlarmGroup(scenario=scenario, alarms=tuple(alarms))
+        return None
+
+    @staticmethod
+    def _occurred_at(alarm: SecurityAlarm) -> datetime:
+        return datetime.fromisoformat(alarm.occurred_at)
+
+
+class RiskAssessor:
+    """Apply explicit deterministic risk and response rules to a correlated group."""
+
+    def assess(self, group: CorrelatedAlarmGroup) -> RiskAssessment:
+        first = group.alarms[0]
+        base_scope = tuple(value for value in (first.building_id, first.area_id) if value)
+        if group.scenario == "night_abnormal_access":
+            return RiskAssessment(
+                risk_level="high",
+                impact_scope=(*base_scope, "night-research-zone"),
+                recommended_plan="night_access_verification",
+                responsible_party="team-night",
+                evidence_completeness=0.92,
+            )
+        if group.scenario == "access_failure_and_loitering":
+            attempts = max(
+                (
+                    int(alarm.payload.get("attempt_count", 1))
+                    for alarm in group.alarms
+                    if alarm.alarm_type == "repeated_access_failure"
+                ),
+                default=1,
+            )
+            return RiskAssessment(
+                risk_level="high" if attempts > 1 else "medium",
+                impact_scope=(*base_scope, "visitor-entry-route"),
+                recommended_plan="verify_visitor_appointment_and_dispatch_patrol",
+                responsible_party="team-access",
+                evidence_completeness=0.88,
+            )
+        if group.scenario == "fire_alarm_and_equipment_fault":
+            return RiskAssessment(
+                risk_level="critical",
+                impact_scope=(*base_scope, "mechanical-room", "evacuation-zone-a"),
+                recommended_plan="fire_emergency_response",
+                responsible_party="team-fire",
+                evidence_completeness=0.97,
+            )
+        raise ValueError("unsupported_security_scenario")
 
 
 def _evidence(
@@ -38,8 +155,14 @@ def _audit(
 class MockSecurityRepository:
     """Deterministic in-memory security data for the park-security mock server."""
 
-    def __init__(self) -> None:
+    def __init__(
+        self,
+        correlator: EventCorrelator | None = None,
+        risk_assessor: RiskAssessor | None = None,
+    ) -> None:
         self._alarms = self._build_alarms()
+        self._correlator = correlator or EventCorrelator()
+        self._risk_assessor = risk_assessor or RiskAssessor()
         self._events = self._build_events()
         self._work_orders: dict[str, WorkOrder] = {}
 
@@ -84,6 +207,25 @@ class MockSecurityRepository:
         stored_event.status = "work_order_created"
         self._events[event_id] = stored_event
         return work_order.model_copy(deep=True)
+
+    def close_work_order(self, work_order_id: str, closed_at: str) -> WorkOrder:
+        work_order = self._work_orders.get(work_order_id)
+        if work_order is None:
+            raise ValueError("work_order_not_found")
+
+        closed = work_order.model_copy(
+            update={"status": "closed", "closed_at": closed_at}, deep=True
+        )
+        self._work_orders[work_order_id] = closed
+        event = self._events[closed.event_id].model_copy(deep=True)
+        event.work_orders = [
+            closed.model_copy(deep=True)
+            if item.work_order_id == work_order_id
+            else item
+            for item in event.work_orders
+        ]
+        self._events[event.event_id] = event
+        return closed.model_copy(deep=True)
 
     def list_shift_context(self, park_id: str, area_id: str | None) -> dict[str, Any]:
         focus_area = area_id or "area-lab-01"
@@ -148,6 +290,7 @@ class MockSecurityRepository:
                 occurred_at="2026-08-11T00:42:00Z",
                 alarm_type="repeated_access_failure",
                 severity="medium",
+                payload={"attempt_count": 3},
             ),
             "alarm-patrol-001": SecurityAlarm(
                 alarm_id="alarm-patrol-001",
@@ -206,70 +349,133 @@ class MockSecurityRepository:
             ),
         }
 
+    def _build_events(self) -> dict[str, SecurityEvent]:
+        events = [
+            self._build_event(group, self._risk_assessor.assess(group))
+            for group in self._correlator.correlate(self._alarms.values())
+        ]
+        return {event.event_id: event for event in events}
+
     @staticmethod
-    def _build_events() -> dict[str, SecurityEvent]:
-        return {
-            "event-night-001": SecurityEvent(
-                event_id="event-night-001",
-                park_id="park-1",
-                building_id="building-a",
-                area_id="area-lab-01",
-                scenario="night_abnormal_access",
-                risk_level="high",
-                first_occurred_at="2026-08-11T00:12:00Z",
-                last_occurred_at="2026-08-11T00:14:00Z",
-                alarm_ids=["alarm-access-001", "alarm-video-001"],
-                impact_scope=["building-a", "area-lab-01", "night-research-zone"],
-                recommended_plan="night_access_verification",
-                responsible_party="team-night",
-                evidence_completeness=0.92,
-                timeline=[
-                    _evidence("evidence-night-access", "access_control", "2026-08-11T00:12:00Z", "After-hours access attempt denied.", "access://door-lab-01/log/001"),
-                    _evidence("evidence-night-video", "video", "2026-08-11T00:14:00Z", "Person detected near laboratory door.", "s3://park-security/screenshots/night-001.jpg"),
-                    _evidence("evidence-night-shift", "shift", "2026-08-11T00:15:00Z", "Guard-01 is assigned to the north patrol route.", "shift://2026-08-11/guard-01"),
-                ],
-                audit_records=[_audit("audit-night-001", "event-night-001", "guard-01", "event_created", "2026-08-11T00:15:00Z")],
-            ),
-            "event-access-002": SecurityEvent(
-                event_id="event-access-002",
-                park_id="park-1",
-                building_id="building-a",
-                area_id="area-gate-02",
-                scenario="access_failure_and_loitering",
-                risk_level="high",
-                first_occurred_at="2026-08-11T00:42:00Z",
-                last_occurred_at="2026-08-11T00:49:00Z",
-                alarm_ids=["alarm-access-002", "alarm-patrol-001", "alarm-video-002"],
-                impact_scope=["building-a", "area-gate-02", "visitor-entry-route"],
-                recommended_plan="verify_visitor_appointment_and_dispatch_patrol",
-                responsible_party="team-access",
-                evidence_completeness=0.88,
-                timeline=[
-                    _evidence("evidence-access-reader", "access_control", "2026-08-11T00:42:00Z", "Three failed credential attempts recorded.", "access://gate-reader-02/log/002"),
-                    _evidence("evidence-access-video", "video", "2026-08-11T00:49:00Z", "Person remained at gate after denial.", "s3://park-security/screenshots/access-002.jpg"),
-                    _evidence("evidence-access-appointment", "appointment", "2026-08-11T00:50:00Z", "No active visitor appointment matched the credential.", "appointment://gate-02/lookup/002"),
-                ],
-                audit_records=[_audit("audit-access-002", "event-access-002", "guard-01", "event_created", "2026-08-11T00:50:00Z")],
-            ),
-            "event-fire-003": SecurityEvent(
-                event_id="event-fire-003",
-                park_id="park-1",
-                building_id="building-a",
-                area_id="area-plant-01",
-                scenario="fire_alarm_and_equipment_fault",
-                risk_level="critical",
-                first_occurred_at="2026-08-11T01:02:00Z",
-                last_occurred_at="2026-08-11T01:04:00Z",
-                alarm_ids=["alarm-fire-001", "alarm-fire-002", "alarm-fire-003"],
-                impact_scope=["building-a", "area-plant-01", "mechanical-room", "evacuation-zone-a"],
-                recommended_plan="fire_emergency_response",
-                responsible_party="team-fire",
-                evidence_completeness=0.97,
-                timeline=[
-                    _evidence("evidence-fire-smoke", "fire", "2026-08-11T01:02:00Z", "Smoke detector alarmed in plant room.", "fire://smoke-plant-01/event/003"),
-                    _evidence("evidence-fire-temperature", "fire", "2026-08-11T01:03:00Z", "Temperature rose above the fire threshold.", "fire://temp-plant-01/event/003"),
-                    _evidence("evidence-fire-device", "device", "2026-08-11T01:04:00Z", "Ventilation fan reported a fault state.", "device://fan-plant-01/status/003"),
-                ],
-                audit_records=[_audit("audit-fire-003", "event-fire-003", "guard-01", "event_created", "2026-08-11T01:05:00Z")],
-            ),
+    def _build_event(
+        group: CorrelatedAlarmGroup, assessment: RiskAssessment
+    ) -> SecurityEvent:
+        event_ids = {
+            "night_abnormal_access": "event-night-001",
+            "access_failure_and_loitering": "event-access-002",
+            "fire_alarm_and_equipment_fault": "event-fire-003",
         }
+        event_id = event_ids[group.scenario]
+        alarms = {alarm.alarm_type: alarm for alarm in group.alarms}
+        first = group.alarms[0]
+        timeline, audit_at = MockSecurityRepository._build_timeline(group.scenario, alarms)
+        return SecurityEvent(
+            event_id=event_id,
+            park_id=first.park_id,
+            building_id=first.building_id,
+            area_id=first.area_id,
+            scenario=group.scenario,
+            risk_level=assessment.risk_level,
+            first_occurred_at=min(alarm.occurred_at for alarm in group.alarms),
+            last_occurred_at=max(alarm.occurred_at for alarm in group.alarms),
+            alarm_ids=[alarm.alarm_id for alarm in group.alarms],
+            impact_scope=list(assessment.impact_scope),
+            recommended_plan=assessment.recommended_plan,
+            responsible_party=assessment.responsible_party,
+            evidence_completeness=assessment.evidence_completeness,
+            timeline=timeline,
+            audit_records=[
+                _audit(
+                    f"audit-{event_id.removeprefix('event-')}",
+                    event_id,
+                    "guard-01",
+                    "event_created",
+                    audit_at,
+                )
+            ],
+        )
+
+    @staticmethod
+    def _build_timeline(
+        scenario: str, alarms: dict[str, SecurityAlarm]
+    ) -> tuple[list[EvidenceItem], str]:
+        if scenario == "night_abnormal_access":
+            access = alarms["after_hours_access"]
+            video = alarms["person_detected"]
+            return ([
+                _evidence(
+                    "evidence-night-access",
+                    "access_control",
+                    access.occurred_at,
+                    "After-hours access attempt denied.",
+                    f"access://{access.device_id}/log/001",
+                ),
+                _evidence(
+                    "evidence-night-video",
+                    "video",
+                    video.occurred_at,
+                    "Person detected near laboratory door.",
+                    "s3://park-security/screenshots/night-001.jpg",
+                ),
+                _evidence(
+                    "evidence-night-shift",
+                    "shift",
+                    "2026-08-11T00:15:00Z",
+                    "Guard-01 is assigned to the north patrol route.",
+                    "shift://2026-08-11/guard-01",
+                ),
+            ], "2026-08-11T00:15:00Z")
+        if scenario == "access_failure_and_loitering":
+            access = alarms["repeated_access_failure"]
+            video = alarms["loitering_detected"]
+            return ([
+                _evidence(
+                    "evidence-access-reader",
+                    "access_control",
+                    access.occurred_at,
+                    "Three failed credential attempts recorded.",
+                    f"access://{access.device_id}/log/002",
+                ),
+                _evidence(
+                    "evidence-access-video",
+                    "video",
+                    video.occurred_at,
+                    "Person remained at gate after denial.",
+                    "s3://park-security/screenshots/access-002.jpg",
+                ),
+                _evidence(
+                    "evidence-access-appointment",
+                    "appointment",
+                    "2026-08-11T00:50:00Z",
+                    "No active visitor appointment matched the credential.",
+                    "appointment://gate-02/lookup/002",
+                ),
+            ], "2026-08-11T00:50:00Z")
+        if scenario == "fire_alarm_and_equipment_fault":
+            smoke = alarms["smoke_detected"]
+            temperature = alarms["temperature_rise"]
+            device = alarms["ventilation_device_fault"]
+            return ([
+                _evidence(
+                    "evidence-fire-smoke",
+                    "fire",
+                    smoke.occurred_at,
+                    "Smoke detector alarmed in plant room.",
+                    f"fire://{smoke.device_id}/event/003",
+                ),
+                _evidence(
+                    "evidence-fire-temperature",
+                    "fire",
+                    temperature.occurred_at,
+                    "Temperature rose above the fire threshold.",
+                    f"fire://{temperature.device_id}/event/003",
+                ),
+                _evidence(
+                    "evidence-fire-device",
+                    "device",
+                    device.occurred_at,
+                    "Ventilation fan reported a fault state.",
+                    f"device://{device.device_id}/status/003",
+                ),
+            ], "2026-08-11T01:05:00Z")
+        raise ValueError("unsupported_security_scenario")

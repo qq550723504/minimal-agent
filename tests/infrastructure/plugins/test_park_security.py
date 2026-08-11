@@ -11,13 +11,18 @@ from pydantic import ValidationError
 
 from plugins.park_security.server.config import Settings
 from plugins.park_security.server.models import (
+    CloseEventAction,
     CreateWorkOrder,
     EventAction,
     EventListQuery,
     SecurityAlarm,
     SecurityEvent,
 )
-from plugins.park_security.server.mock_repository import MockSecurityRepository
+from plugins.park_security.server.mock_repository import (
+    EventCorrelator,
+    MockSecurityRepository,
+    RiskAssessor,
+)
 from plugins.park_security.server.service import SecurityService
 
 
@@ -32,6 +37,11 @@ def test_compose_wires_agent_to_park_security_service():
     )
     assert agent["depends_on"]["park_security"]["condition"] == "service_healthy"
     assert security["environment"]["PARK_SECURITY_DATA_MODE"] == "${PARK_SECURITY_DATA_MODE:-mock}"
+    assert "PARK_SECURITY_APPROVAL_TOKEN" not in agent["environment"]
+    assert (
+        security["environment"]["PARK_SECURITY_APPROVAL_TOKEN"]
+        == "${PARK_SECURITY_APPROVAL_TOKEN:-}"
+    )
 
 
 def test_mcp_handlers_have_explicit_parameters_and_expected_names():
@@ -64,17 +74,24 @@ def test_mcp_handlers_have_explicit_parameters_and_expected_names():
     )
     assert "operator_id" in inspect.signature(confirm_event).parameters
     assert "assignee" in inspect.signature(create_work_order).parameters
+    assert all(
+        "approval_token" in inspect.signature(handler).parameters
+        for handler in (confirm_event, create_work_order, close_event)
+    )
+    assert inspect.signature(close_event).parameters["note"].default is inspect.Parameter.empty
 
 
 def test_settings_defaults_to_loopback_mock(monkeypatch):
     monkeypatch.delenv("PARK_SECURITY_MCP_HOST", raising=False)
     monkeypatch.delenv("PARK_SECURITY_DATA_MODE", raising=False)
+    monkeypatch.delenv("PARK_SECURITY_APPROVAL_TOKEN", raising=False)
 
     settings = Settings.from_env()
 
     assert settings.host == "127.0.0.1"
     assert settings.port == 8200
     assert settings.data_mode == "mock"
+    assert settings.approval_token is None
 
 
 def test_settings_rejects_non_mock_data_mode(monkeypatch):
@@ -85,10 +102,54 @@ def test_settings_rejects_non_mock_data_mode(monkeypatch):
 
 
 def test_action_models_require_operator_and_assignee():
-    assert EventAction(event_id="event-night-001", operator_id="guard-01").operator_id == "guard-01"
-    assert CreateWorkOrder(
-        event_id="event-night-001", operator_id="guard-01", assignee="team-night"
-    ).assignee == "team-night"
+    action = EventAction(
+        event_id="event-night-001",
+        operator_id="  guard-01  ",
+        approval_token="  approved  ",
+    )
+    work_order = CreateWorkOrder(
+        event_id="event-night-001",
+        operator_id="guard-01",
+        assignee="  team-night  ",
+        approval_token="approved",
+    )
+
+    assert action.operator_id == "guard-01"
+    assert action.approval_token == "approved"
+    assert work_order.assignee == "team-night"
+
+
+@pytest.mark.parametrize("field", ["operator_id", "approval_token"])
+def test_event_action_rejects_blank_credentials(field):
+    values = {
+        "event_id": "event-night-001",
+        "operator_id": "guard-01",
+        "approval_token": "approved",
+    }
+    values[field] = "   "
+
+    with pytest.raises(ValidationError):
+        EventAction(**values)
+
+
+def test_create_work_order_rejects_blank_assignee():
+    with pytest.raises(ValidationError):
+        CreateWorkOrder(
+            event_id="event-night-001",
+            operator_id="guard-01",
+            assignee="  ",
+            approval_token="approved",
+        )
+
+
+def test_close_event_requires_non_blank_disposition_note():
+    with pytest.raises(ValidationError):
+        CloseEventAction(
+            event_id="event-night-001",
+            operator_id="guard-01",
+            approval_token="approved",
+            note="  ",
+        )
 
 
 def test_security_event_defaults_to_open_with_empty_collections():
@@ -126,6 +187,55 @@ def test_repository_exposes_three_correlated_mock_scenarios():
     assert len(access.alarm_ids) == 3
     assert fire.risk_level == "critical"
     assert {item.source for item in fire.timeline} >= {"fire", "device"}
+
+
+def test_correlator_and_risk_assessor_are_independently_callable():
+    alarms = [
+        SecurityAlarm(
+            alarm_id="access-1",
+            source="access_control",
+            park_id="park-test",
+            building_id="building-test",
+            area_id="area-test",
+            occurred_at="2026-08-11T02:00:00Z",
+            alarm_type="repeated_access_failure",
+            severity="medium",
+            payload={"attempt_count": 1},
+        ),
+        SecurityAlarm(
+            alarm_id="patrol-1",
+            source="patrol",
+            park_id="park-test",
+            building_id="building-test",
+            area_id="area-test",
+            occurred_at="2026-08-11T02:04:00Z",
+            alarm_type="loitering_report",
+            severity="medium",
+        ),
+        SecurityAlarm(
+            alarm_id="video-1",
+            source="video",
+            park_id="park-test",
+            building_id="building-test",
+            area_id="area-test",
+            occurred_at="2026-08-11T02:06:00Z",
+            alarm_type="loitering_detected",
+            severity="medium",
+        ),
+    ]
+
+    groups = EventCorrelator().correlate(alarms)
+    assessment = RiskAssessor().assess(groups[0])
+
+    assert len(groups) == 1
+    assert groups[0].scenario == "access_failure_and_loitering"
+    assert [alarm.alarm_id for alarm in groups[0].alarms] == [
+        "access-1",
+        "patrol-1",
+        "video-1",
+    ]
+    assert assessment.risk_level == "medium"
+    assert assessment.recommended_plan == "verify_visitor_appointment_and_dispatch_patrol"
 
 
 def test_repository_returns_deep_copies_when_reading_and_saving_events():
@@ -243,17 +353,26 @@ def test_service_exposes_shift_context_in_response_envelope():
     assert context["raw"] == context["data"]
 
 
-def test_service_requires_confirmation_before_work_order_and_records_audit():
+def test_service_requires_confirmation_before_work_order_and_records_audit(monkeypatch):
     """Catch skipped state validation, persistence, audit entries, or review report creation."""
+    monkeypatch.setenv("PARK_SECURITY_APPROVAL_TOKEN", "human-approved")
     service = SecurityService(MockSecurityRepository())
-    action = EventAction(event_id="event-night-001", operator_id="guard-01", note="现场核验")
+    action = EventAction(
+        event_id="event-night-001",
+        operator_id="guard-01",
+        approval_token="human-approved",
+        note="现场核验",
+    )
     work_order_action = CreateWorkOrder(**action.model_dump(), assignee="team-night")
+    close_action = CloseEventAction(
+        **action.model_dump(exclude={"note"}), note="现已排除异常，恢复常态巡更"
+    )
 
     with pytest.raises(ValueError, match="event_not_confirmed"):
         asyncio.run(service.create_work_order(work_order_action))
     confirmed = asyncio.run(service.confirm_event(action))
     created = asyncio.run(service.create_work_order(work_order_action))
-    closed = asyncio.run(service.close_event(action))
+    closed = asyncio.run(service.close_event(close_action))
 
     assert confirmed["data"]["status"] == "confirmed"
     assert created["data"]["status"] == "work_order_created"
@@ -261,19 +380,74 @@ def test_service_requires_confirmation_before_work_order_and_records_audit():
         "event_created", "confirmed", "work_order_created", "closed"
     ]
     assert closed["data"]["status"] == "closed"
+    assert closed["data"]["work_orders"] == [{
+        "work_order_id": "wo-event-night-001",
+        "event_id": "event-night-001",
+        "status": "closed",
+        "assignee": "team-night",
+        "operator_id": "guard-01",
+        "created_at": "2026-08-11T01:20:00Z",
+        "closed_at": "2026-08-11T01:30:00Z",
+        "note": "现场核验",
+    }]
     assert closed["data"]["review_report"] == {
         "event_id": "event-night-001",
         "final_risk_level": "high",
+        "disposition": "现已排除异常，恢复常态巡更",
         "handling_process": ["event_created", "confirmed", "work_order_created", "closed"],
+        "timeline": closed["data"]["timeline"],
         "evidence_completeness": 0.92,
         "closed_at": "2026-08-11T01:30:00Z",
     }
 
 
-def test_service_rejects_invalid_closure_states_and_missing_events():
+def test_write_actions_require_configured_matching_approval_token(monkeypatch):
+    action = EventAction(
+        event_id="event-night-001",
+        operator_id="guard-01",
+        approval_token="presented-token",
+    )
+    write_actions = [
+        ("confirm_event", action),
+        (
+            "create_work_order",
+            CreateWorkOrder(**action.model_dump(), assignee="team-night"),
+        ),
+        (
+            "close_event",
+            CloseEventAction(
+                **action.model_dump(exclude={"note"}), note="现场处置完成"
+            ),
+        ),
+    ]
+
+    monkeypatch.delenv("PARK_SECURITY_APPROVAL_TOKEN", raising=False)
+    for method_name, write_action in write_actions:
+        service = SecurityService(MockSecurityRepository())
+        with pytest.raises(ValueError, match="approval_not_configured"):
+            asyncio.run(getattr(service, method_name)(write_action))
+
+    monkeypatch.setenv("PARK_SECURITY_APPROVAL_TOKEN", "expected-token")
+    for method_name, write_action in write_actions:
+        service = SecurityService(MockSecurityRepository())
+        with pytest.raises(ValueError, match="approval_denied"):
+            asyncio.run(getattr(service, method_name)(write_action))
+
+    approved_action = action.model_copy(update={"approval_token": "expected-token"})
+    result = asyncio.run(SecurityService(MockSecurityRepository()).confirm_event(approved_action))
+    assert result["data"]["status"] == "confirmed"
+
+
+def test_service_rejects_invalid_closure_states_and_missing_events(monkeypatch):
     """Catch closure from open events and missing-event handling that returns partial data."""
+    monkeypatch.setenv("PARK_SECURITY_APPROVAL_TOKEN", "human-approved")
     service = SecurityService(MockSecurityRepository())
-    action = EventAction(event_id="event-access-002", operator_id="guard-01")
+    action = CloseEventAction(
+        event_id="event-access-002",
+        operator_id="guard-01",
+        approval_token="human-approved",
+        note="现场处置完成",
+    )
 
     with pytest.raises(ValueError, match="event_not_closable"):
         asyncio.run(service.close_event(action))

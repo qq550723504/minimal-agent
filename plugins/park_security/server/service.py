@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 from collections import Counter
+import os
+import secrets
 from typing import Any
 
 from plugins.park_security.server.mock_repository import MockSecurityRepository
 from plugins.park_security.server.models import (
     AuditRecord,
+    CloseEventAction,
     CreateWorkOrder,
     EventAction,
     EventListQuery,
@@ -21,8 +24,18 @@ class SecurityService:
     _CLOSED_AT = "2026-08-11T01:30:00Z"
     _RISK_SCORES = {"low": 1, "medium": 2, "high": 3, "critical": 4}
 
-    def __init__(self, repository: MockSecurityRepository) -> None:
+    def __init__(
+        self,
+        repository: MockSecurityRepository,
+        approval_token: str | None = None,
+    ) -> None:
         self.repository = repository
+        configured_token = (
+            approval_token
+            if approval_token is not None
+            else os.getenv("PARK_SECURITY_APPROVAL_TOKEN", "")
+        )
+        self._approval_token = configured_token.strip() or None
 
     async def get_event_summary(self, park_id: str) -> dict[str, Any]:
         events = self.repository.list_events(park_id)
@@ -63,6 +76,7 @@ class SecurityService:
         return wrap_response(self.repository.list_shift_context(park_id, area_id))
 
     async def confirm_event(self, action: EventAction) -> dict[str, Any]:
+        self._require_approval(action)
         event = self._require_event(action.event_id)
         if event.status != "open":
             raise ValueError("event_not_open")
@@ -72,6 +86,7 @@ class SecurityService:
         return wrap_response(self._event_detail(self.repository.save_event(event)))
 
     async def create_work_order(self, action: CreateWorkOrder) -> dict[str, Any]:
+        self._require_approval(action)
         event = self._require_event(action.event_id)
         if event.status != "confirmed":
             raise ValueError("event_not_confirmed")
@@ -86,14 +101,31 @@ class SecurityService:
         )
         return wrap_response(self._event_detail(self.repository.save_event(event)))
 
-    async def close_event(self, action: EventAction) -> dict[str, Any]:
+    async def close_event(self, action: CloseEventAction) -> dict[str, Any]:
+        self._require_approval(action)
         event = self._require_event(action.event_id)
         if event.status not in {"confirmed", "work_order_created"}:
             raise ValueError("event_not_closable")
+        if event.work_order_id is not None:
+            closed_work_order = self.repository.close_work_order(
+                event.work_order_id, self._CLOSED_AT
+            )
+            event.work_orders = [
+                closed_work_order
+                if item.work_order_id == closed_work_order.work_order_id
+                else item
+                for item in event.work_orders
+            ]
         event.status = "closed"
         event.closed_at = self._CLOSED_AT
         event.audit_records.append(self._audit("closed", action, self._CLOSED_AT))
         return wrap_response(self._event_detail(self.repository.save_event(event)))
+
+    def _require_approval(self, action: EventAction) -> None:
+        if self._approval_token is None:
+            raise ValueError("approval_not_configured")
+        if not secrets.compare_digest(action.approval_token, self._approval_token):
+            raise ValueError("approval_denied")
 
     def _require_event(self, event_id: str) -> SecurityEvent:
         event = self.repository.get_event(event_id)
@@ -146,10 +178,15 @@ class SecurityService:
 
     @staticmethod
     def _review_report(event: SecurityEvent) -> dict[str, Any]:
+        closed_record = next(
+            record for record in reversed(event.audit_records) if record.action == "closed"
+        )
         return {
             "event_id": event.event_id,
             "final_risk_level": event.risk_level,
+            "disposition": closed_record.note,
             "handling_process": [record.action for record in event.audit_records],
+            "timeline": [item.model_dump(mode="json") for item in event.timeline],
             "evidence_completeness": event.evidence_completeness,
             "closed_at": event.closed_at,
         }

@@ -18,6 +18,7 @@
 $env:PARK_SECURITY_DATA_MODE = "mock"
 $env:PARK_SECURITY_MCP_HOST = "127.0.0.1"
 $env:PARK_SECURITY_MCP_PORT = "8200"
+$env:PARK_SECURITY_APPROVAL_TOKEN = "<由人工审批系统签发的非空凭证>"
 python -m plugins.park_security.server.main
 ```
 
@@ -33,7 +34,15 @@ MCP 端点为 `http://127.0.0.1:8200/mcp`。Compose 会将该端点发布到宿�
 - `security.create_work_order`：为已确认事件创建工单。
 - `security.close_event`：由具名操作员关闭已处置事件。
 
-后三个工具具有副作用；调用方必须完成自身的身份、园区和权限校验，并在未知执行结果时人工核查，不能自动重放。
+后三个工具具有副作用，且都要求显式传入非空 `approval_token`。服务只接受与
+`PARK_SECURITY_APPROVAL_TOKEN` 完全匹配的凭证；未配置服务端凭证或凭证不匹配时，
+写操作会被拒绝，前四个只读工具不受影响。`close_event` 还必须提供非空处置说明
+`note`。
+
+审批凭证必须由可信的人工审批客户端在确认操作后附加，不得注入 Planner、用户提示词
+或 agent 容器环境。Compose 只把 `PARK_SECURITY_APPROVAL_TOKEN` 传给
+`park_security` 服务。调用方还必须完成身份、园区和权限校验，并在未知执行结果时人工
+核查，不能自动重放。
 
 ## 数据边界
 

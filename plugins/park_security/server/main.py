@@ -6,12 +6,12 @@ from mcp.server import MCPServer
 
 from .config import Settings
 from .mock_repository import MockSecurityRepository
-from .models import CreateWorkOrder, EventAction, EventListQuery
+from .models import CloseEventAction, CreateWorkOrder, EventAction, EventListQuery
 from .service import SecurityService
 
 
 settings = Settings.from_env()
-service = SecurityService(MockSecurityRepository())
+service = SecurityService(MockSecurityRepository(), approval_token=settings.approval_token)
 mcp = MCPServer("park-security")
 
 
@@ -55,11 +55,17 @@ async def get_shift_context(
 
 @mcp.tool(name="security.confirm_event")
 async def confirm_event(
-    event_id: str, operator_id: str, note: str | None = None
+    event_id: str,
+    operator_id: str,
+    approval_token: str,
+    note: str | None = None,
 ) -> dict[str, Any]:
     """Confirm an open security event after human review."""
     return await service.confirm_event(EventAction(
-        event_id=event_id, operator_id=operator_id, note=note
+        event_id=event_id,
+        operator_id=operator_id,
+        approval_token=approval_token,
+        note=note,
     ))
 
 
@@ -68,6 +74,7 @@ async def create_work_order(
     event_id: str,
     operator_id: str,
     assignee: str,
+    approval_token: str,
     note: str | None = None,
 ) -> dict[str, Any]:
     """Create a work order for a confirmed security event."""
@@ -75,17 +82,24 @@ async def create_work_order(
         event_id=event_id,
         operator_id=operator_id,
         assignee=assignee,
+        approval_token=approval_token,
         note=note,
     ))
 
 
 @mcp.tool(name="security.close_event")
 async def close_event(
-    event_id: str, operator_id: str, note: str | None = None
+    event_id: str,
+    operator_id: str,
+    approval_token: str,
+    note: str,
 ) -> dict[str, Any]:
     """Close a confirmed or remediated security event."""
-    return await service.close_event(EventAction(
-        event_id=event_id, operator_id=operator_id, note=note
+    return await service.close_event(CloseEventAction(
+        event_id=event_id,
+        operator_id=operator_id,
+        approval_token=approval_token,
+        note=note,
     ))
 
 

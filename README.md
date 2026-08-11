@@ -110,6 +110,7 @@ curl http://localhost:8001/
 - `PARK_SECURITY_DATA_MODE`: `park_security` 数据模式；当前仅支持 `mock`，Compose 开发环境默认为 `mock`。
 - `PARK_SECURITY_MCP_URL`: agent 连接园区安防 MCP 的地址；Compose 默认容器网络地址为 `http://park_security:8200/mcp`。
 - `PARK_SECURITY_MCP_TOKEN`: 可选的园区安防 MCP `Authorization` Header 值；不要写入插件清单或提交到仓库。
+- `PARK_SECURITY_APPROVAL_TOKEN`: 园区安防服务校验人工写操作的审批凭证；为空时三个写工具全部拒绝。Compose 只把它传给 `park_security`，不得注入 Planner、提示词或 agent 环境；人工审批客户端调用写工具时须显式传入匹配的 `approval_token`。
 
 插件、Skill 与 MCP 运行时：
 

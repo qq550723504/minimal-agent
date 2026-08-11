@@ -2,11 +2,12 @@ from __future__ import annotations
 
 from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, StringConstraints
 
 
 EventStatus = Literal["open", "confirmed", "work_order_created", "closed"]
 RiskLevel = Literal["low", "medium", "high", "critical"]
+NonBlankText = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
 
 
 class SecurityAlarm(BaseModel):
@@ -84,12 +85,17 @@ class EventListQuery(BaseModel):
 
 class EventAction(BaseModel):
     event_id: str = Field(min_length=1)
-    operator_id: str = Field(min_length=1)
+    operator_id: NonBlankText
+    approval_token: NonBlankText = Field(repr=False)
     note: str | None = None
 
 
 class CreateWorkOrder(EventAction):
-    assignee: str = Field(min_length=1)
+    assignee: NonBlankText
+
+
+class CloseEventAction(EventAction):
+    note: NonBlankText
 
 
 def wrap_response(payload: Any) -> dict[str, Any]:

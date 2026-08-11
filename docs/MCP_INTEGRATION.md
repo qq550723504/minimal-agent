@@ -132,6 +132,7 @@ $env:AGENT_MCP_ALLOWED_HOSTS = "park_security"
 $env:PARK_SECURITY_MCP_URL = "http://park_security:8200/mcp"
 $env:PARK_SECURITY_MCP_TOKEN = ""
 $env:PARK_SECURITY_DATA_MODE = "mock"
+$env:PARK_SECURITY_APPROVAL_TOKEN = "<由人工审批系统签发的非空凭证>"
 docker compose up --build
 ```
 
@@ -145,13 +146,18 @@ $env:AGENT_MCP_ALLOWED_HOSTS = "127.0.0.1"
 $env:PARK_SECURITY_MCP_URL = "http://127.0.0.1:8200/mcp"
 $env:PARK_SECURITY_MCP_TOKEN = ""
 $env:PARK_SECURITY_DATA_MODE = "mock"
+$env:PARK_SECURITY_APPROVAL_TOKEN = "<由人工审批系统签发的非空凭证>"
 ```
 
 安防 mock 提供夜间异常门禁、入口访问失败与徘徊、消防与设备故障三种关联告警场景，以及七个工具：
 `security.get_event_summary`、`security.list_events`、`security.get_event_detail`、
 `security.get_shift_context`、`security.confirm_event`、`security.create_work_order` 和
 `security.close_event`。前四个工具只读；后三个工具有副作用且非幂等，必须由调用方
-进行人工确认、权限校验和未知结果核查。
+进行人工确认、权限校验和未知结果核查。三个写工具均要求人工审批客户端显式提供
+`approval_token`；园区安防服务使用 `PARK_SECURITY_APPROVAL_TOKEN` 做恒定时间比较，
+未配置或不匹配时拒绝写入。该服务端凭证不得进入 Planner、用户提示词或 agent 环境，
+Compose 也只将其传给 `park_security` 服务。`close_event` 还要求非空 `note` 作为处置
+说明；关闭关联事件时，Mock 工单会同步写为 `closed` 并记录固定关闭时间。
 
 生产系统不应把原始视频、人脸或真实工单数据送入该 mock。实际安防 MCP Server 必须
 自行处理敏感数据最小化、园区/租户隔离、授权和工单系统的幂等控制。
