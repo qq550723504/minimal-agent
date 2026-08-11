@@ -60,7 +60,7 @@ class EventCorrelator:
 
         correlated: list[CorrelatedAlarmGroup] = []
         for spatial_alarms in spatial_groups.values():
-            ordered = sorted(spatial_alarms, key=lambda alarm: alarm.occurred_at)
+            ordered = sorted(spatial_alarms, key=self._occurred_at)
             current: list[SecurityAlarm] = []
             for alarm in ordered:
                 if current and self._occurred_at(alarm) - self._occurred_at(current[0]) > self.window:
@@ -73,7 +73,7 @@ class EventCorrelator:
             if group is not None:
                 correlated.append(group)
 
-        return sorted(correlated, key=lambda group: group.alarms[0].occurred_at)
+        return sorted(correlated, key=lambda group: self._occurred_at(group.alarms[0]))
 
     @classmethod
     def _classify(cls, alarms: list[SecurityAlarm]) -> CorrelatedAlarmGroup | None:
@@ -85,7 +85,7 @@ class EventCorrelator:
 
     @staticmethod
     def _occurred_at(alarm: SecurityAlarm) -> datetime:
-        return datetime.fromisoformat(alarm.occurred_at)
+        return parse_timestamp(alarm.occurred_at)
 
 
 class RiskAssessor:
@@ -448,6 +448,7 @@ class MockSecurityRepository:
             ], "2026-08-11T00:15:00Z")
         if scenario == "access_failure_and_loitering":
             access = alarms["repeated_access_failure"]
+            patrol = alarms["loitering_report"]
             video = alarms["loitering_detected"]
             return ([
                 _evidence(
@@ -463,6 +464,13 @@ class MockSecurityRepository:
                     video.occurred_at,
                     "Person remained at gate after denial.",
                     "s3://park-security/screenshots/access-002.jpg",
+                ),
+                _evidence(
+                    "evidence-access-patrol",
+                    "patrol",
+                    patrol.occurred_at,
+                    "Patrol reported continued loitering at the gate.",
+                    f"patrol://{patrol.device_id}/report/002",
                 ),
                 _evidence(
                     "evidence-access-appointment",

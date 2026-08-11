@@ -4,6 +4,7 @@ import asyncio
 from datetime import datetime, timezone
 import inspect
 from pathlib import Path
+from typing import get_type_hints
 
 import pytest
 import yaml
@@ -15,6 +16,8 @@ from plugins.park_security.server.models import (
     CreateWorkOrder,
     EventAction,
     EventListQuery,
+    EventStatus,
+    RiskLevel,
     SecurityAlarm,
     SecurityEvent,
 )
@@ -92,6 +95,14 @@ def test_settings_defaults_to_loopback_mock(monkeypatch):
     assert settings.port == 8200
     assert settings.data_mode == "mock"
     assert settings.approval_token is None
+
+
+def test_mcp_filter_schema_uses_domain_literal_types():
+    from plugins.park_security.server.main import list_events
+
+    hints = get_type_hints(list_events)
+    assert hints["risk_level"] == RiskLevel | None
+    assert hints["status"] == EventStatus | None
 
 
 def test_settings_rejects_non_mock_data_mode(monkeypatch):
@@ -236,6 +247,41 @@ def test_correlator_and_risk_assessor_are_independently_callable():
     ]
     assert assessment.risk_level == "medium"
     assert assessment.recommended_plan == "verify_visitor_appointment_and_dispatch_patrol"
+
+
+def test_correlator_compares_alarm_instants_when_offsets_differ():
+    alarms = [
+        SecurityAlarm(
+            alarm_id="late-access",
+            source="access_control",
+            park_id="park-test",
+            building_id="building-test",
+            area_id="area-test",
+            occurred_at="2026-08-10T23:59:00-10:00",
+            alarm_type="after_hours_access",
+            severity="high",
+        ),
+        SecurityAlarm(
+            alarm_id="early-video",
+            source="video",
+            park_id="park-test",
+            building_id="building-test",
+            area_id="area-test",
+            occurred_at="2026-08-11T00:00:00+10:00",
+            alarm_type="person_detected",
+            severity="high",
+        ),
+    ]
+
+    assert EventCorrelator().correlate(alarms) == []
+
+
+def test_access_event_detail_includes_patrol_evidence():
+    detail = asyncio.run(SecurityService(MockSecurityRepository()).get_event_detail(
+        "event-access-002"
+    ))
+
+    assert any(item["source"] == "patrol" for item in detail["data"]["timeline"])
 
 
 def test_repository_returns_deep_copies_when_reading_and_saving_events():

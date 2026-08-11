@@ -6,7 +6,14 @@ from mcp.server import MCPServer
 
 from .config import Settings
 from .mock_repository import MockSecurityRepository
-from .models import CloseEventAction, CreateWorkOrder, EventAction, EventListQuery
+from .models import (
+    CloseEventAction,
+    CreateWorkOrder,
+    EventAction,
+    EventListQuery,
+    EventStatus,
+    RiskLevel,
+)
 from .service import SecurityService
 
 
@@ -26,8 +33,8 @@ async def list_events(
     park_id: str,
     start_time: str | None = None,
     end_time: str | None = None,
-    risk_level: str | None = None,
-    status: str | None = None,
+    risk_level: RiskLevel | None = None,
+    status: EventStatus | None = None,
 ) -> dict[str, Any]:
     """List event cards after applying the supplied filters."""
     return await service.list_events(EventListQuery(
