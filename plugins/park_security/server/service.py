@@ -12,6 +12,8 @@ from plugins.park_security.server.models import (
     CreateWorkOrder,
     EventAction,
     EventListQuery,
+    normalize_timestamp,
+    parse_timestamp,
     SecurityEvent,
     wrap_response,
 )
@@ -71,9 +73,15 @@ class SecurityService:
         return wrap_response(self._event_detail(self._require_event(event_id)))
 
     async def get_shift_context(
-        self, park_id: str, area_id: str | None = None
+        self,
+        park_id: str,
+        area_id: str | None = None,
+        at_time: str | None = None,
     ) -> dict[str, Any]:
-        return wrap_response(self.repository.list_shift_context(park_id, area_id))
+        query_time = normalize_timestamp(at_time) if at_time else None
+        return wrap_response(
+            self.repository.list_shift_context(park_id, area_id, query_time)
+        )
 
     async def confirm_event(self, action: EventAction) -> dict[str, Any]:
         self._require_approval(action)
@@ -135,9 +143,13 @@ class SecurityService:
 
     @staticmethod
     def _matches(event: SecurityEvent, query: EventListQuery) -> bool:
+        first_occurred_at = parse_timestamp(event.first_occurred_at)
+        last_occurred_at = parse_timestamp(event.last_occurred_at)
+        start_time = parse_timestamp(query.start_time) if query.start_time else None
+        end_time = parse_timestamp(query.end_time) if query.end_time else None
         return (
-            (query.start_time is None or event.first_occurred_at >= query.start_time)
-            and (query.end_time is None or event.last_occurred_at <= query.end_time)
+            (start_time is None or first_occurred_at >= start_time)
+            and (end_time is None or last_occurred_at <= end_time)
             and (query.risk_level is None or event.risk_level == query.risk_level)
             and (query.status is None or event.status == query.status)
         )

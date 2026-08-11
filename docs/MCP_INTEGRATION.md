@@ -151,7 +151,7 @@ $env:PARK_SECURITY_APPROVAL_TOKEN = "<由人工审批系统签发的非空凭证
 
 安防 mock 提供夜间异常门禁、入口访问失败与徘徊、消防与设备故障三种关联告警场景，以及七个工具：
 `security.get_event_summary`、`security.list_events`、`security.get_event_detail`、
-`security.get_shift_context`、`security.confirm_event`、`security.create_work_order` 和
+`security.get_shift_context`（可选 `area_id`、`at_time`）、`security.confirm_event`、`security.create_work_order` 和
 `security.close_event`。前四个工具只读；后三个工具有副作用且非幂等，必须由调用方
 进行人工确认、权限校验和未知结果核查。三个写工具均要求人工审批客户端显式提供
 `approval_token`；园区安防服务使用 `PARK_SECURITY_APPROVAL_TOKEN` 做恒定时间比较，

@@ -11,6 +11,7 @@ from plugins.park_security.server.models import (
     SecurityAlarm,
     SecurityEvent,
     WorkOrder,
+    parse_timestamp,
 )
 
 
@@ -227,19 +228,39 @@ class MockSecurityRepository:
         self._events[event.event_id] = event
         return closed.model_copy(deep=True)
 
-    def list_shift_context(self, park_id: str, area_id: str | None) -> dict[str, Any]:
+    def list_shift_context(
+        self,
+        park_id: str,
+        area_id: str | None,
+        query_time: str | None = None,
+    ) -> dict[str, Any]:
+        if park_id != "park-1":
+            raise ValueError("park_not_found")
+        known_areas = {"area-lab-01", "area-gate-02", "area-plant-01"}
+        if area_id is not None and area_id not in known_areas:
+            raise ValueError("area_not_found")
         focus_area = area_id or "area-lab-01"
+        shift_start = "2026-08-10T16:00:00Z"
+        shift_end = "2026-08-11T08:00:00Z"
+        effective_query_time = query_time or "2026-08-11T01:00:00Z"
+        on_duty = (
+            parse_timestamp(shift_start)
+            <= parse_timestamp(effective_query_time)
+            <= parse_timestamp(shift_end)
+        )
         return {
             "park_id": park_id,
             "focus_area": focus_area,
+            "query_time": effective_query_time,
+            "on_duty": on_duty,
             "key_areas": ["area-lab-01", "area-gate-02", "area-plant-01"],
             "on_duty_guard": {
                 "guard_id": "guard-01",
                 "name": "Li Wei",
                 "shift": "night",
-                "shift_start": "2026-08-10T16:00:00Z",
-                "shift_end": "2026-08-11T08:00:00Z",
-            },
+                "shift_start": shift_start,
+                "shift_end": shift_end,
+            } if on_duty else None,
             "responsible_areas": ["area-lab-01", "area-gate-02", "area-plant-01"],
             "escalation_rules": {
                 "level_1": {

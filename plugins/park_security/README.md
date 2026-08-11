@@ -29,7 +29,7 @@ MCP 端点为 `http://127.0.0.1:8200/mcp`。Compose 会将该端点发布到宿�
 - `security.get_event_summary`：按园区获取事件风险摘要。
 - `security.list_events`：按时间、风险等级或状态筛选事件。
 - `security.get_event_detail`：读取关联证据、处置状态和审计记录。
-- `security.get_shift_context`：读取值班、区域和升级规则上下文。
+- `security.get_shift_context`：按园区、区域和可选 `at_time` 读取值班、区域和升级规则上下文；未知园区或区域会被拒绝。
 - `security.confirm_event`：由具名操作员人工确认事件。
 - `security.create_work_order`：为已确认事件创建工单。
 - `security.close_event`：由具名操作员关闭已处置事件。

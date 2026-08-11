@@ -1,13 +1,32 @@
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, Field, StringConstraints
+from pydantic import BaseModel, Field, StringConstraints, field_validator
 
 
 EventStatus = Literal["open", "confirmed", "work_order_created", "closed"]
 RiskLevel = Literal["low", "medium", "high", "critical"]
 NonBlankText = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
+
+
+def normalize_timestamp(value: str) -> str:
+    """Normalize a timezone-aware ISO 8601 timestamp to UTC with a Z suffix."""
+    if not isinstance(value, str):
+        raise ValueError("valid ISO 8601 timestamp is required")
+    try:
+        parsed = datetime.fromisoformat(value.strip().replace("Z", "+00:00"))
+    except ValueError as error:
+        raise ValueError("valid ISO 8601 timestamp is required") from error
+    if parsed.tzinfo is None:
+        raise ValueError("valid ISO 8601 timestamp with timezone is required")
+    return parsed.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
+
+
+def parse_timestamp(value: str) -> datetime:
+    """Parse a stored timestamp as an aware datetime for instant comparisons."""
+    return datetime.fromisoformat(normalize_timestamp(value).replace("Z", "+00:00"))
 
 
 class SecurityAlarm(BaseModel):
@@ -81,6 +100,11 @@ class EventListQuery(BaseModel):
     end_time: str | None = None
     risk_level: RiskLevel | None = None
     status: EventStatus | None = None
+
+    @field_validator("start_time", "end_time", mode="before")
+    @classmethod
+    def validate_query_timestamp(cls, value: str | None) -> str | None:
+        return None if value is None else normalize_timestamp(value)
 
 
 class EventAction(BaseModel):

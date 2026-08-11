@@ -55,7 +55,7 @@ Mock 数据固定为三种场景；归并规则以相同园区、相同或相邻
 | `security.get_event_summary` | `park_id` | 事件数量、按等级/状态统计、有效告警率等 | 无 |
 | `security.list_events` | `park_id`、可选时间/等级/状态筛选 | 事件卡片列表 | 无 |
 | `security.get_event_detail` | `event_id` | 时间线、证据、影响范围、预案和审计记录 | 无 |
-| `security.get_shift_context` | `park_id`、可选区域与时间 | 重点区域、当班人员、责任区域和升级规则 | 无 |
+| `security.get_shift_context` | `park_id`、可选 `area_id`、`at_time` | 重点区域、当班人员、责任区域和升级规则 | 无 |
 | `security.confirm_event` | `event_id`、`operator_id`、备注 | 更新后的事件和审计记录 | 有 |
 | `security.create_work_order` | `event_id`、`operator_id`、责任人 | 新建 Mock 工单和事件更新 | 有 |
 | `security.close_event` | `event_id`、`operator_id`、处置说明 | 已关闭事件、复盘摘要和审计记录 | 有 |

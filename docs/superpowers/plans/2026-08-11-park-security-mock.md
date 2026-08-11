@@ -211,7 +211,7 @@ git commit -m "feat: add park security mock scenarios"
 
 **Interfaces:**
 - Consumes: Task 1 的 `EventListQuery`、`EventAction`、`CreateWorkOrder` 与 Task 2 的 `MockSecurityRepository`。
-- Produces: `SecurityService(repository: MockSecurityRepository)`，公开异步方法 `get_event_summary(park_id)`, `list_events(query)`, `get_event_detail(event_id)`, `get_shift_context(park_id, area_id=None)`, `confirm_event(action)`, `create_work_order(action)` 和 `close_event(action)`；每个方法返回稳定响应信封。
+- Produces: `SecurityService(repository: MockSecurityRepository)`，公开异步方法 `get_event_summary(park_id)`, `list_events(query)`, `get_event_detail(event_id)`, `get_shift_context(park_id, area_id=None, at_time=None)`, `confirm_event(action)`, `create_work_order(action)` 和 `close_event(action)`；每个方法返回稳定响应信封。
 - Produces: 写操作状态机 `open -> confirmed -> work_order_created -> closed`，且 `close_event` 接受 `confirmed` 与 `work_order_created`。
 
 - [ ] **Step 1: 写出失败的查询与闭环测试**
@@ -355,7 +355,7 @@ mcp_servers:
         result_size_limit: 262144
 ```
 
-在同一 allowlist 中逐项声明其余六个工具。`list_events` 使用 `park_id: str` 加可选 `start_time`、`end_time`、`risk_level`、`status`；`get_event_detail` 使用 `event_id: str`；`get_shift_context` 使用 `park_id: str` 加可选 `area_id`；三个写处理器使用显式 `event_id`、`operator_id`、可选 `note`，建单额外接收 `assignee`。每个处理器构造 Task 1 定义的 Pydantic 请求模型后调用相同名称的 `service` 方法，禁止 `**kwargs`。最后使用 `mcp.run("streamable-http", host=settings.host, port=settings.port)`。
+在同一 allowlist 中逐项声明其余六个工具。`list_events` 使用 `park_id: str` 加可选 `start_time`、`end_time`、`risk_level`、`status`；`get_event_detail` 使用 `event_id: str`；`get_shift_context` 使用 `park_id: str` 加可选 `area_id`、`at_time`，并拒绝未知园区/区域；三个写处理器使用显式 `event_id`、`operator_id`、可选 `note`，建单额外接收 `assignee`。每个处理器构造 Task 1 定义的 Pydantic 请求模型后调用相同名称的 `service` 方法，禁止 `**kwargs`。最后使用 `mcp.run("streamable-http", host=settings.host, port=settings.port)`。
 
 - [ ] **Step 4: 运行 MCP 契约及插件加载测试，确认通过**
 

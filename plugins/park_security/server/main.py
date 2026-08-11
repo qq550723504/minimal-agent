@@ -47,10 +47,12 @@ async def get_event_detail(event_id: str) -> dict[str, Any]:
 
 @mcp.tool(name="security.get_shift_context")
 async def get_shift_context(
-    park_id: str, area_id: str | None = None
+    park_id: str,
+    area_id: str | None = None,
+    at_time: str | None = None,
 ) -> dict[str, Any]:
     """Return duty coverage, escalation rules, and area context."""
-    return await service.get_shift_context(park_id, area_id)
+    return await service.get_shift_context(park_id, area_id, at_time)
 
 
 @mcp.tool(name="security.confirm_event")

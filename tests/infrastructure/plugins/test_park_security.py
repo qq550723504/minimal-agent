@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import asyncio
-from datetime import datetime
+from datetime import datetime, timezone
 import inspect
 from pathlib import Path
 
@@ -342,15 +342,57 @@ def test_service_filters_event_cards_by_every_query_condition():
     }]
 
 
+def test_service_filters_event_cards_by_timestamp_instant_not_lexical_text():
+    service = SecurityService(MockSecurityRepository())
+
+    result = asyncio.run(service.list_events(EventListQuery(
+        park_id="park-1",
+        start_time="2026-08-11T09:00:00+08:00",
+        end_time="2026-08-11T09:10:00+08:00",
+    )))
+
+    assert [event["event_id"] for event in result["data"]] == ["event-fire-003"]
+
+
+def test_event_list_query_rejects_invalid_timestamps():
+    with pytest.raises(ValidationError, match="valid ISO 8601 timestamp"):
+        EventListQuery(park_id="park-1", start_time="not-a-timestamp")
+
+
 def test_service_exposes_shift_context_in_response_envelope():
     """Catch a service that leaks bare repository context instead of the public envelope."""
     service = SecurityService(MockSecurityRepository())
 
-    context = asyncio.run(service.get_shift_context("park-1", "area-lab-01"))
+    context = asyncio.run(service.get_shift_context(
+        "park-1", "area-lab-01", "2026-08-11T01:00:00+00:00"
+    ))
 
     assert context["success"] is True
     assert context["data"]["focus_area"] == "area-lab-01"
     assert context["raw"] == context["data"]
+    assert context["data"]["query_time"] == "2026-08-11T01:00:00Z"
+    assert context["data"]["on_duty"] is True
+
+
+def test_shift_context_rejects_unknown_park_or_area():
+    service = SecurityService(MockSecurityRepository())
+
+    with pytest.raises(ValueError, match="park_not_found"):
+        asyncio.run(service.get_shift_context("park-2", None))
+    with pytest.raises(ValueError, match="area_not_found"):
+        asyncio.run(service.get_shift_context("park-1", "area-unknown"))
+
+
+def test_shift_context_returns_time_appropriate_duty_state():
+    service = SecurityService(MockSecurityRepository())
+
+    context = asyncio.run(service.get_shift_context(
+        "park-1", "area-lab-01", "2026-08-11T10:00:00Z"
+    ))
+
+    assert context["data"]["query_time"] == "2026-08-11T10:00:00Z"
+    assert context["data"]["on_duty"] is False
+    assert context["data"]["on_duty_guard"] is None
 
 
 def test_service_requires_confirmation_before_work_order_and_records_audit(monkeypatch):
