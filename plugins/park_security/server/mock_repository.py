@@ -96,7 +96,7 @@ class MockSecurityRepository:
                 "name": "Li Wei",
                 "shift": "night",
                 "shift_start": "2026-08-10T16:00:00Z",
-                "shift_end": "2026-08-11T00:00:00Z",
+                "shift_end": "2026-08-11T08:00:00Z",
             },
             "responsible_areas": ["area-lab-01", "area-gate-02", "area-plant-01"],
             "escalation_rules": {

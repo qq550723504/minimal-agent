@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import datetime
+
 import pytest
 from pydantic import ValidationError
 
@@ -110,3 +112,19 @@ def test_repository_exposes_shift_context_for_requested_area():
     assert context["on_duty_guard"]["guard_id"] == "guard-01"
     assert "area-lab-01" in context["responsible_areas"]
     assert set(context["escalation_rules"]) == {"level_1", "level_2"}
+
+
+def test_night_shift_covers_the_night_access_event_timeline():
+    repository = MockSecurityRepository()
+    event = repository.get_event("event-night-001")
+    context = repository.list_shift_context("park-1", event.area_id)
+
+    shift_start = datetime.fromisoformat(context["on_duty_guard"]["shift_start"])
+    shift_end = datetime.fromisoformat(context["on_duty_guard"]["shift_end"])
+    event_times = [
+        datetime.fromisoformat(event.first_occurred_at),
+        datetime.fromisoformat(event.last_occurred_at),
+        *(datetime.fromisoformat(item.occurred_at) for item in event.timeline),
+    ]
+
+    assert all(shift_start <= occurred_at <= shift_end for occurred_at in event_times)
