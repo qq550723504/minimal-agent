@@ -1,0 +1,1116 @@
+from __future__ import annotations
+
+import asyncio
+from datetime import datetime, timedelta, timezone
+import inspect
+from pathlib import Path
+from typing import get_type_hints
+
+import pytest
+import yaml
+from pydantic import ValidationError
+
+from plugins.park_security.server.config import Settings
+from plugins.park_security.server.models import (
+    CloseEventAction,
+    CreateWorkOrder,
+    EventAction,
+    EventListQuery,
+    EventStatus,
+    RiskLevel,
+    SecurityAlarm,
+    SecurityEvent,
+)
+from plugins.park_security.server.mock_repository import (
+    EventCorrelator,
+    MockSecurityRepository,
+    RiskAssessor,
+)
+from plugins.park_security.server.service import SecurityService
+
+
+def test_compose_wires_agent_to_park_security_service():
+    compose = yaml.safe_load(Path("docker-compose.yml").read_text(encoding="utf-8"))
+    agent = compose["services"]["agent"]
+    security = compose["services"]["park_security"]
+
+    assert (
+        agent["environment"]["PARK_SECURITY_MCP_URL"]
+        == "${PARK_SECURITY_MCP_URL:-http://park_security:8200/mcp}"
+    )
+    assert agent["depends_on"]["park_security"]["condition"] == "service_healthy"
+    assert security["environment"]["PARK_SECURITY_DATA_MODE"] == "${PARK_SECURITY_DATA_MODE:-mock}"
+    assert "PARK_SECURITY_APPROVAL_TOKEN" not in agent["environment"]
+    assert (
+        security["environment"]["PARK_SECURITY_APPROVAL_TOKEN"]
+        == "${PARK_SECURITY_APPROVAL_TOKEN:-}"
+    )
+
+
+def test_mcp_handlers_have_explicit_parameters_and_expected_names():
+    from mcp.server import MCPServer
+    from plugins.park_security.server.main import (
+        close_event,
+        confirm_event,
+        create_work_order,
+        get_event_detail,
+        get_event_summary,
+        get_shift_context,
+        list_events,
+        mcp,
+    )
+
+    handlers = [
+        get_event_summary,
+        list_events,
+        get_event_detail,
+        get_shift_context,
+        confirm_event,
+        create_work_order,
+        close_event,
+    ]
+    assert isinstance(mcp, MCPServer)
+    assert all(
+        parameter.kind is not inspect.Parameter.VAR_KEYWORD
+        for handler in handlers
+        for parameter in inspect.signature(handler).parameters.values()
+    )
+    assert "operator_id" in inspect.signature(confirm_event).parameters
+    assert "assignee" in inspect.signature(create_work_order).parameters
+    assert all(
+        "approval_token" in inspect.signature(handler).parameters
+        for handler in (confirm_event, create_work_order, close_event)
+    )
+    assert inspect.signature(close_event).parameters["note"].default is inspect.Parameter.empty
+
+
+def test_settings_defaults_to_loopback_mock(monkeypatch):
+    monkeypatch.delenv("PARK_SECURITY_MCP_HOST", raising=False)
+    monkeypatch.delenv("PARK_SECURITY_DATA_MODE", raising=False)
+    monkeypatch.delenv("PARK_SECURITY_APPROVAL_TOKEN", raising=False)
+
+    settings = Settings.from_env()
+
+    assert settings.host == "127.0.0.1"
+    assert settings.port == 8200
+    assert settings.data_mode == "mock"
+    assert settings.approval_token is None
+
+
+def test_mcp_filter_schema_uses_domain_literal_types():
+    from plugins.park_security.server.main import list_events
+
+    hints = get_type_hints(list_events)
+    assert hints["risk_level"] == RiskLevel | None
+    assert hints["status"] == EventStatus | None
+
+
+def test_settings_rejects_non_mock_data_mode(monkeypatch):
+    monkeypatch.setenv("PARK_SECURITY_DATA_MODE", "rest")
+
+    with pytest.raises(ValueError, match="PARK_SECURITY_DATA_MODE must be mock"):
+        Settings.from_env()
+
+
+def test_action_models_require_operator_and_assignee():
+    action = EventAction(
+        event_id="event-night-001",
+        operator_id="  guard-01  ",
+        approval_token="  approved  ",
+    )
+    work_order = CreateWorkOrder(
+        event_id="event-night-001",
+        operator_id="guard-01",
+        assignee="  team-night  ",
+        approval_token="approved",
+    )
+
+    assert action.operator_id == "guard-01"
+    assert action.approval_token == "approved"
+    assert work_order.assignee == "team-night"
+
+
+@pytest.mark.parametrize("field", ["operator_id", "approval_token"])
+def test_event_action_rejects_blank_credentials(field):
+    values = {
+        "event_id": "event-night-001",
+        "operator_id": "guard-01",
+        "approval_token": "approved",
+    }
+    values[field] = "   "
+
+    with pytest.raises(ValidationError):
+        EventAction(**values)
+
+
+def test_create_work_order_rejects_blank_assignee():
+    with pytest.raises(ValidationError):
+        CreateWorkOrder(
+            event_id="event-night-001",
+            operator_id="guard-01",
+            assignee="  ",
+            approval_token="approved",
+        )
+
+
+def test_close_event_requires_non_blank_disposition_note():
+    with pytest.raises(ValidationError):
+        CloseEventAction(
+            event_id="event-night-001",
+            operator_id="guard-01",
+            approval_token="approved",
+            note="  ",
+        )
+
+
+def test_security_event_defaults_to_open_with_empty_collections():
+    event = SecurityEvent.model_validate({"event_id": "event-night-001", "park_id": "park-1"})
+
+    assert event.status == "open"
+    assert event.alarm_ids == []
+    assert event.timeline == []
+    assert event.audit_records == []
+
+
+def test_alarm_source_is_limited_to_upstream_security_systems():
+    with pytest.raises(ValidationError):
+        SecurityAlarm(alarm_id="alarm-001", source="device", park_id="park-1")
+
+
+def test_security_event_rejects_empty_alarm_identifiers():
+    with pytest.raises(ValidationError):
+        SecurityEvent(event_id="event-001", park_id="park-1", alarm_ids=[""])
+
+
+def test_repository_exposes_three_correlated_mock_scenarios():
+    events = MockSecurityRepository().list_events("park-1")
+
+    assert [event.event_id for event in events] == [
+        "event-night-001",
+        "event-access-002",
+        "event-fire-003",
+    ]
+    night, access, fire = events
+    assert night.scenario == "night_abnormal_access"
+    assert night.risk_level == "high"
+    assert len(night.alarm_ids) == 2
+    assert access.scenario == "access_failure_and_loitering"
+    assert len(access.alarm_ids) == 3
+    assert fire.risk_level == "critical"
+    assert {item.source for item in fire.timeline} >= {"fire", "device"}
+
+
+def test_correlation_classes_are_compatibly_exported_from_new_module():
+    from plugins.park_security.server.correlation import (
+        CorrelatedAlarmGroup as NewCorrelatedAlarmGroup,
+        EventCorrelator as NewEventCorrelator,
+    )
+    from plugins.park_security.server.mock_repository import (
+        CorrelatedAlarmGroup as LegacyCorrelatedAlarmGroup,
+        EventCorrelator as LegacyEventCorrelator,
+    )
+
+    assert LegacyCorrelatedAlarmGroup is NewCorrelatedAlarmGroup
+    assert LegacyEventCorrelator is NewEventCorrelator
+
+
+def test_risk_classes_are_compatibly_exported_from_new_module():
+    from plugins.park_security.server.mock_repository import (
+        RiskAssessment as LegacyRiskAssessment,
+        RiskAssessor as LegacyRiskAssessor,
+    )
+    from plugins.park_security.server.risk import (
+        RiskAssessment as NewRiskAssessment,
+        RiskAssessor as NewRiskAssessor,
+    )
+
+    assert LegacyRiskAssessment is NewRiskAssessment
+    assert LegacyRiskAssessor is NewRiskAssessor
+
+
+def test_mock_fixture_builders_are_importable_and_preserve_seeded_events():
+    from plugins.park_security.server.mock_fixtures import (
+        build_event,
+        build_mock_alarms,
+        build_timeline,
+    )
+
+    alarms = build_mock_alarms()
+    groups = EventCorrelator().correlate(alarms.values())
+    events = [build_event(group, RiskAssessor().assess(group)) for group in groups]
+    fire_alarms = {
+        alarm.alarm_type: alarm
+        for alarm in alarms.values()
+        if alarm.area_id == "area-plant-01"
+    }
+    fire_timeline, _ = build_timeline("fire_alarm_and_equipment_fault", fire_alarms)
+
+    assert len(alarms) == 8
+    assert [event.event_id for event in events] == [
+        "event-night-001",
+        "event-access-002",
+        "event-fire-003",
+    ]
+    assert {item.source for item in fire_timeline} == {"fire", "device"}
+
+
+def test_mock_repository_facade_exports_moved_domain_classes():
+    from plugins.park_security.server.correlation import (
+        CorrelatedAlarmGroup as CorrelationGroup,
+        EventCorrelator as Correlator,
+    )
+    from plugins.park_security.server.mock_repository import (
+        CorrelatedAlarmGroup as FacadeGroup,
+        EventCorrelator as FacadeCorrelator,
+        RiskAssessment as FacadeAssessment,
+        RiskAssessor as FacadeAssessor,
+    )
+    from plugins.park_security.server.risk import (
+        RiskAssessment as Assessment,
+        RiskAssessor as Assessor,
+    )
+
+    assert FacadeGroup is CorrelationGroup
+    assert FacadeCorrelator is Correlator
+    assert FacadeAssessment is Assessment
+    assert FacadeAssessor is Assessor
+
+
+def test_correlator_and_risk_assessor_are_independently_callable():
+    alarms = [
+        SecurityAlarm(
+            alarm_id="access-1",
+            source="access_control",
+            park_id="park-test",
+            building_id="building-test",
+            area_id="area-test",
+            occurred_at="2026-08-11T02:00:00Z",
+            alarm_type="repeated_access_failure",
+            severity="medium",
+            payload={"attempt_count": 1, "subject_id": "visitor-1"},
+        ),
+        SecurityAlarm(
+            alarm_id="patrol-1",
+            source="patrol",
+            park_id="park-test",
+            building_id="building-test",
+            area_id="area-test",
+            occurred_at="2026-08-11T02:04:00Z",
+            alarm_type="loitering_report",
+            severity="medium",
+            payload={"subject_id": "visitor-1"},
+        ),
+        SecurityAlarm(
+            alarm_id="video-1",
+            source="video",
+            park_id="park-test",
+            building_id="building-test",
+            area_id="area-test",
+            occurred_at="2026-08-11T02:06:00Z",
+            alarm_type="loitering_detected",
+            severity="medium",
+            payload={"subject_id": "visitor-1"},
+        ),
+    ]
+
+    groups = EventCorrelator().correlate(alarms)
+    assessment = RiskAssessor().assess(groups[0])
+
+    assert len(groups) == 1
+    assert groups[0].scenario == "access_failure_and_loitering"
+    assert [alarm.alarm_id for alarm in groups[0].alarms] == [
+        "access-1",
+        "patrol-1",
+        "video-1",
+    ]
+    assert assessment.risk_level == "medium"
+    assert assessment.recommended_plan == "verify_visitor_appointment_and_dispatch_patrol"
+
+
+def test_correlator_compares_alarm_instants_when_offsets_differ():
+    alarms = [
+        SecurityAlarm(
+            alarm_id="late-access",
+            source="access_control",
+            park_id="park-test",
+            building_id="building-test",
+            area_id="area-test",
+            occurred_at="2026-08-10T23:59:00-10:00",
+            alarm_type="after_hours_access",
+            severity="high",
+        ),
+        SecurityAlarm(
+            alarm_id="early-video",
+            source="video",
+            park_id="park-test",
+            building_id="building-test",
+            area_id="area-test",
+            occurred_at="2026-08-11T00:00:00+10:00",
+            alarm_type="person_detected",
+            severity="high",
+        ),
+    ]
+
+    assert EventCorrelator().correlate(alarms) == []
+
+
+def test_correlator_emits_each_matching_scenario_in_an_overlapping_window():
+    alarms = [
+        SecurityAlarm(
+            alarm_id="night-access",
+            source="access_control",
+            park_id="park-test",
+            building_id="building-test",
+            area_id="area-test",
+            occurred_at="2026-08-11T02:00:00Z",
+            alarm_type="after_hours_access",
+            severity="high",
+            payload={"subject_id": "person-1"},
+        ),
+        SecurityAlarm(
+            alarm_id="night-person",
+            source="video",
+            park_id="park-test",
+            building_id="building-test",
+            area_id="area-test",
+            occurred_at="2026-08-11T02:01:00Z",
+            alarm_type="person_detected",
+            severity="high",
+            payload={"subject_id": "person-1"},
+        ),
+        SecurityAlarm(
+            alarm_id="fire-smoke",
+            source="fire",
+            park_id="park-test",
+            building_id="building-test",
+            area_id="area-test",
+            occurred_at="2026-08-11T02:02:00Z",
+            alarm_type="smoke_detected",
+            severity="critical",
+            payload={"device_group_id": "plant-1"},
+        ),
+        SecurityAlarm(
+            alarm_id="fire-temperature",
+            source="fire",
+            park_id="park-test",
+            building_id="building-test",
+            area_id="area-test",
+            occurred_at="2026-08-11T02:03:00Z",
+            alarm_type="temperature_rise",
+            severity="critical",
+            payload={"device_group_id": "plant-1"},
+        ),
+        SecurityAlarm(
+            alarm_id="fire-fan",
+            source="fire",
+            park_id="park-test",
+            building_id="building-test",
+            area_id="area-test",
+            occurred_at="2026-08-11T02:04:00Z",
+            alarm_type="ventilation_device_fault",
+            severity="high",
+            payload={"device_group_id": "plant-1"},
+        ),
+    ]
+
+    groups = EventCorrelator().correlate(alarms)
+
+    assert [group.scenario for group in groups] == [
+        "night_abnormal_access",
+        "fire_alarm_and_equipment_fault",
+    ]
+    assert {alarm.alarm_id for alarm in groups[0].alarms} == {"night-access", "night-person"}
+    assert {alarm.alarm_id for alarm in groups[1].alarms} == {
+        "fire-smoke", "fire-temperature", "fire-fan"
+    }
+
+
+def test_correlator_uses_sliding_windows_after_unrelated_alarm():
+    alarms = [
+        SecurityAlarm(
+            alarm_id="unrelated",
+            source="video",
+            park_id="park-test",
+            building_id="building-test",
+            area_id="area-test",
+            occurred_at="2026-08-11T00:00:00Z",
+            alarm_type="person_detected",
+            severity="low",
+            payload={"subject_id": "other-person"},
+        ),
+        SecurityAlarm(
+            alarm_id="access",
+            source="access_control",
+            park_id="park-test",
+            building_id="building-test",
+            area_id="area-test",
+            occurred_at="2026-08-11T00:01:00Z",
+            alarm_type="after_hours_access",
+            severity="high",
+            payload={"subject_id": "person-1"},
+        ),
+        SecurityAlarm(
+            alarm_id="matching-person",
+            source="video",
+            park_id="park-test",
+            building_id="building-test",
+            area_id="area-test",
+            occurred_at="2026-08-11T00:11:00Z",
+            alarm_type="person_detected",
+            severity="high",
+            payload={"subject_id": "person-1"},
+        ),
+    ]
+
+    groups = EventCorrelator().correlate(alarms)
+
+    assert len(groups) == 1
+    assert groups[0].scenario == "night_abnormal_access"
+    assert {alarm.alarm_id for alarm in groups[0].alarms} == {"access", "matching-person"}
+
+
+def test_correlator_matches_configured_adjacent_areas():
+    alarms = [
+        SecurityAlarm(
+            alarm_id="adjacent-access",
+            source="access_control",
+            park_id="park-test",
+            building_id="building-test",
+            area_id="area-lab-01",
+            occurred_at="2026-08-11T02:00:00Z",
+            alarm_type="after_hours_access",
+            severity="high",
+            payload={"subject_id": "person-1"},
+        ),
+        SecurityAlarm(
+            alarm_id="adjacent-video",
+            source="video",
+            park_id="park-test",
+            building_id="building-test",
+            area_id="area-lab-corridor-01",
+            occurred_at="2026-08-11T02:01:00Z",
+            alarm_type="person_detected",
+            severity="high",
+            payload={"subject_id": "person-1"},
+        ),
+    ]
+
+    groups = EventCorrelator(
+        area_adjacency={
+            "area-lab-01": {"area-lab-corridor-01"},
+            "area-lab-corridor-01": {"area-lab-01"},
+        }
+    ).correlate(alarms)
+
+    assert len(groups) == 1
+    assert groups[0].scenario == "night_abnormal_access"
+
+
+def test_correlator_does_not_treat_area_adjacency_as_transitive():
+    alarms = [
+        SecurityAlarm(
+            alarm_id="chain-access",
+            source="access_control",
+            park_id="park-test",
+            building_id="building-test",
+            area_id="area-a",
+            occurred_at="2026-08-11T02:00:00Z",
+            alarm_type="after_hours_access",
+            severity="high",
+            payload={"subject_id": "person-chain"},
+        ),
+        SecurityAlarm(
+            alarm_id="chain-middle",
+            source="video",
+            park_id="park-test",
+            building_id="building-test",
+            area_id="area-b",
+            occurred_at="2026-08-11T02:01:00Z",
+            alarm_type="person_detected",
+            severity="low",
+            payload={"subject_id": "other-person"},
+        ),
+        SecurityAlarm(
+            alarm_id="chain-video",
+            source="video",
+            park_id="park-test",
+            building_id="building-test",
+            area_id="area-c",
+            occurred_at="2026-08-11T02:02:00Z",
+            alarm_type="person_detected",
+            severity="high",
+            payload={"subject_id": "person-chain"},
+        ),
+    ]
+
+    groups = EventCorrelator(
+        area_adjacency={"area-a": {"area-b"}, "area-b": {"area-c"}}
+    ).correlate(alarms)
+
+    assert groups == []
+
+
+def test_correlator_requires_all_candidate_areas_to_be_directly_compatible():
+    """候选事件的每个区域都必须与其他区域直接相同或相邻。"""
+    alarms = [
+        SecurityAlarm(
+            alarm_id="fire-middle",
+            source="fire",
+            park_id="park-test",
+            building_id="building-test",
+            area_id="area-b",
+            occurred_at="2026-08-11T02:00:00Z",
+            alarm_type="smoke_detected",
+            severity="high",
+            payload={"device_group_id": "fire-group"},
+        ),
+        SecurityAlarm(
+            alarm_id="fire-left",
+            source="fire",
+            park_id="park-test",
+            building_id="building-test",
+            area_id="area-a",
+            occurred_at="2026-08-11T02:01:00Z",
+            alarm_type="temperature_rise",
+            severity="high",
+            payload={"device_group_id": "fire-group"},
+        ),
+        SecurityAlarm(
+            alarm_id="fire-right",
+            source="fire",
+            park_id="park-test",
+            building_id="building-test",
+            area_id="area-c",
+            occurred_at="2026-08-11T02:02:00Z",
+            alarm_type="ventilation_device_fault",
+            severity="high",
+            payload={"device_group_id": "fire-group"},
+        ),
+    ]
+
+    groups = EventCorrelator(
+        area_adjacency={"area-a": {"area-b"}, "area-b": {"area-c"}}
+    ).correlate(alarms)
+
+    assert groups == []
+
+
+def test_correlator_does_not_merge_candidate_groups_beyond_configured_window():
+    """滚动窗口生成的候选组再次合并时，整体跨度不能超过窗口。"""
+    alarms = [
+        SecurityAlarm(
+            alarm_id="access-1",
+            source="access_control",
+            park_id="park-test",
+            building_id="building-test",
+            area_id="area-test",
+            occurred_at="2026-08-11T02:00:00Z",
+            alarm_type="after_hours_access",
+            severity="high",
+            payload={"subject_id": "person-window"},
+        ),
+        SecurityAlarm(
+            alarm_id="access-2",
+            source="access_control",
+            park_id="park-test",
+            building_id="building-test",
+            area_id="area-test",
+            occurred_at="2026-08-11T02:05:00Z",
+            alarm_type="after_hours_access",
+            severity="high",
+            payload={"subject_id": "person-window"},
+        ),
+        SecurityAlarm(
+            alarm_id="person-1",
+            source="video",
+            park_id="park-test",
+            building_id="building-test",
+            area_id="area-test",
+            occurred_at="2026-08-11T02:10:00Z",
+            alarm_type="person_detected",
+            severity="high",
+            payload={"subject_id": "person-window"},
+        ),
+        SecurityAlarm(
+            alarm_id="person-2",
+            source="video",
+            park_id="park-test",
+            building_id="building-test",
+            area_id="area-test",
+            occurred_at="2026-08-11T02:15:00Z",
+            alarm_type="person_detected",
+            severity="high",
+            payload={"subject_id": "person-window"},
+        ),
+    ]
+
+    groups = EventCorrelator().correlate(alarms)
+
+    assert groups
+    for group in groups:
+        occurred = [
+            datetime.fromisoformat(alarm.occurred_at.replace("Z", "+00:00"))
+            for alarm in group.alarms
+        ]
+        assert max(occurred) - min(occurred) <= timedelta(minutes=10)
+
+
+def test_correlator_keeps_repeated_associated_failures_in_one_group():
+    alarms = [
+        SecurityAlarm(
+            alarm_id="failure-1",
+            source="access_control",
+            park_id="park-test",
+            building_id="building-test",
+            area_id="area-test",
+            occurred_at="2026-08-11T02:00:00Z",
+            alarm_type="repeated_access_failure",
+            severity="medium",
+            payload={"attempt_count": 1, "subject_id": "visitor-repeat"},
+        ),
+        SecurityAlarm(
+            alarm_id="failure-2",
+            source="access_control",
+            park_id="park-test",
+            building_id="building-test",
+            area_id="area-test",
+            occurred_at="2026-08-11T02:01:00Z",
+            alarm_type="repeated_access_failure",
+            severity="medium",
+            payload={"attempt_count": 1, "subject_id": "visitor-repeat"},
+        ),
+        SecurityAlarm(
+            alarm_id="repeat-patrol",
+            source="patrol",
+            park_id="park-test",
+            building_id="building-test",
+            area_id="area-test",
+            occurred_at="2026-08-11T02:02:00Z",
+            alarm_type="loitering_report",
+            severity="medium",
+            payload={"subject_id": "visitor-repeat"},
+        ),
+        SecurityAlarm(
+            alarm_id="repeat-video",
+            source="video",
+            park_id="park-test",
+            building_id="building-test",
+            area_id="area-test",
+            occurred_at="2026-08-11T02:03:00Z",
+            alarm_type="loitering_detected",
+            severity="medium",
+            payload={"subject_id": "visitor-repeat"},
+        ),
+    ]
+
+    groups = EventCorrelator().correlate(alarms)
+
+    assert len(groups) == 1
+    assert {alarm.alarm_id for alarm in groups[0].alarms} == {
+        "failure-1", "failure-2", "repeat-patrol", "repeat-video"
+    }
+    assert RiskAssessor().assess(groups[0]).risk_level == "high"
+
+
+def test_correlator_does_not_merge_different_subjects():
+    alarms = [
+        SecurityAlarm(
+            alarm_id="subject-access",
+            source="access_control",
+            park_id="park-test",
+            building_id="building-test",
+            area_id="area-test",
+            occurred_at="2026-08-11T02:00:00Z",
+            alarm_type="after_hours_access",
+            severity="high",
+            payload={"subject_id": "person-1"},
+        ),
+        SecurityAlarm(
+            alarm_id="subject-video",
+            source="video",
+            park_id="park-test",
+            building_id="building-test",
+            area_id="area-test",
+            occurred_at="2026-08-11T02:01:00Z",
+            alarm_type="person_detected",
+            severity="high",
+            payload={"subject_id": "person-2"},
+        ),
+    ]
+
+    assert EventCorrelator().correlate(alarms) == []
+
+
+def test_event_boundaries_select_original_timestamp_by_instant():
+    alarms = [
+        SecurityAlarm(
+            alarm_id="late",
+            source="access_control",
+            park_id="park-test",
+            building_id="building-test",
+            area_id="area-test",
+            occurred_at="2026-08-11T08:00:00+08:00",
+            alarm_type="after_hours_access",
+            severity="high",
+            payload={"subject_id": "person-1"},
+        ),
+        SecurityAlarm(
+            alarm_id="early",
+            source="video",
+            park_id="park-test",
+            building_id="building-test",
+            area_id="area-test",
+            occurred_at="2026-08-11T00:05:00Z",
+            alarm_type="person_detected",
+            severity="high",
+            payload={"subject_id": "person-1"},
+        ),
+    ]
+
+    group = EventCorrelator().correlate(alarms)[0]
+    event = MockSecurityRepository._build_event(
+        group,
+        RiskAssessor().assess(group),
+    )
+
+    assert event.first_occurred_at == "2026-08-11T08:00:00+08:00"
+    assert event.last_occurred_at == "2026-08-11T00:05:00Z"
+
+
+def test_adjacent_area_assessment_preserves_all_affected_areas():
+    alarms = [
+        SecurityAlarm(
+            alarm_id="scope-access",
+            source="access_control",
+            park_id="park-test",
+            building_id="building-test",
+            area_id="area-a",
+            occurred_at="2026-08-11T02:00:00Z",
+            alarm_type="after_hours_access",
+            severity="high",
+            payload={"subject_id": "person-scope"},
+        ),
+        SecurityAlarm(
+            alarm_id="scope-video",
+            source="video",
+            park_id="park-test",
+            building_id="building-test",
+            area_id="area-b",
+            occurred_at="2026-08-11T02:01:00Z",
+            alarm_type="person_detected",
+            severity="high",
+            payload={"subject_id": "person-scope"},
+        ),
+    ]
+    group = EventCorrelator(area_adjacency={"area-a": {"area-b"}}).correlate(alarms)[0]
+
+    assessment = RiskAssessor().assess(group)
+
+    assert "area-a" in assessment.impact_scope
+    assert "area-b" in assessment.impact_scope
+
+
+def test_service_sorts_event_cards_by_timestamp_instant():
+    repository = MockSecurityRepository()
+    repository._events["event-offset"] = SecurityEvent(
+        event_id="event-offset",
+        park_id="park-1",
+        area_id="area-lab-01",
+        first_occurred_at="2026-08-11T08:00:00+08:00",
+        last_occurred_at="2026-08-11T08:00:00+08:00",
+    )
+
+    result = asyncio.run(SecurityService(repository).list_events(EventListQuery(park_id="park-1")))
+
+    assert result["data"][0]["event_id"] == "event-offset"
+
+
+def test_access_event_detail_includes_patrol_evidence():
+    detail = asyncio.run(SecurityService(MockSecurityRepository()).get_event_detail(
+        "event-access-002"
+    ))
+
+    assert any(item["source"] == "patrol" for item in detail["data"]["timeline"])
+
+
+def test_night_access_event_detail_includes_negative_appointment_evidence():
+    detail = asyncio.run(SecurityService(MockSecurityRepository()).get_event_detail(
+        "event-night-001"
+    ))
+
+    appointment = next(
+        item for item in detail["data"]["timeline"] if item["source"] == "appointment"
+    )
+    assert "No active visitor appointment" in appointment["summary"]
+
+
+def test_repository_returns_deep_copies_when_reading_and_saving_events():
+    repository = MockSecurityRepository()
+
+    event = repository.get_event("event-night-001")
+    assert event is not None
+    event.timeline[0].summary = "altered by caller"
+    assert repository.get_event("event-night-001").timeline[0].summary != "altered by caller"
+
+    saved = repository.save_event(event)
+    saved.recommended_plan = "altered after save"
+    assert repository.get_event("event-night-001").recommended_plan != "altered after save"
+
+
+def test_repository_creates_one_stable_work_order_per_event():
+    repository = MockSecurityRepository()
+
+    work_order = repository.create_work_order(
+        "event-access-002", "team-access", "guard-01", "dispatch technician"
+    )
+
+    assert work_order.work_order_id == "wo-event-access-002"
+    assert work_order.event_id == "event-access-002"
+    assert work_order.status == "open"
+    assert repository.get_event("event-access-002").work_order_id == "wo-event-access-002"
+    with pytest.raises(ValueError, match="work_order_exists"):
+        repository.create_work_order("event-access-002", "team-access", "guard-01", None)
+
+
+def test_repository_exposes_shift_context_for_requested_area():
+    context = MockSecurityRepository().list_shift_context("park-1", "area-lab-01")
+
+    assert context["focus_area"] == "area-lab-01"
+    assert context["on_duty_guard"]["guard_id"] == "guard-01"
+    assert "area-lab-01" in context["responsible_areas"]
+    assert set(context["escalation_rules"]) == {"level_1", "level_2"}
+
+
+def test_night_shift_covers_the_night_access_event_timeline():
+    repository = MockSecurityRepository()
+    event = repository.get_event("event-night-001")
+    context = repository.list_shift_context("park-1", event.area_id)
+
+    shift_start = datetime.fromisoformat(context["on_duty_guard"]["shift_start"])
+    shift_end = datetime.fromisoformat(context["on_duty_guard"]["shift_end"])
+    event_times = [
+        datetime.fromisoformat(event.first_occurred_at),
+        datetime.fromisoformat(event.last_occurred_at),
+        *(datetime.fromisoformat(item.occurred_at) for item in event.timeline),
+    ]
+
+    assert all(shift_start <= occurred_at <= shift_end for occurred_at in event_times)
+
+
+def test_service_returns_event_timeline_and_summary():
+    """Catch a service that omits the repository's risk aggregation or event detail."""
+    service = SecurityService(MockSecurityRepository())
+
+    summary = asyncio.run(service.get_event_summary("park-1"))
+    detail = asyncio.run(service.get_event_detail("event-fire-003"))
+
+    assert summary["data"] == {
+        "park_id": "park-1",
+        "total_events": 3,
+        "risk_counts": {"high": 2, "critical": 1},
+        "status_counts": {"open": 3},
+        "raw_alarm_count": 8,
+        "merged_event_count": 3,
+        "duplicate_alarm_count": 5,
+        "effective_alarm_rate": 0.375,
+        "average_risk_score": pytest.approx(3.3333333333333335),
+    }
+    assert detail["data"]["recommended_plan"] == "fire_emergency_response"
+    assert len(detail["data"]["timeline"]) == 3
+    assert {item["source"] for item in detail["data"]["timeline"]} == {"fire", "device"}
+
+
+def test_service_filters_event_cards_by_every_query_condition():
+    """Catch filtering that ignores a supplied time, risk, or status condition."""
+    service = SecurityService(MockSecurityRepository())
+
+    result = asyncio.run(service.list_events(EventListQuery(
+        park_id="park-1",
+        start_time="2026-08-11T00:20:00Z",
+        end_time="2026-08-11T01:00:00Z",
+        risk_level="high",
+        status="open",
+    )))
+
+    assert result["data"] == [{
+        "event_id": "event-access-002",
+        "park_id": "park-1",
+        "building_id": "building-a",
+        "area_id": "area-gate-02",
+        "scenario": "access_failure_and_loitering",
+        "risk_level": "high",
+        "status": "open",
+        "first_occurred_at": "2026-08-11T00:42:00Z",
+        "last_occurred_at": "2026-08-11T00:49:00Z",
+        "impact_scope": ["building-a", "area-gate-02", "visitor-entry-route"],
+        "recommended_plan": "verify_visitor_appointment_and_dispatch_patrol",
+        "work_order_id": None,
+    }]
+
+
+def test_service_filters_event_cards_by_timestamp_instant_not_lexical_text():
+    service = SecurityService(MockSecurityRepository())
+
+    result = asyncio.run(service.list_events(EventListQuery(
+        park_id="park-1",
+        start_time="2026-08-11T09:00:00+08:00",
+        end_time="2026-08-11T09:10:00+08:00",
+    )))
+
+    assert [event["event_id"] for event in result["data"]] == ["event-fire-003"]
+
+
+def test_event_list_query_rejects_invalid_timestamps():
+    with pytest.raises(ValidationError, match="valid ISO 8601 timestamp"):
+        EventListQuery(park_id="park-1", start_time="not-a-timestamp")
+
+
+def test_event_list_query_rejects_reversed_time_range():
+    with pytest.raises(ValidationError, match="start_time must not be after end_time"):
+        EventListQuery(
+            park_id="park-1",
+            start_time="2026-08-11T02:00:00Z",
+            end_time="2026-08-11T01:00:00Z",
+        )
+
+
+def test_service_exposes_shift_context_in_response_envelope():
+    """Catch a service that leaks bare repository context instead of the public envelope."""
+    service = SecurityService(MockSecurityRepository())
+
+    context = asyncio.run(service.get_shift_context(
+        "park-1", "area-lab-01", "2026-08-11T01:00:00+00:00"
+    ))
+
+    assert context["success"] is True
+    assert context["data"]["focus_area"] == "area-lab-01"
+    assert context["raw"] == context["data"]
+    assert context["data"]["query_time"] == "2026-08-11T01:00:00Z"
+    assert context["data"]["on_duty"] is True
+
+
+def test_shift_context_rejects_unknown_park_or_area():
+    service = SecurityService(MockSecurityRepository())
+
+    with pytest.raises(ValueError, match="park_not_found"):
+        asyncio.run(service.get_shift_context("park-2", None))
+    with pytest.raises(ValueError, match="area_not_found"):
+        asyncio.run(service.get_shift_context("park-1", "area-unknown"))
+
+
+def test_shift_context_returns_time_appropriate_duty_state():
+    service = SecurityService(MockSecurityRepository())
+
+    context = asyncio.run(service.get_shift_context(
+        "park-1", "area-lab-01", "2026-08-11T10:00:00Z"
+    ))
+
+    assert context["data"]["query_time"] == "2026-08-11T10:00:00Z"
+    assert context["data"]["on_duty"] is False
+    assert context["data"]["on_duty_guard"] is None
+    assert "guard-01" not in context["data"]["escalation_rules"]["level_1"]["notify"]
+
+    with pytest.raises(ValueError, match="valid ISO 8601 timestamp"):
+        asyncio.run(service.get_shift_context("park-1", "area-lab-01", ""))
+
+
+def test_service_requires_confirmation_before_work_order_and_records_audit(monkeypatch):
+    """Catch skipped state validation, persistence, audit entries, or review report creation."""
+    monkeypatch.setenv("PARK_SECURITY_APPROVAL_TOKEN", "human-approved")
+    service = SecurityService(MockSecurityRepository())
+    action = EventAction(
+        event_id="event-night-001",
+        operator_id="guard-01",
+        approval_token="human-approved",
+        note="现场核验",
+    )
+    work_order_action = CreateWorkOrder(**action.model_dump(), assignee="team-night")
+    close_action = CloseEventAction(
+        **action.model_dump(exclude={"note"}), note="现已排除异常，恢复常态巡更"
+    )
+
+    with pytest.raises(ValueError, match="event_not_confirmed"):
+        asyncio.run(service.create_work_order(work_order_action))
+    confirmed = asyncio.run(service.confirm_event(action))
+    created = asyncio.run(service.create_work_order(work_order_action))
+    closed = asyncio.run(service.close_event(close_action))
+
+    assert confirmed["data"]["status"] == "confirmed"
+    assert created["data"]["status"] == "work_order_created"
+    assert [record["action"] for record in closed["data"]["audit_records"]] == [
+        "event_created", "confirmed", "work_order_created", "closed"
+    ]
+    assert closed["data"]["status"] == "closed"
+    assert closed["data"]["work_orders"] == [{
+        "work_order_id": "wo-event-night-001",
+        "event_id": "event-night-001",
+        "status": "closed",
+        "assignee": "team-night",
+        "operator_id": "guard-01",
+        "created_at": "2026-08-11T01:20:00Z",
+        "closed_at": "2026-08-11T01:30:00Z",
+        "note": "现场核验",
+    }]
+    assert closed["data"]["review_report"] == {
+        "event_id": "event-night-001",
+        "final_risk_level": "high",
+        "disposition": "现已排除异常，恢复常态巡更",
+        "handling_process": ["event_created", "confirmed", "work_order_created", "closed"],
+        "timeline": closed["data"]["timeline"],
+        "evidence_completeness": 0.92,
+        "closed_at": "2026-08-11T01:30:00Z",
+    }
+
+
+def test_write_actions_require_configured_matching_approval_token(monkeypatch):
+    action = EventAction(
+        event_id="event-night-001",
+        operator_id="guard-01",
+        approval_token="presented-token",
+    )
+    write_actions = [
+        ("confirm_event", action),
+        (
+            "create_work_order",
+            CreateWorkOrder(**action.model_dump(), assignee="team-night"),
+        ),
+        (
+            "close_event",
+            CloseEventAction(
+                **action.model_dump(exclude={"note"}), note="现场处置完成"
+            ),
+        ),
+    ]
+
+    monkeypatch.delenv("PARK_SECURITY_APPROVAL_TOKEN", raising=False)
+    for method_name, write_action in write_actions:
+        service = SecurityService(MockSecurityRepository())
+        with pytest.raises(ValueError, match="approval_not_configured"):
+            asyncio.run(getattr(service, method_name)(write_action))
+
+    monkeypatch.setenv("PARK_SECURITY_APPROVAL_TOKEN", "expected-token")
+    for method_name, write_action in write_actions:
+        service = SecurityService(MockSecurityRepository())
+        with pytest.raises(ValueError, match="approval_denied"):
+            asyncio.run(getattr(service, method_name)(write_action))
+
+    approved_action = action.model_copy(update={"approval_token": "expected-token"})
+    result = asyncio.run(SecurityService(MockSecurityRepository()).confirm_event(approved_action))
+    assert result["data"]["status"] == "confirmed"
+
+
+def test_service_rejects_invalid_closure_states_and_missing_events(monkeypatch):
+    """Catch closure from open events and missing-event handling that returns partial data."""
+    monkeypatch.setenv("PARK_SECURITY_APPROVAL_TOKEN", "human-approved")
+    service = SecurityService(MockSecurityRepository())
+    action = CloseEventAction(
+        event_id="event-access-002",
+        operator_id="guard-01",
+        approval_token="human-approved",
+        note="现场处置完成",
+    )
+
+    with pytest.raises(ValueError, match="event_not_closable"):
+        asyncio.run(service.close_event(action))
+    with pytest.raises(ValueError, match="event_not_found"):
+        asyncio.run(service.get_event_detail("event-unknown"))

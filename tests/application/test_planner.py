@@ -145,8 +145,8 @@ def test_build_tool_catalog_prompt_is_safe_and_sorted():
         source=ToolSource.LOCAL,
         plugin_id=None,
         timeout_seconds=9,
-        side_effects=True,
-        idempotent=False,
+        side_effects=False,
+        idempotent=True,
         result_size_limit=456,
     )
 
@@ -167,6 +167,30 @@ def test_build_tool_catalog_prompt_is_safe_and_sorted():
     assert "input_schema" in prompt
     assert "side_effects" in prompt
     assert "idempotent" in prompt
+
+
+def test_build_tool_catalog_prompt_hides_non_idempotent_side_effect_tools():
+    read_spec = ToolSpec(
+        name="security.read",
+        description="Read security events",
+        input_schema={"type": "object", "properties": {}, "additionalProperties": False},
+        source=ToolSource.MCP,
+        side_effects=False,
+        idempotent=True,
+    )
+    write_spec = ToolSpec(
+        name="security.write",
+        description="Write a security disposition",
+        input_schema={"type": "object", "properties": {}, "additionalProperties": False},
+        source=ToolSource.MCP,
+        side_effects=True,
+        idempotent=False,
+    )
+
+    prompt = build_tool_catalog_prompt([read_spec, write_spec])
+
+    assert '"name": "security.read"' in prompt
+    assert '"name": "security.write"' not in prompt
 
 
 def test_build_tool_catalog_prompt_redacts_sensitive_schema_names_and_scalar_values():

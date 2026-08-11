@@ -114,11 +114,13 @@ def test_handle_endpoint_preserves_active_skill_ids_for_async_tool_calls(monkeyp
         run_id=None,
         active_skill_ids=(),
         registry=None,
+        allowed_tools=None,
     ):
         seen["steps"] = steps
         seen["owner_id"] = owner_id
         seen["run_id"] = run_id
         seen["active_skill_ids"] = active_skill_ids
+        seen["allowed_tools"] = allowed_tools
         return ["skill-result"]
 
     monkeypatch.setattr("src.agent.application.requests.execute_plan_items", fake_execute_plan_items)
@@ -132,6 +134,7 @@ def test_handle_endpoint_preserves_active_skill_ids_for_async_tool_calls(monkeyp
     assert seen["owner_id"] == "default"
     assert isinstance(seen["run_id"], str) and seen["run_id"]
     assert seen["active_skill_ids"] == ("demo.review",)
+    assert seen["allowed_tools"] == set()
 
 
 def test_runtime_and_development_requirements_are_separated():

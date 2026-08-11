@@ -1,0 +1,49 @@
+api_version: minimal-agent/v1
+id: park-security
+version: 0.1.0
+enabled: true
+required: false
+skills: []
+
+mcp_servers:
+  - id: security
+    transport: streamable_http
+    url_env: PARK_SECURITY_MCP_URL
+    headers_env:
+      Authorization: PARK_SECURITY_MCP_TOKEN
+    allowed_tools:
+      - name: security.get_event_summary
+        side_effects: false
+        idempotent: true
+        timeout_seconds: 10
+        result_size_limit: 262144
+      - name: security.list_events
+        side_effects: false
+        idempotent: true
+        timeout_seconds: 10
+        result_size_limit: 262144
+      - name: security.get_event_detail
+        side_effects: false
+        idempotent: true
+        timeout_seconds: 10
+        result_size_limit: 262144
+      - name: security.get_shift_context
+        side_effects: false
+        idempotent: true
+        timeout_seconds: 10
+        result_size_limit: 262144
+      - name: security.confirm_event
+        side_effects: true
+        idempotent: false
+        timeout_seconds: 10
+        result_size_limit: 262144
+      - name: security.create_work_order
+        side_effects: true
+        idempotent: false
+        timeout_seconds: 10
+        result_size_limit: 262144
+      - name: security.close_event
+        side_effects: true
+        idempotent: false
+        timeout_seconds: 10
+        result_size_limit: 262144

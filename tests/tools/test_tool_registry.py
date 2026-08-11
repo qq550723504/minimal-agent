@@ -20,6 +20,16 @@ def test_register_and_get_tool():
     assert "dummy" in list_tools()
 
 
+def test_http_get_is_read_only_in_structured_catalog():
+    import src.agent.tools  # noqa: F401
+
+    spec = get_capability_registry().get_spec("http_get")
+
+    assert spec is not None
+    assert spec.side_effects is False
+    assert spec.idempotent is True
+
+
 def test_get_unknown_tool():
     assert get_tool("unknown_tool") is None
 

@@ -55,9 +55,10 @@ $env:AGENT_HOST_PORT="8001"
 docker compose up --build
 ```
 
-Compose 会同时启动 `agent`、`park_energy` 和 Prometheus；开发环境默认让
-`park_energy` 返回确定性的 mock 数据。agent 可在 `8001` 访问，park-energy
-的直接 MCP 地址是 `http://127.0.0.1:8100/mcp`。开发模式允许显式
+Compose 会同时启动 `agent`、`park_energy`、`park_security` 和 Prometheus；开发环境默认让
+两个园区 MCP 服务返回确定性的 mock 数据。agent 可在 `8001` 访问，park-energy
+与 park-security 的直接 MCP 地址分别是 `http://127.0.0.1:8100/mcp` 和
+`http://127.0.0.1:8200/mcp`。开发模式允许显式
 allowlist 的本机 HTTP MCP；生产模式仍强制 HTTPS。如需在本机接入 agent，
 请配置 `AGENT_MCP_ALLOWED_HOSTS=127.0.0.1`。如果宿主机
 `8000` 未被占用，可以省略 `AGENT_HOST_PORT`，否则通过该变量改宿主机端口，
@@ -106,6 +107,10 @@ curl http://localhost:8001/
 - `AGENT_MAX_ACTIVE_SKILLS`: 单次请求最多激活的 Skill 数，默认 `3`。
 - `AGENT_MAX_SKILL_REFERENCE_BYTES`: 单个 Skill 参考文件的最大读取字节数，默认 `262144`。
 - `PARK_ENERGY_DATA_MODE`: `park_energy` 数据模式，`rest` 或 `mock`；Compose 开发环境默认为 `mock`，生产覆盖配置默认为 `rest`。
+- `PARK_SECURITY_DATA_MODE`: `park_security` 数据模式；当前仅支持 `mock`，Compose 开发环境默认为 `mock`。
+- `PARK_SECURITY_MCP_URL`: agent 连接园区安防 MCP 的地址；Compose 默认容器网络地址为 `http://park_security:8200/mcp`。
+- `PARK_SECURITY_MCP_TOKEN`: 可选的园区安防 MCP `Authorization` Header 值；不要写入插件清单或提交到仓库。
+- `PARK_SECURITY_APPROVAL_TOKEN`: 园区安防服务校验人工写操作的审批凭证；为空时三个写工具全部拒绝。Compose 只把它传给 `park_security`，不得注入 Planner、提示词或 agent 环境；人工审批客户端调用写工具时须显式传入匹配的 `approval_token`。
 
 插件、Skill 与 MCP 运行时：
 
@@ -164,7 +169,7 @@ curl http://localhost:8000/api/skills
 更多文档：请参见 `docs/AGENT_GUIDE.md`，其中包含架构设计、部署建议、安全与维护策略。
 
 编排与监控：
-- `docker-compose.yml` 包含 `agent`、`park_energy` 和 `prometheus` 服务；`park_energy` 默认以 mock 模式运行。
+- `docker-compose.yml` 包含 `agent`、`park_energy`、`park_security` 和 `prometheus` 服务；两个园区 MCP 服务默认以 mock 模式运行。
 - 本地开发使用 `docker compose up --build`；生产环境使用 `docker compose -f docker-compose.yml -f docker-compose.production.yml up --build`，并必须提供 `AGENT_API_KEYS`、`AGENT_METRICS_API_KEY` 和 `AGENT_HTTP_ALLOWED_HOSTS`。
 - `AGENT_ENABLE_MEMORY=true` 和 `VECTOR_MEMORY_PATH=/app/data/vector_memory.json` 已在 Docker 环境中启用。
 - 升级旧版 Compose 部署时，请在首次启动新配置前迁移旧版向量记忆：如果项目根目录存在 `vector_memory.json` 且 `data/vector_memory.json` 不存在，PowerShell 执行 `New-Item -ItemType Directory -Force .\data; Copy-Item .\vector_memory.json .\data\vector_memory.json`。
@@ -173,7 +178,7 @@ curl http://localhost:8000/api/skills
 - Prometheus 使用固定版本镜像和 `./data/metrics-token` 作为 Bearer token；该 token 仅用于本地开发，生产环境必须把它替换为与 `AGENT_METRICS_API_KEY` 相同的随机值。
 - Compose 会把 `./data` 挂载到容器的 `/app/data`，用于持久化向量记忆、审计日志和 SQLite 工作流状态。
 - 插件运行时默认关闭。启用 `AGENT_CAPABILITY_RUNTIME_ENABLED=true` 后，服务仅在启动时从只读插件目录构建目录；`/api/plugins` 和 `/api/skills` 仅返回声明的标识、版本、状态、错误码、触发词和能力名，不返回命令、环境变量、Skill 正文或参考文件内容。
-- 如需启用结构化 MCP 工具调用，先开启 `AGENT_CAPABILITY_RUNTIME_ENABLED=true`，再按传输方式配置 `AGENT_MCP_ALLOWED_HOSTS` 或 `AGENT_MCP_STDIO_ALLOWED_COMMANDS`，最后显式设置 `AGENT_STRUCTURED_TOOL_CALLING_ENABLED=true`；仅调用内置本地工具时只需设置最后一个开关。默认值始终为 `false`，避免未审计的规划器工具执行进入生产请求路径。完整的 MCP/园区能耗接入流程请参见 [`docs/MCP_INTEGRATION.md`](docs/MCP_INTEGRATION.md)。
+- 如需启用结构化 MCP 工具调用，先开启 `AGENT_CAPABILITY_RUNTIME_ENABLED=true`，再按传输方式配置 `AGENT_MCP_ALLOWED_HOSTS` 或 `AGENT_MCP_STDIO_ALLOWED_COMMANDS`，最后显式设置 `AGENT_STRUCTURED_TOOL_CALLING_ENABLED=true`；仅调用内置本地工具时只需设置最后一个开关。默认值始终为 `false`，避免未审计的规划器工具执行进入生产请求路径。完整的 MCP/园区能耗与安防接入流程请参见 [`docs/MCP_INTEGRATION.md`](docs/MCP_INTEGRATION.md)。
 - 队列工作流会在每个步骤完成后保存状态；服务重启后会从第一个未完成步骤恢复。恢复语义是至少一次执行，服务在步骤执行中退出时该步骤可能再次执行。
 - 只有通过工作流入口创建的任务支持重启恢复；直接提交任意 Python callable 的内部队列任务不支持跨进程恢复。
 - 当前队列由单个进程内工作线程和 SQLite 文件组成，生产部署应保持单实例；多副本需要迁移到外部队列和共享数据库。

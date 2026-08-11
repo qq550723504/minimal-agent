@@ -29,6 +29,8 @@ services:
       AGENT_MCP_ALLOWED_HOSTS: ${AGENT_MCP_ALLOWED_HOSTS:-}
       PARK_ENERGY_MCP_URL: ${PARK_ENERGY_MCP_URL:-http://park_energy:8100/mcp}
       PARK_ENERGY_MCP_TOKEN: ${PARK_ENERGY_MCP_TOKEN:-}
+      PARK_SECURITY_MCP_URL: ${PARK_SECURITY_MCP_URL:-http://park_security:8200/mcp}
+      PARK_SECURITY_MCP_TOKEN: ${PARK_SECURITY_MCP_TOKEN:-}
       AGENT_MCP_STDIO_ALLOWED_COMMANDS: ${AGENT_MCP_STDIO_ALLOWED_COMMANDS:-}
       AGENT_MCP_STARTUP_TIMEOUT_SECONDS: ${AGENT_MCP_STARTUP_TIMEOUT_SECONDS:-30}
       AGENT_MCP_DISCOVERY_TIMEOUT_SECONDS: ${AGENT_MCP_DISCOVERY_TIMEOUT_SECONDS:-30}
@@ -40,6 +42,8 @@ services:
       - ./plugins:/app/plugins:ro
     depends_on:
       park_energy:
+        condition: service_healthy
+      park_security:
         condition: service_healthy
   park_energy:
     build: .
@@ -56,6 +60,26 @@ services:
         - python
         - -c
         - "import socket; s = socket.create_connection(('127.0.0.1', 8100), 2); s.close()"
+      interval: 2s
+      timeout: 3s
+      retries: 15
+      start_period: 3s
+  park_security:
+    build: .
+    command: ["python", "-m", "plugins.park_security.server.main"]
+    ports:
+      - "127.0.0.1:8200:8200"
+    environment:
+      PARK_SECURITY_DATA_MODE: ${PARK_SECURITY_DATA_MODE:-mock}
+      PARK_SECURITY_MCP_HOST: 0.0.0.0
+      PARK_SECURITY_MCP_PORT: "8200"
+      PARK_SECURITY_APPROVAL_TOKEN: ${PARK_SECURITY_APPROVAL_TOKEN:-}
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import socket; s = socket.create_connection(('127.0.0.1', 8200), 2); s.close()"
       interval: 2s
       timeout: 3s
       retries: 15

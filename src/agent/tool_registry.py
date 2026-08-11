@@ -17,7 +17,14 @@ CAPABILITY_REGISTRY = CapabilityRegistry()
 _CAPABILITY_NAME_PATTERN = re.compile(r"^[a-z0-9][a-z0-9_.-]*$")
 
 
-def register_tool(name: str, func: Callable[[str], str], description: str = "") -> None:
+def register_tool(
+    name: str,
+    func: Callable[[str], str],
+    description: str = "",
+    *,
+    side_effects: bool = True,
+    idempotent: bool = False,
+) -> None:
     """注册一个工具函数，用于执行器的工具步骤调用。"""
     normalized_name = name.strip().lower()
     normalized_description = description.strip()
@@ -37,8 +44,8 @@ def register_tool(name: str, func: Callable[[str], str], description: str = "") 
                     "additionalProperties": False,
                 },
                 source=ToolSource.LOCAL,
-                side_effects=True,
-                idempotent=False,
+                side_effects=side_effects,
+                idempotent=idempotent,
             ),
             legacy_handler,
             replace=True,

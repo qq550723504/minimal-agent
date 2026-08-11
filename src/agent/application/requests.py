@@ -18,7 +18,7 @@ if __package__ is None and __name__ == "__main__":
 from src.agent import config
 from src.agent.application.execution.service import enqueue_task_execution, execute_plan_items
 from src.agent.infrastructure.memory.memory_manager import initialize_memory, save_memory
-from src.agent.application.planning.service import plan_task
+from src.agent.application.planning.service import plan_task, planner_visible_specs
 from src.agent.infrastructure.skills.loader import SkillCatalog
 from src.agent.infrastructure.skills.resolver import SkillResolver
 from src.agent.tool_registry import get_capability_registry
@@ -52,23 +52,26 @@ async def handle_input_async(
     registry = get_capability_registry()
     active_skill_ids = _resolve_active_skill_ids(prompt, skill_catalog)
     structured_mode = _structured_tool_calling_enabled()
+    visible_specs = planner_visible_specs(registry.list_specs())
     steps = await asyncio.to_thread(
         partial(
             plan_task,
             prompt,
             user_id=user_id,
-            tool_specs=registry.list_specs(),
+            tool_specs=visible_specs,
             structured_tools=structured_mode,
         )
     )
     run_id = uuid.uuid4().hex
-    results = await execute_plan_items(
-        steps,
-        owner_id=user_id,
-        run_id=run_id,
-        active_skill_ids=active_skill_ids,
-        registry=registry,
-    )
+    execution_kwargs = {
+        "owner_id": user_id,
+        "run_id": run_id,
+        "active_skill_ids": active_skill_ids,
+        "registry": registry,
+    }
+    if structured_mode:
+        execution_kwargs["allowed_tools"] = {spec.name for spec in visible_specs}
+    results = await execute_plan_items(steps, **execution_kwargs)
     separator = "; " if structured_mode else " | "
     return separator.join(results)
 

@@ -2,14 +2,19 @@ import asyncio
 import json
 import re
 import uuid
-from typing import Any, List, Optional
+from typing import Any, Collection, List, Optional
 
 from src.agent.config import MAX_TOOL_RESULT_BYTES
 from src.agent.domain.planning.models import PlanItem, ToolCallPlan
 from src.agent.infrastructure.workflows.task_queue import enqueue_task, get_workflow_queue, get_workflow_store
 from src.agent.tool_registry import get_capability_registry, get_tool
 from src.agent.infrastructure.workflows.workflow_store import WorkflowStore
-from src.agent.domain.capabilities.models import ToolCall, ToolInvocationContext, ToolResult
+from src.agent.domain.capabilities.models import (
+    ToolCall,
+    ToolInvocationContext,
+    ToolResult,
+    ToolResultStatus,
+)
 from src.agent.domain.capabilities.registry import CapabilityRegistry
 
 # 导入默认工具注册模块
@@ -180,8 +185,9 @@ async def execute_plan_items(
     run_id: str | None = None,
     active_skill_ids: tuple[str, ...] = (),
     registry: CapabilityRegistry | None = None,
+    allowed_tools: Collection[str] | None = None,
 ) -> list[str]:
-    """Execute mixed text and structured tool-call steps without blocking the event loop."""
+    """执行文本步骤和结构化工具调用，并阻止 Planner 调用未授权的隐藏工具。"""
 
     context = ToolInvocationContext(
         owner_id=owner_id,
@@ -192,11 +198,23 @@ async def execute_plan_items(
     results: list[str] = []
     for step in steps:
         if isinstance(step, ToolCallPlan):
-            tool_result = await execute_tool_call(
-                ToolCall(call_id=step.call_id, tool=step.tool, arguments=step.arguments),
-                context,
-                active_registry,
-            )
+            if (
+                allowed_tools is not None
+                and step.tool not in allowed_tools
+                and active_registry.get_spec(step.tool) is not None
+            ):
+                tool_result = ToolResult(
+                    call_id=step.call_id,
+                    tool=step.tool,
+                    status=ToolResultStatus.ERROR,
+                    error_code="tool_not_planner_visible",
+                )
+            else:
+                tool_result = await execute_tool_call(
+                    ToolCall(call_id=step.call_id, tool=step.tool, arguments=step.arguments),
+                    context,
+                    active_registry,
+                )
             results.append(_render_tool_result(tool_result))
             continue
 
