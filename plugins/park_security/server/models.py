@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -61,7 +61,7 @@ class SecurityEvent(BaseModel):
     status: EventStatus = "open"
     first_occurred_at: str = "1970-01-01T00:00:00Z"
     last_occurred_at: str = "1970-01-01T00:00:00Z"
-    alarm_ids: list[str] = Field(default_factory=list)
+    alarm_ids: list[Annotated[str, Field(min_length=1)]] = Field(default_factory=list)
     impact_scope: list[str] = Field(default_factory=list)
     recommended_plan: str = ""
     responsible_party: str | None = Field(default=None, min_length=1)

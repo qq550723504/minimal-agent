@@ -23,6 +23,13 @@ def test_settings_defaults_to_loopback_mock(monkeypatch):
     assert settings.data_mode == "mock"
 
 
+def test_settings_rejects_non_mock_data_mode(monkeypatch):
+    monkeypatch.setenv("PARK_SECURITY_DATA_MODE", "rest")
+
+    with pytest.raises(ValueError, match="PARK_SECURITY_DATA_MODE must be mock"):
+        Settings.from_env()
+
+
 def test_action_models_require_operator_and_assignee():
     assert EventAction(event_id="event-night-001", operator_id="guard-01").operator_id == "guard-01"
     assert CreateWorkOrder(
@@ -42,3 +49,8 @@ def test_security_event_defaults_to_open_with_empty_collections():
 def test_alarm_source_is_limited_to_upstream_security_systems():
     with pytest.raises(ValidationError):
         SecurityAlarm(alarm_id="alarm-001", source="device", park_id="park-1")
+
+
+def test_security_event_rejects_empty_alarm_identifiers():
+    with pytest.raises(ValidationError):
+        SecurityEvent(event_id="event-001", park_id="park-1", alarm_ids=[""])
