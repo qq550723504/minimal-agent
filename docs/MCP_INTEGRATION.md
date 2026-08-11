@@ -211,10 +211,37 @@ curl -H "X-API-Key: <api-key>" http://localhost:8000/api/skills
 
 ## 五、故障定位
 
+### 5.1 本地开发常见坑
+
+本地联调时需要区分 Docker Compose 和直接运行 Python：
+
+- 两个 capability 开关默认都是 `false`。修改 `.env` 或环境变量后必须重启 agent；已经运行的进程不会重新读取配置。
+- Docker Compose 会自动读取项目根目录的 `.env`。直接执行 `python -m plugins.park_energy.server.main` 或 `python -m uvicorn ...` 不会自动读取 `.env`，必须在同一个 PowerShell 会话中显式设置环境变量，或使用 Compose 启动。
+- 宿主机直接运行时使用 `PARK_ENERGY_MCP_URL=http://127.0.0.1:8100/mcp` 和 `AGENT_MCP_ALLOWED_HOSTS=127.0.0.1`；Compose 内的 agent 必须使用 `http://park_energy:8100/mcp` 和 `AGENT_MCP_ALLOWED_HOSTS=park_energy`，容器内的 `127.0.0.1` 指向 agent 自身。
+- `PARK_ENERGY_DATA_MODE=mock` 只对实际启动的 `park_energy` 进程生效。若直接运行 Python 时没有传入该变量，服务会回退到 `rest`，随后可能出现 `mcp_tool_error`，实际根因是上游 REST API 不可用或返回了非 JSON。
+- Gemini 结构化调用依赖 JSON 响应约束和工具输入 Schema。只提供自然语言提示时，模型可能只输出“调用某接口”的文字；这不等于工具已经执行。`/api/handle` 的请求应包含 `park_id`、时间范围等工具必填参数，缺少 `park_id` 时要求补充是正常行为。
+- 审计日志中的 `[REDACTED]` 是脱敏标记，不代表时间或业务数据被 MCP 修改。`mcp_tool_error` 表示 MCP Server 返回了错误结果；应同时检查 MCP 服务自身日志和 `PARK_ENERGY_DATA_MODE`，不要只看 agent 的脱敏错误码。
+
+宿主机直接运行 mock 服务的最小配置：
+
+```powershell
+$env:PARK_ENERGY_DATA_MODE = "mock"
+$env:PARK_ENERGY_MCP_HOST = "127.0.0.1"
+$env:PARK_ENERGY_MCP_PORT = "8100"
+python -m plugins.park_energy.server.main
+```
+
+验证工具注册和调用时，先检查 `/api/plugins`、`/api/tools`，再使用明确的业务请求，例如：
+
+```text
+查询园区 park-2 今天的电耗数据，按天统计
+```
+
 | 现象或错误码 | 含义 | 处理方向 |
 | --- | --- | --- |
 | `unknown_tool` | 规划器生成了未注册工具 | 以 `/api/tools` 返回名为准，检查插件是否成功加载 |
 | `invalid_tool_arguments` | 参数不符合 MCP 工具 JSON Schema | 检查字段、类型、必填项和时间格式 |
+| `mcp_tool_error` | MCP Server 返回了 `is_error=true` | 检查 park_energy 是否误运行在 `rest` 模式、上游 API 是否可用，以及 MCP Server 自身日志 |
 | `tool_timeout` | 本地能力执行超时 | 调整工具 timeout 或拆分查询范围 |
 | `mcp_tool_transport_failed` | 幂等工具的 MCP 传输失败 | 检查 URL、网络、DNS 和 MCP Server 健康状态 |
 | `mcp_tool_unknown_outcome` | 非幂等工具执行结果未知 | 不要自动重试，先到业务系统确认是否已生效 |
