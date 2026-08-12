@@ -42,6 +42,7 @@ audit.log
 # Temporary directories
 .tmp
 .worktrees/
+.docs/superpowers
 
 # Test and type-check caches
 .coverage
