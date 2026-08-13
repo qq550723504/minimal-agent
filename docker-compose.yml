@@ -32,6 +32,9 @@ services:
       ENERGY_API_BASE_URL: ${ENERGY_API_BASE_URL:-http://cent-energy:9714}
       ENERGY_PROJECT_IDS: ${ENERGY_PROJECT_IDS:-}
       ENERGY_TREND_PATH: ${ENERGY_TREND_PATH:-/api/agent/v1/energy/trend}
+      ENERGY_RANKING_PATH: ${ENERGY_RANKING_PATH:-/api/agent/v1/energy/ranking}
+      ENERGY_COMPARE_PATH: ${ENERGY_COMPARE_PATH:-/api/agent/v1/energy/compare}
+      ENERGY_ALARMS_PATH: ${ENERGY_ALARMS_PATH:-/api/agent/v1/energy/anomalies}
       PARK_SECURITY_MCP_URL: ${PARK_SECURITY_MCP_URL:-http://park_security:8200/mcp}
       PARK_SECURITY_MCP_TOKEN: ${PARK_SECURITY_MCP_TOKEN:-}
       AGENT_MCP_STDIO_ALLOWED_COMMANDS: ${AGENT_MCP_STDIO_ALLOWED_COMMANDS:-}
@@ -58,6 +61,9 @@ services:
       ENERGY_API_BASE_URL: ${ENERGY_API_BASE_URL:-http://cent-energy:9714}
       ENERGY_PROJECT_IDS: ${ENERGY_PROJECT_IDS:-}
       ENERGY_TREND_PATH: ${ENERGY_TREND_PATH:-/api/agent/v1/energy/trend}
+      ENERGY_RANKING_PATH: ${ENERGY_RANKING_PATH:-/api/agent/v1/energy/ranking}
+      ENERGY_COMPARE_PATH: ${ENERGY_COMPARE_PATH:-/api/agent/v1/energy/compare}
+      ENERGY_ALARMS_PATH: ${ENERGY_ALARMS_PATH:-/api/agent/v1/energy/anomalies}
       PARK_ENERGY_MCP_HOST: 0.0.0.0
       PARK_ENERGY_MCP_PORT: "8100"
     healthcheck:

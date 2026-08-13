@@ -104,9 +104,12 @@ MiniAgent。Docker Compose 内请使用 `park_energy` 作为 URL 主机名和 al
   - 可选参数：`building_id`、`energy_type`（默认 `electricity`）、`granularity`（默认 `day`）
   - REST 模式 POST 到 `/api/agent/v1/energy/trend`，日期映射为 `startDate`/`endDate`，项目范围来自 `ENERGY_PROJECT_IDS`。
 - `energy.query_ranking`
+  - REST 模式 POST 到 `/api/agent/v1/energy/ranking`，返回按电表降序的 `items`。
 - `energy.get_peak_value`
 - `energy.compare_period`
+  - REST 模式 POST 到 `/api/agent/v1/energy/compare`，返回 `currentTotal`、`baselineTotal`、`delta`、`changePercent`。
 - `energy.get_alarm_summary`
+  - REST 模式 POST 到 `/api/agent/v1/energy/anomalies`，返回异常读数、缺失读数和受影响电表日数量。
 
 ## 插件信息
 
