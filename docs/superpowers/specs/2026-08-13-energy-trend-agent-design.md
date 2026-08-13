@@ -23,6 +23,8 @@
 
 `cent-energy` 是数据口径和计算边界：读取电表、取读数、计算耗电量、处理无效数据，并返回结构化结果。`minimal-agent` 只负责将工具参数转换为 HTTP 请求、处理远端错误、将结果交给编排层；不连接业务数据库，也不计算电表读数。
 
+`cent-energy` 现有默认数据源继续连接 `cent_energy`，保持后台管理功能不变。新增独立、只读的 `agent.datasource` 连接 `cent_agent`，仅由 Agent 能耗查询仓储使用；不得把默认 `spring.datasource` 切换到 `cent_agent`，也不得将数据库密码写入源码或提交到仓库。
+
 ## Java 接口
 
 接口：`POST /api/agent/v1/energy/trend`
