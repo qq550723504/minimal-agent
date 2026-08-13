@@ -216,6 +216,15 @@ def test_compose_forwards_global_tool_result_limit():
     assert "AGENT_MAX_TOOL_RESULT_BYTES: ${AGENT_MAX_TOOL_RESULT_BYTES:-1048576}" in compose
 
 
+def test_compose_forwards_java_backed_energy_runtime_configuration():
+    compose = (ROOT / "docker-compose.yml").read_text(encoding="utf-8")
+
+    assert "ENERGY_API_BASE_URL: ${ENERGY_API_BASE_URL:-http://cent-energy:9714}" in compose
+    assert "ENERGY_PROJECT_IDS: ${ENERGY_PROJECT_IDS:-}" in compose
+    assert "ENERGY_TREND_PATH: ${ENERGY_TREND_PATH:-/api/agent/v1/energy/trend}" in compose
+    assert "PARK_ENERGY_DATA_MODE: ${PARK_ENERGY_DATA_MODE:-mock}" in compose
+
+
 def test_docker_build_context_excludes_local_runtime_data():
     dockerignore = (ROOT / ".dockerignore").read_text(encoding="utf-8").splitlines()
 

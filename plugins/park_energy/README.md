@@ -26,6 +26,17 @@ $env:ENERGY_API_MAX_RESPONSE_BYTES = "1048576"
 - 如果你的后端路由路径不同，请覆盖 `ENERGY_*_PATH` 相关变量。
 - 如果接口是公开的，`ENERGY_API_TOKEN` 可选。
 - `ENERGY_PROJECT_IDS` 是服务端受控的项目范围，趋势查询必须非空；不要从用户自然语言直接拼接该变量。
+
+## 真实 Java 闭环联调
+
+按以下顺序启动本地链路：
+
+1. 启动 `cent-energy`，确认趋势接口监听 `http://127.0.0.1:19714`。
+2. 设置 `PARK_ENERGY_DATA_MODE=rest`、`ENERGY_API_BASE_URL=http://127.0.0.1:19714`、`ENERGY_PROJECT_IDS=2709`。
+3. 启动 park-energy MCP 服务。
+4. 启动 Agent，并显式设置 `AGENT_CAPABILITY_RUNTIME_ENABLED=true`、`AGENT_STRUCTURED_TOOL_CALLING_ENABLED=true`、`AGENT_MCP_ALLOWED_HOSTS=127.0.0.1`。
+
+用户请求“查询最近 7 天能耗”时，Agent 会调用 `energy.query_trend`，由 Java 查询 `cent_energy` 后返回趋势、累计值、峰值和数据质量。
 - `PARK_ENERGY_DATA_MODE` 取值为 `rest` 或 `mock`，默认是 `rest`。
 - `mock` 模式下，五个工具返回可重复的示例数据，不会请求上游 API。
 

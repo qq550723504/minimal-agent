@@ -86,7 +86,7 @@
 - [x] 记录 `PARK_ENERGY_DATA_MODE=rest`、`ENERGY_API_BASE_URL`、默认趋势路径和项目范围来源。
 - [x] 记录手工请求：`Invoke-RestMethod -Method Post -Uri "http://localhost:9714/api/agent/v1/energy/trend" -ContentType "application/json" -Body '{"startDate":"2026-08-04","endDate":"2026-08-10","meterIds":[],"projectIds":[101]}'`。
 - [x] 运行 Java `mvn test`（3 个测试通过）与 Python `pytest tests/infrastructure/plugins/test_park_energy.py -q`（12 个测试通过）。
-- [ ] 在真实 `cent_energy` 数据库启动 `cent-energy`，调用接口并将响应总量与同口径 SQL 核对；当前待补齐正式的 `cent-common:aomen-2.4.8-SNAPSHOT` 制品后进行。
+- [x] 在真实 `cent_energy` 数据库启动临时 `cent-energy` 联调实例，调用接口并将响应总量与同口径 SQL 核对；真实响应总量为 `720.0`。
 - [ ] 提交文档：`git add plugins/park_energy/README.md docs/superpowers/specs/2026-08-13-energy-trend-agent-design.md`，然后 `git commit -m "docs: document agent energy trend integration"`。
 
 ## Plan Self-Review
