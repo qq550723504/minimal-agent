@@ -26,6 +26,14 @@ class EnergyCompareQuery(EnergyQuery):
     compare_end_time: str
 
 
+class EnergyRankingQuery(EnergyQuery):
+    limit: int = 10
+
+
+class EnergyAnomalyQuery(EnergyQuery):
+    pass
+
+
 class EnergyResponse(BaseModel):
     success: bool = True
     data: Any = None

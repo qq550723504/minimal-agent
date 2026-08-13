@@ -7,7 +7,7 @@ from typing import Any
 import httpx
 
 from .config import Settings
-from .models import EnergyCompareQuery, EnergyQuery, EnergyTrendRequest, wrap_response
+from .models import EnergyCompareQuery, EnergyQuery, EnergyTrendRequest, EnergyRankingQuery, EnergyAnomalyQuery, wrap_response
 
 
 class EnergyAPIError(RuntimeError):
@@ -105,13 +105,33 @@ class EnergyRESTClient:
         return await self._post_json(self.settings.trend_path, request.model_dump())
 
     async def query_ranking(self, query: EnergyQuery) -> dict[str, Any]:
-        return await self._get(self.settings.ranking_path, self._query_params(query))
+        if not self.settings.project_ids:
+            raise EnergyAPIError("energy API project scope is not configured")
+        body = {
+            "startDate": query.start_time[:10],
+            "endDate": query.end_time[:10],
+            "meterIds": [query.building_id] if query.building_id else [],
+            "projectIds": list(self.settings.project_ids),
+            "limit": 10,
+        }
+        return await self._post_json(self.settings.ranking_path, body)
 
     async def get_peak_value(self, query: EnergyQuery) -> dict[str, Any]:
         return await self._get(self.settings.peak_path, self._query_params(query))
 
     async def compare_period(self, query: EnergyCompareQuery) -> dict[str, Any]:
-        return await self._get(self.settings.compare_path, self._query_params(query))
+        if not self.settings.project_ids:
+            raise EnergyAPIError("energy API project scope is not configured")
+        body = {
+            "startDate": query.start_time[:10], "endDate": query.end_time[:10],
+            "baselineStartDate": query.compare_start_time[:10], "baselineEndDate": query.compare_end_time[:10],
+            "meterIds": [query.building_id] if query.building_id else [], "projectIds": list(self.settings.project_ids),
+        }
+        return await self._post_json(self.settings.compare_path, body)
 
     async def get_alarm_summary(self, query: EnergyQuery) -> dict[str, Any]:
-        return await self._get(self.settings.alarms_path, self._query_params(query))
+        if not self.settings.project_ids:
+            raise EnergyAPIError("energy API project scope is not configured")
+        body = {"startDate": query.start_time[:10], "endDate": query.end_time[:10],
+                "meterIds": [query.building_id] if query.building_id else [], "projectIds": list(self.settings.project_ids)}
+        return await self._post_json(self.settings.alarms_path, body)
