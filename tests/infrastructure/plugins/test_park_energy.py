@@ -224,6 +224,42 @@ def test_rest_trend_posts_java_agent_contract(monkeypatch: pytest.MonkeyPatch):
     assert result["data"]["total"] == 5
 
 
+def test_rest_trend_accepts_cent_common_success_code(monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setenv("ENERGY_PROJECT_IDS", "2709")
+
+    class Response:
+        status_code = 200
+        headers = {"content-length": "48"}
+
+        def raise_for_status(self):
+            return None
+
+        async def aread(self):
+            return b'{"code":1000,"state":true,"result":{"total":720}}'
+
+    class Client:
+        def __init__(self, **kwargs):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            return None
+
+        async def post(self, url, **kwargs):
+            return Response()
+
+    monkeypatch.setattr("plugins.park_energy.server.rest_client.httpx.AsyncClient", Client)
+    query = EnergyQuery(
+        park_id="park-1",
+        start_time="2026-08-04T00:00:00Z",
+        end_time="2026-08-10T23:59:59Z",
+    )
+    result = asyncio.run(EnergyRESTClient(Settings.from_env()).query_trend(query))
+    assert result["data"]["total"] == 720
+
+
 @pytest.mark.parametrize(
     ("status", "body", "message"),
     [

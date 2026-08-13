@@ -36,4 +36,6 @@ def wrap_response(payload: Any) -> dict[str, Any]:
     """Keep a stable envelope while the upstream response contract is pending."""
     if isinstance(payload, dict) and "data" in payload:
         return {"success": True, "data": payload["data"], "raw": payload}
+    if isinstance(payload, dict) and "result" in payload:
+        return {"success": True, "data": payload["result"], "raw": payload}
     return {"success": True, "data": payload, "raw": payload}

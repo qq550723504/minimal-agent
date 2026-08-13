@@ -81,7 +81,9 @@ class EnergyRESTClient:
             raise EnergyAPIError("energy API request failed or returned invalid JSON") from exc
         if not isinstance(payload, dict):
             raise EnergyAPIError("energy API returned invalid JSON")
-        if payload.get("code") not in (None, 200):
+        # cent-common ResultJson uses 1000 for success; keep 200 for
+        # conventional REST services and None for unwrapped responses.
+        if payload.get("code") not in (None, 200, 1000):
             raise EnergyAPIError("energy API returned business failure")
         if payload.get("state") is False or payload.get("success") is False:
             raise EnergyAPIError("energy API returned business failure")
