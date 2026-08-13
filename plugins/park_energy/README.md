@@ -12,7 +12,8 @@ $env:ENERGY_API_TOKEN = "<secret>"
 $env:ENERGY_API_TOKEN_HEADER = "Authorization"
 $env:ENERGY_API_TOKEN_PREFIX = "Bearer"
 $env:ENERGY_API_TIMEOUT_SECONDS = "10"
-$env:ENERGY_TREND_PATH = "/api/energy/trend"
+$env:ENERGY_TREND_PATH = "/api/agent/v1/energy/trend"
+$env:ENERGY_PROJECT_IDS = "101,102"
 $env:ENERGY_RANKING_PATH = "/api/energy/ranking"
 $env:ENERGY_PEAK_PATH = "/api/energy/peak"
 $env:ENERGY_COMPARE_PATH = "/api/energy/compare"
@@ -24,6 +25,7 @@ $env:ENERGY_API_MAX_RESPONSE_BYTES = "1048576"
 
 - 如果你的后端路由路径不同，请覆盖 `ENERGY_*_PATH` 相关变量。
 - 如果接口是公开的，`ENERGY_API_TOKEN` 可选。
+- `ENERGY_PROJECT_IDS` 是服务端受控的项目范围，趋势查询必须非空；不要从用户自然语言直接拼接该变量。
 - `PARK_ENERGY_DATA_MODE` 取值为 `rest` 或 `mock`，默认是 `rest`。
 - `mock` 模式下，五个工具返回可重复的示例数据，不会请求上游 API。
 
@@ -89,6 +91,7 @@ MiniAgent。Docker Compose 内请使用 `park_energy` 作为 URL 主机名和 al
 - `energy.query_trend`
   - 必填参数：`park_id`、`start_time`、`end_time`
   - 可选参数：`building_id`、`energy_type`（默认 `electricity`）、`granularity`（默认 `day`）
+  - REST 模式 POST 到 `/api/agent/v1/energy/trend`，日期映射为 `startDate`/`endDate`，项目范围来自 `ENERGY_PROJECT_IDS`。
 - `energy.query_ranking`
 - `energy.get_peak_value`
 - `energy.compare_period`
@@ -99,3 +102,12 @@ MiniAgent。Docker Compose 内请使用 `park_energy` 作为 URL 主机名和 al
 - 插件 ID：`park-energy`
 - 通信方式：`streamable_http`
 - 默认端口：`8100`
+
+## Java 趋势接口手工联调
+
+```powershell
+Invoke-RestMethod -Method Post `
+  -Uri "http://localhost:9714/api/agent/v1/energy/trend" `
+  -ContentType "application/json" `
+  -Body '{"startDate":"2026-08-04","endDate":"2026-08-10","meterIds":[],"projectIds":[101]}'
+```

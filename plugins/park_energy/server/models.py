@@ -14,6 +14,13 @@ class EnergyQuery(BaseModel):
     granularity: Literal["hour", "day", "month"] = "day"
 
 
+class EnergyTrendRequest(BaseModel):
+    startDate: str
+    endDate: str
+    meterIds: list[str] = Field(default_factory=list)
+    projectIds: list[int] = Field(min_length=1)
+
+
 class EnergyCompareQuery(EnergyQuery):
     compare_start_time: str
     compare_end_time: str

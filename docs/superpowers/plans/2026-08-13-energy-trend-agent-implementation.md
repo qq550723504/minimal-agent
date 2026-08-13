@@ -31,9 +31,9 @@
 
 **Interfaces:** `List<MeterDailyReading> findDailyReadings(LocalDate startDate, LocalDate endDate, List<Long> projectIds, List<String> meterIds)`；DTO 字段为 `meterId`、`date`、`firstReading`、`lastReading`、`readingCount`。
 
-- [ ] 先写失败的 DAO 契约测试：要求 Mapper 方法接收项目范围，且输出含电表、日期、首末读数和采样数。
+- [x] 先写失败的 DAO 契约测试：要求 Mapper 方法接收项目范围，且输出含电表、日期、首末读数和采样数。
 - [ ] 运行 `mvn -Dtest=AgentEnergyDaoTest test`，确认因 DAO/DTO 缺失失败。
-- [ ] 新建 Mapper 接口/XML。SQL 必须以 `CMC_DEVICE_METER_INFO.DEVICE_CODE = CMC_DEVICE_REPORT_DATA.DEVICE_CODE` 连接，并使用 `PROJECT_ID IN (...)` 过滤；时间使用 `[startDate 00:00, endDate+1 00:00)`。每个电表日期按 `MIN(CREATED_DATE)` 与 `MAX(CREATED_DATE)` 找首末记录并取对应 `ACTIVE_ENERGY`，禁止用 `MIN/MAX(ACTIVE_ENERGY)` 替代时间首末值。
+- [x] 新建 Mapper 接口/XML。SQL 必须以 `CMC_DEVICE_METER_INFO.DEVICE_CODE = CMC_DEVICE_REPORT_DATA.DEVICE_CODE` 连接，并使用 `PROJECT_ID IN (...)` 过滤；时间使用 `[startDate 00:00, endDate+1 00:00)`。每个电表日期按 `MIN(CREATED_DATE)` 与 `MAX(CREATED_DATE)` 找首末记录并取对应 `ACTIVE_ENERGY`，禁止用 `MIN/MAX(ACTIVE_ENERGY)` 替代时间首末值。
 - [ ] 运行 `mvn -Dtest=AgentEnergyDaoTest test`，确认通过。
 - [ ] 提交：`git add src/main/java/com/xhwl/energy/agent src/main/resources/mapper/AgentEnergyMapper.xml src/test/java/com/xhwl/energy/agent/dao/AgentEnergyDaoTest.java`，然后 `git commit -m "feat: query daily energy readings for agent"`。
 
@@ -56,7 +56,7 @@
 
 - [ ] 写失败测试：同日 `10->15` 与 `20->18` 读数总量为 `5`、有效电表数为 `1`、无效读数数为 `1`；缺项目、反向日期或 32 天日期范围抛 `IllegalArgumentException`；无有效读数返回零总量和空序列。
 - [ ] 运行 `mvn -Dtest=AgentEnergyServiceImplTest test`，确认因实现缺失失败。
-- [ ] 实现请求参数 `startDate`、`endDate`、`meterIds`、`projectIds`：日期必填、项目范围必填、跨度最大 31 天。逐行计算：样本数小于 2 增加缺失；负差值增加无效；否则累加日点。按日期排序，计算总量、两位小数日均、峰和谷。
+- [x] 实现请求参数 `startDate`、`endDate`、`meterIds`、`projectIds`：日期必填、项目范围必填、跨度最大 31 天。逐行计算：样本数小于 2 增加缺失；负差值增加无效；否则累加日点。按日期排序，计算总量、两位小数日均、峰和谷。
 - [ ] 实现 `/api/agent/v1/energy/trend` Controller，并用 `ResultJson.success` 包装成功结果。
 - [ ] 运行 `mvn -Dtest=AgentEnergyServiceImplTest,AgentEnergyControllerTest test`，再运行 `mvn test`；均应通过。
 - [ ] 提交：`git add src/main/java/com/xhwl/energy/agent src/test/java/com/xhwl/energy/agent`，然后 `git commit -m "feat: expose agent energy trend endpoint"`。
@@ -72,7 +72,7 @@
 
 - [ ] 写失败测试，要求 `query_trend` 向 `/api/agent/v1/energy/trend` 发送 POST，JSON 为 `{"startDate":"2026-08-04","endDate":"2026-08-10","meterIds":[],"projectIds":[101]}`；Java `{"code":200,"data":{"total":5}}` 解析为成功，HTTP 500、失败 ResultJson 与错误 JSON 为 `EnergyAPIError`。
 - [ ] 运行 `pytest tests/infrastructure/plugins/test_park_energy.py -q`，确认因当前 GET 与旧路径失败。
-- [ ] 默认 `trend_path` 改为 `/api/agent/v1/energy/trend`。新增 `EnergyTrendRequest`，映射日期、可选 `building_id` 至 `meterIds`，并接收项目范围；增加有请求体上限、超时、请求头和错误转换的 `_post_json()`。只有 `query_trend` 改 POST；其余工具继续 GET。
+- [x] 默认 `trend_path` 改为 `/api/agent/v1/energy/trend`。新增 `EnergyTrendRequest`，映射日期、可选 `building_id` 至 `meterIds`，并接收项目范围；增加有请求体上限、超时、请求头和错误转换的 `_post_json()`。只有 `query_trend` 改 POST；其余工具继续 GET。
 - [ ] 运行 `pytest tests/infrastructure/plugins/test_park_energy.py -q`，确认通过。
 - [ ] 提交：`git add plugins/park_energy/server/config.py plugins/park_energy/server/models.py plugins/park_energy/server/rest_client.py tests/infrastructure/plugins/test_park_energy.py`，然后 `git commit -m "feat: call agent energy trend endpoint"`。
 
@@ -83,8 +83,8 @@
 - Modify: `E:/code/new/plugins/park_energy/README.md`
 - Modify: `E:/code/new/docs/superpowers/specs/2026-08-13-energy-trend-agent-design.md`
 
-- [ ] 记录 `PARK_ENERGY_DATA_MODE=rest`、`ENERGY_API_BASE_URL`、默认趋势路径和项目范围来源。
-- [ ] 记录手工请求：`Invoke-RestMethod -Method Post -Uri "http://localhost:9714/api/agent/v1/energy/trend" -ContentType "application/json" -Body '{"startDate":"2026-08-04","endDate":"2026-08-10","meterIds":[],"projectIds":[101]}'`。
+- [x] 记录 `PARK_ENERGY_DATA_MODE=rest`、`ENERGY_API_BASE_URL`、默认趋势路径和项目范围来源。
+- [x] 记录手工请求：`Invoke-RestMethod -Method Post -Uri "http://localhost:9714/api/agent/v1/energy/trend" -ContentType "application/json" -Body '{"startDate":"2026-08-04","endDate":"2026-08-10","meterIds":[],"projectIds":[101]}'`。
 - [ ] 运行 Java `mvn test` 与 Python `pytest tests/infrastructure/plugins/test_park_energy.py -q`；在真实 `cent_energy` 数据库有采样记录时，将响应总量与同口径 SQL 核对。
 - [ ] 提交文档：`git add plugins/park_energy/README.md docs/superpowers/specs/2026-08-13-energy-trend-agent-design.md`，然后 `git commit -m "docs: document agent energy trend integration"`。
 
