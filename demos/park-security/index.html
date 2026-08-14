@@ -16,16 +16,14 @@
         <p class="subtitle">把安防事件、值班规则和能耗数据汇聚到同一个可解释的 Agent 工作台。</p>
       </div>
       <div class="topbar-meta" aria-label="页面状态">
-        <span class="pill mock-badge">MOCK DATA</span>
         <span class="pill"><span class="dot"></span><strong>park-1</strong> · 运行正常</span>
-        <span class="pill">模拟时刻 <strong>2026-08-11 01:00 UTC</strong></span>
       </div>
     </header>
 
     <section class="panel chat-panel" aria-labelledby="chat-title">
       <div class="chat-header">
         <div class="chat-header-copy"><h2 id="chat-title">问问现有 Agent</h2><p class="panel-subtitle">自然语言提问，Agent 返回回答和可展开的安防、能耗结构化卡片。</p></div>
-        <span class="badge">response_mode: structured</span>
+        <span class="badge">response_mode: stream</span>
       </div>
       <div class="chat-messages" id="chat-messages" aria-live="polite">
         <div class="message message-assistant"><div class="message-role">Agent</div><p class="message-text">你好，我可以帮你查看园区事件、证据链、值班规则和能耗数据。试试问“查询最近 7 天园区能耗趋势”。</p></div>
@@ -35,12 +33,12 @@
         <button class="btn btn-primary" type="submit" id="chat-submit">发送给 Agent</button>
       </form>
       <div class="chat-tools">
-        <button class="prompt-chip" type="button" data-prompt="园区当前有哪些高风险事件？">高风险事件</button>
-        <button class="prompt-chip" type="button" data-prompt="机房有没有消防风险？">机房消防风险</button>
+        <button class="prompt-chip" type="button" data-prompt="查询园区安防态势汇总">安防态势汇总</button>
+        <button class="prompt-chip" type="button" data-prompt="查看事件 event-fire-003 的详情">消防事件详情</button>
+        <button class="prompt-chip" type="button" data-prompt="查看事件 event-night-001 的详情">夜间门禁详情</button>
         <button class="prompt-chip" type="button" data-prompt="凌晨一点谁在值班？">当前值班</button>
-        <button class="prompt-chip" type="button" data-prompt="查询最近 7 天园区能耗趋势">7 天能耗趋势</button>
-        <button class="prompt-chip" type="button" data-prompt="哪栋楼能耗最高？">能耗排名</button>
-        <button class="prompt-chip" type="button" data-prompt="最近有没有能耗异常？">能耗异常</button>
+        <button class="prompt-chip" type="button" data-prompt="查询园区能耗排名">能耗排名</button>
+        <button class="prompt-chip" type="button" data-prompt="哪栋楼能耗最高？">最高能耗电表</button>
         <label class="endpoint">Agent API 地址<input id="agent-endpoint" autocomplete="off"></label>
       </div>
       <p class="chat-status" id="chat-status">页面只会把问题发送到你配置的 Agent API，不会直连数据库或 MCP；能耗 MCP 地址由 <code>PARK_ENERGY_MCP_URL</code> 配置。</p>
@@ -81,7 +79,7 @@
 
       <aside class="side-column">
         <section class="panel" id="shift-panel" aria-labelledby="shift-title">
-          <div class="panel-header"><div><h2 id="shift-title">值班与升级</h2><p class="panel-subtitle">模拟时刻的区域响应上下文</p></div></div>
+          <div class="panel-header"><div><h2 id="shift-title">值班与升级</h2><p class="panel-subtitle">当前查询时段的区域响应上下文</p></div></div>
         </section>
         <section class="panel" aria-labelledby="scope-title">
           <div class="panel-header"><div><h2 id="scope-title">数据边界</h2><p class="panel-subtitle">当前演示不连接生产系统</p></div></div>
@@ -103,6 +101,6 @@
     </form>
   </dialog>
 
-  <script type="module" src="app.js?v=20260814-2"></script>
+  <script type="module" src="app.js?v=20260814-9"></script>
 </body>
 </html>

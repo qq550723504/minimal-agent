@@ -5,7 +5,7 @@ from pydantic import BaseModel
 
 class PromptIn(BaseModel):
     prompt: str
-    response_mode: Literal["text", "structured"] = "text"
+    response_mode: Literal["text", "structured", "stream"] = "text"
 
 
 class TaskStatusOut(BaseModel):

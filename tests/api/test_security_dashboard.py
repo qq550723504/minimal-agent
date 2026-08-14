@@ -8,7 +8,9 @@ def test_security_dashboard_contains_agent_chat_surface():
     page = (ROOT / "demos" / "park-security" / "index.html").read_text(encoding="utf-8")
 
     assert '<link rel="stylesheet" href="styles.css?v=20260814-2">' in page
-    assert '<script type="module" src="app.js?v=20260814-2"></script>' in page
+    assert '<script type="module" src="app.js?v=20260814-9"></script>' in page
+    assert "MOCK DATA" not in page
+    assert "模拟时刻" not in page
     assert '<style>' not in page
     assert '<script>' not in page
     assert 'style=' not in page
@@ -22,8 +24,14 @@ def test_security_dashboard_contains_agent_chat_surface():
     assert 'hidden = !demoMode' in app
     assert 'local-dashboard' in page
     assert "export function createInitialEvents" in mock_data
-    assert "event-fire-003" not in page
+    assert 'data-prompt="查看事件 event-fire-003 的详情"' in page
+    assert 'data-prompt="查看事件 event-night-001 的详情"' in page
     assert 'raw ? formatPercent(state.events.length / raw) : "—"' in app
+    assert 'evidenceSummaryLabels' in app
+    assert 'After-hours access attempt denied.' in app
+    assert '夜间门禁尝试被拒绝。' in app
+    assert 'Person detected near laboratory door.' in app
+    assert '实验室门附近检测到人员。' in app
     assert "[hidden] { display: none !important; }" in styles
 
     source = page + app
@@ -32,8 +40,11 @@ def test_security_dashboard_contains_agent_chat_surface():
         "/park-agent/",
         "chat-form",
         "chat-messages",
-        "response_mode",
+        "response_mode: stream",
+        'response_mode: isStreamingEndpoint ? "stream" : "structured"',
         "/api/handle",
+        "/api/handle/stream",
+        "response.body.getReader",
         "energy_trend",
         "energy_ranking",
         "energy_peak",

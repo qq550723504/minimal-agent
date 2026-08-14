@@ -51,23 +51,22 @@ docker run -it --rm -p 8000:8000 minimal-agent
 3. Docker Compose 运行：
 
 ```powershell
-$env:AGENT_HOST_PORT="8001"
 docker compose up --build
 ```
 
-Compose 会同时启动 `agent`、`park_energy`、`park_security` 和 Prometheus；开发环境默认让
-两个园区 MCP 服务返回确定性的 mock 数据。agent 可在 `8001` 访问，park-energy
+Compose 会启动 `agent`、`park_energy`、`park_security` 和 Prometheus；开发环境默认开启
+Agent 插件/结构化工具运行时，能耗默认通过 REST 调用本机 `cent-energy`，安防使用确定性的 mock 数据。agent 默认可在 `8000` 访问，park-energy
 与 park-security 的直接 MCP 地址分别是 `http://127.0.0.1:8100/mcp` 和
 `http://127.0.0.1:8200/mcp`。开发模式允许显式
 allowlist 的本机 HTTP MCP；生产模式仍强制 HTTPS。如需在本机接入 agent，
 请配置 `AGENT_MCP_ALLOWED_HOSTS=127.0.0.1`。如果宿主机
-`8000` 未被占用，可以省略 `AGENT_HOST_PORT`，否则通过该变量改宿主机端口，
+`8000` 已被占用时，通过 `AGENT_HOST_PORT` 改宿主机端口，
 容器内端口仍是 `8000`。
 
 服务运行后：
 
 ```bash
-curl http://localhost:8001/
+curl http://localhost:8000/
 ```
 
 4. 环境变量说明：
@@ -106,9 +105,13 @@ curl http://localhost:8001/
 - `AGENT_MCP_SHUTDOWN_TIMEOUT_SECONDS`: 每个 MCP 客户端关闭清理的超时，默认 `10` 秒；必须是有限正数。
 - `AGENT_MAX_ACTIVE_SKILLS`: 单次请求最多激活的 Skill 数，默认 `3`。
 - `AGENT_MAX_SKILL_REFERENCE_BYTES`: 单个 Skill 参考文件的最大读取字节数，默认 `262144`。
-- `PARK_ENERGY_DATA_MODE`: `park_energy` 数据模式，`rest` 或 `mock`；Compose 开发环境默认为 `mock`，生产覆盖配置默认为 `rest`。
+- `PARK_ENERGY_DATA_MODE`: `park_energy` 数据模式，`rest` 或 `mock`；Compose 默认使用 `rest`，只有演示或 Java 未启动时才显式改为 `mock`。
+- `ENERGY_API_BASE_URL`: `cent-energy` Agent REST 接口地址；Compose 默认通过 `http://host.docker.internal:9714` 访问宿主机 Java 服务，Java 在同一 Docker 网络时改为 `http://cent-energy:9714`。
+- `ENERGY_PROJECT_IDS`: Java 查询使用的受控项目范围，必须显式配置，例如 `2709`；不会从用户问题中拼接。
 - `PARK_SECURITY_DATA_MODE`: `park_security` 数据模式；当前仅支持 `mock`，Compose 开发环境默认为 `mock`。
 - `PARK_SECURITY_MCP_URL`: agent 连接园区安防 MCP 的地址；Compose 默认容器网络地址为 `http://park_security:8200/mcp`。
+- `DOCKER_AGENT_MCP_ALLOWED_HOSTS`: Compose 内 agent 使用的 MCP 主机 allowlist，默认 `park_energy,park_security`；用于避免宿主机 `.env` 中的 `127.0.0.1` 被错误带入容器。
+- `DOCKER_PARK_ENERGY_MCP_URL`、`DOCKER_PARK_SECURITY_MCP_URL`: Compose 内 agent 使用的 MCP 地址覆盖项，默认分别为 `http://park_energy:8100/mcp` 和 `http://park_security:8200/mcp`。
 - `PARK_SECURITY_MCP_TOKEN`: 可选的园区安防 MCP `Authorization` Header 值；不要写入插件清单或提交到仓库。
 - `PARK_SECURITY_APPROVAL_TOKEN`: 园区安防服务校验人工写操作的审批凭证；为空时三个写工具全部拒绝。Compose 只把它传给 `park_security`，不得注入 Planner、提示词或 agent 环境；人工审批客户端调用写工具时须显式传入匹配的 `approval_token`。
 
@@ -170,7 +173,7 @@ curl http://localhost:8000/api/skills
 
 编排与监控：
 - `docker-compose.yml` 包含 `agent`、`park_energy`、`park_security` 和 `prometheus` 服务；两个园区 MCP 服务默认以 mock 模式运行。
-- 本地开发使用 `docker compose up --build`；生产环境使用 `docker compose -f docker-compose.yml -f docker-compose.production.yml up --build`，并必须提供 `AGENT_API_KEYS`、`AGENT_METRICS_API_KEY` 和 `AGENT_HTTP_ALLOWED_HOSTS`。
+- 本地开发使用 `docker compose up --build`；启动前应先启动 `cent-energy` 并确认 `http://127.0.0.1:9714` 可访问；生产环境使用 `docker compose -f docker-compose.yml -f docker-compose.production.yml up --build`，并必须提供 `AGENT_API_KEYS`、`AGENT_METRICS_API_KEY` 和 `AGENT_HTTP_ALLOWED_HOSTS`。
 - `AGENT_ENABLE_MEMORY=true` 和 `VECTOR_MEMORY_PATH=/app/data/vector_memory.json` 已在 Docker 环境中启用。
 - 升级旧版 Compose 部署时，请在首次启动新配置前迁移旧版向量记忆：如果项目根目录存在 `vector_memory.json` 且 `data/vector_memory.json` 不存在，PowerShell 执行 `New-Item -ItemType Directory -Force .\data; Copy-Item .\vector_memory.json .\data\vector_memory.json`。
 - 生产部署必须使用 `AGENT_DEPLOYMENT_MODE=production`；生产 Compose 会要求 `AGENT_AUTH_REQUIRED=true`、`AGENT_API_KEYS`、`AGENT_METRICS_API_KEY` 和 `AGENT_HTTP_ALLOWED_HOSTS`。

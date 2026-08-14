@@ -4,7 +4,7 @@
 
 **Goal:** 让 Agent 通过已注册的 `park-energy` MCP 服务调用真实 `cent-energy` 趋势接口，完成自然语言请求到真实能耗结果的闭环。
 
-**Architecture:** Agent 启动时加载 `plugins/park_energy/plugin.yaml`，通过 Streamable HTTP 发现 `energy.query_trend`；park-energy 的 REST 客户端调用 Java `POST /api/agent/v1/energy/trend`。默认安全开关仍关闭，本地联调通过环境变量显式开启。
+**Architecture:** Agent 启动时加载 `plugins/park_energy/plugin.yaml`，通过 Streamable HTTP 发现能耗工具；park-energy 的 REST 客户端调用 Java `POST /api/agent/v1/energy/*`。直接运行 Agent 时安全开关默认关闭；开发 Compose 为完成闭环会显式开启，生产覆盖配置仍关闭。
 
 **Tech Stack:** Python 3.11+, FastAPI, MCP SDK, httpx, pytest, Docker Compose。
 
@@ -13,7 +13,7 @@
 - 只读能力，不新增数据库写操作。
 - Java 成功码 `1000`、响应业务字段 `result` 必须被 Python 正确解包。
 - 真实联调项目范围使用 `ENERGY_PROJECT_IDS=2709`，不得从用户自然语言拼接项目范围。
-- 默认 `AGENT_CAPABILITY_RUNTIME_ENABLED=false` 和 `AGENT_STRUCTURED_TOOL_CALLING_ENABLED=false` 保持不变。
+- 直接运行 Agent 的默认值仍为 `false`；开发 Compose 默认覆盖为 `true`，能耗数据模式默认使用 `rest`，Java 服务不可用时才显式改为 `mock`。
 
 ### Task 1: Local E2E runtime configuration
 
@@ -36,7 +36,7 @@ Expected: failure because the agent/park-energy service environments do not forw
 
 - [x] **Step 3: Write minimal Compose and README configuration**
 
-Forward `ENERGY_API_BASE_URL`, `ENERGY_PROJECT_IDS`, `ENERGY_TREND_PATH`, `PARK_ENERGY_DATA_MODE`, and local MCP URL from `.env` without changing secure defaults.
+Forward `ENERGY_API_BASE_URL`, `ENERGY_PROJECT_IDS`, `ENERGY_TREND_PATH`, `PARK_ENERGY_DATA_MODE`, and local MCP URL from `.env`; use container-safe MCP defaults and REST-backed energy defaults for development Compose.
 
 - [x] **Step 4: Run test to verify it passes**
 
@@ -95,7 +95,7 @@ With Java on `127.0.0.1:19714`, `ENERGY_API_BASE_URL=http://127.0.0.1:19714`, `E
 
 - [x] **Step 3: Document exact local startup order**
 
-Document Java first, park-energy second, Agent third, plus the two explicit runtime flags and the project scope.
+Document Java first, park-energy second, Agent third, plus the project scope; Compose provides the two runtime flags and container network defaults.
 
 - [x] **Step 4: Run final verification**
 

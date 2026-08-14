@@ -36,7 +36,7 @@ def test_compose_wires_agent_to_park_security_service():
 
     assert (
         agent["environment"]["PARK_SECURITY_MCP_URL"]
-        == "${PARK_SECURITY_MCP_URL:-http://park_security:8200/mcp}"
+        == "${DOCKER_PARK_SECURITY_MCP_URL:-http://park_security:8200/mcp}"
     )
     assert agent["depends_on"]["park_security"]["condition"] == "service_healthy"
     assert security["environment"]["PARK_SECURITY_DATA_MODE"] == "${PARK_SECURITY_DATA_MODE:-mock}"
@@ -985,6 +985,18 @@ def test_service_exposes_shift_context_in_response_envelope():
     assert context["success"] is True
     assert context["data"]["focus_area"] == "area-lab-01"
     assert context["raw"] == context["data"]
+    assert context["data"]["query_time"] == "2026-08-11T01:00:00Z"
+    assert context["data"]["on_duty"] is True
+
+
+def test_mcp_shift_handler_normalises_model_placeholders():
+    from plugins.park_security.server import main as security_main
+
+    context = asyncio.run(security_main.get_shift_context(
+        "PARK001", at_time="01:00"
+    ))
+
+    assert context["data"]["park_id"] == "park-1"
     assert context["data"]["query_time"] == "2026-08-11T01:00:00Z"
     assert context["data"]["on_duty"] is True
 

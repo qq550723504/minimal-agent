@@ -63,6 +63,30 @@ def test_structured_handle_endpoint_returns_agent_blocks(monkeypatch):
     assert seen == [("机房有火灾风险吗？", "default", server.app.state.skill_catalog)]
 
 
+def test_stream_handle_endpoint_returns_sse_events(monkeypatch):
+    seen = []
+
+    async def fake_stream_input_structured_async(prompt, user_id="default", skill_catalog=None):
+        seen.append((prompt, user_id, skill_catalog))
+        yield {"event": "status", "data": {"message": "开始处理"}}
+        yield {"event": "result", "data": {"message": "已完成", "blocks": [], "run_id": "run-stream-1"}}
+
+    monkeypatch.setattr(server, "stream_input_structured_async", fake_stream_input_structured_async)
+    client = TestClient(server.app)
+    resp = client.post(
+        "/api/handle/stream",
+        json={"prompt": "查询园区安防态势汇总", "response_mode": "stream"},
+    )
+
+    assert resp.status_code == 200
+    assert resp.headers["content-type"].startswith("text/event-stream")
+    assert "event: status" in resp.text
+    assert '"message": "开始处理"' in resp.text
+    assert "event: result" in resp.text
+    assert '"run_id": "run-stream-1"' in resp.text
+    assert seen == [("查询园区安防态势汇总", "default", server.app.state.skill_catalog)]
+
+
 def test_structured_response_blocks_decode_security_tool_and_unwrap_data():
     result = ToolResult(
         call_id="summary-1",
@@ -83,6 +107,37 @@ def test_structured_response_blocks_decode_security_tool_and_unwrap_data():
         "tool": "security.get_event_summary",
         "data": {"park_id": "park-1", "total_events": 3, "risk_counts": {"critical": 1}},
     }]
+
+
+def test_planner_security_tool_typo_is_mapped_to_registered_capability():
+    registry = get_capability_registry().__class__()
+    canonical = capability_namespaced_id(
+        "park-security", "security", encode_remote_tool_name("security.get_shift_context")
+    )
+    registry.register(
+        ToolSpec(
+            name=canonical,
+            description="shift",
+            input_schema={"type": "object"},
+            source=ToolSource.MCP,
+            plugin_id="park-security",
+            side_effects=False,
+            idempotent=True,
+        ),
+        lambda _arguments, _context: {},
+    )
+
+    steps = main._normalise_planner_tool_aliases(
+        [ToolCallPlan(
+            kind="tool_call",
+            call_id="shift-1",
+            tool="securiy.get_shift_context",
+            arguments={"park_id": "park-1"},
+        )],
+        registry,
+    )
+
+    assert steps[0].tool == canonical
 
 
 @pytest.mark.parametrize(

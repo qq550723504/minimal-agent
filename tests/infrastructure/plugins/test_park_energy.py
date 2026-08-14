@@ -97,6 +97,35 @@ def test_mock_client_returns_repeatable_results(monkeypatch: pytest.MonkeyPatch)
     assert all(result["data"]["park_id"] == "park-1" for result in first)
 
 
+def test_query_ranking_normalises_model_placeholder_window(monkeypatch: pytest.MonkeyPatch):
+    captured = {}
+
+    class Client:
+        async def query_ranking(self, query):
+            captured.update(query.model_dump())
+            return {"success": True, "data": {"items": []}}
+
+    monkeypatch.setattr(park_energy_main, "client", Client())
+    monkeypatch.setenv("ENERGY_DEFAULT_START_TIME", "2026-08-07T00:00:00Z")
+    monkeypatch.setenv("ENERGY_DEFAULT_END_TIME", "2026-08-14T23:59:59Z")
+
+    result = asyncio.run(query_ranking(
+        park_id="PARK_ID_PLACEHOLDER",
+        start_time="2023-01-01T00:00:00Z",
+        end_time="2023-01-31T23:59:59Z",
+    ))
+
+    assert result["success"] is True
+    assert captured == {
+        "park_id": "park-1",
+        "building_id": None,
+        "start_time": "2026-08-07T00:00:00Z",
+        "end_time": "2026-08-14T23:59:59Z",
+        "energy_type": "electricity",
+        "granularity": "day",
+    }
+
+
 def test_rest_client_rejects_response_over_configured_limit(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setenv("ENERGY_API_MAX_RESPONSE_BYTES", "4")
 
@@ -258,6 +287,49 @@ def test_rest_trend_accepts_cent_common_success_code(monkeypatch: pytest.MonkeyP
     )
     result = asyncio.run(EnergyRESTClient(Settings.from_env()).query_trend(query))
     assert result["data"]["total"] == 720
+
+
+def test_rest_peak_derives_from_java_trend_contract(monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setenv("ENERGY_PROJECT_IDS", "2709")
+    captured: dict[str, object] = {}
+
+    class Response:
+        status_code = 200
+        headers = {"content-length": "90"}
+
+        def raise_for_status(self):
+            return None
+
+        async def aread(self):
+            return b'{"code":1000,"state":true,"result":{"peak":{"date":"2026-08-06","energy":88.5}}}'
+
+    class Client:
+        def __init__(self, **kwargs):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            return None
+
+        async def post(self, url, **kwargs):
+            captured["url"] = url
+            captured["json"] = kwargs["json"]
+            return Response()
+
+    monkeypatch.setattr("plugins.park_energy.server.rest_client.httpx.AsyncClient", Client)
+    query = EnergyQuery(
+        park_id="park-1",
+        start_time="2026-08-04T00:00:00Z",
+        end_time="2026-08-10T23:59:59Z",
+    )
+
+    result = asyncio.run(EnergyRESTClient(Settings.from_env()).get_peak_value(query))
+
+    assert captured["url"] == "http://localhost:9000/api/agent/v1/energy/trend"
+    assert captured["json"]["projectIds"] == [2709]
+    assert result["data"] == {"peak_value": 88.5, "peak_time": "2026-08-06"}
 
 
 @pytest.mark.parametrize(

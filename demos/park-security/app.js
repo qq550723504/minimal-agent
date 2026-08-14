@@ -6,6 +6,15 @@ import { createInitialEvents, shiftContext } from "./mock-data.js";
       const riskLabels = { low: "低风险", medium: "中风险", high: "高风险", critical: "严重风险" };
       const statusLabels = { open: "开放", confirmed: "已确认", work_order_created: "已建工单", closed: "已关闭" };
       const sourceLabels = { access_control: "门禁", video: "视频", patrol: "巡更", fire: "消防", device: "设备", shift: "值班", appointment: "预约" };
+      const evidenceSummaryLabels = {
+        "After-hours access attempt denied.": "夜间门禁尝试被拒绝。",
+        "Person detected near laboratory door.": "实验室门附近检测到人员。",
+        "Guard-01 is assigned to the north patrol route.": "Guard-01 被分配到北侧巡逻路线。",
+        "No active visitor appointment matched the credential.": "没有匹配到有效访客预约。",
+        "Smoke detector alarmed in plant room.": "机房烟感触发报警。",
+        "Temperature rose above the fire threshold.": "温度升高并超过消防阈值。",
+        "Ventilation fan reported a fault state.": "通风风机上报故障状态。"
+      };
       const scenarioLabels = {
         night_abnormal_access: "夜间实验区异常门禁",
         access_failure_and_loitering: "园区入口访问失败与徘徊",
@@ -45,6 +54,7 @@ import { createInitialEvents, shiftContext } from "./mock-data.js";
       }
       function formatTime(value) { return new Date(value).toISOString().replace("T", " ").slice(0, 16) + " UTC"; }
       function formatPercent(value) { return `${Math.round(value * 100)}%`; }
+      function localizeEvidenceSummary(value) { return evidenceSummaryLabels[value] || value; }
       function selectedEvent() { return state.events.find((event) => event.event_id === state.selectedEventId) || null; }
       function filteredEvents() {
         return state.events.filter((event) => (state.riskFilter === "all" || event.risk_level === state.riskFilter) && (state.statusFilter === "all" || event.status === state.statusFilter));
@@ -57,7 +67,7 @@ import { createInitialEvents, shiftContext } from "./mock-data.js";
       function defaultAgentEndpoint() {
         const configured = new URLSearchParams(window.location.search).get("agent");
         if (configured) return configured;
-        return window.location.port === "8088" ? "http://127.0.0.1:8000/api/handle" : "/api/handle";
+        return window.location.port === "8088" ? "http://127.0.0.1:8000/api/handle/stream" : "/api/handle/stream";
       }
 
       function appendMessage(role, text) {
@@ -87,14 +97,14 @@ import { createInitialEvents, shiftContext } from "./mock-data.js";
           const list = make("div", "response-list"); data.forEach((event) => { const item = make("div", "response-list-item"); item.append(make("strong", "", event.scenario || event.event_id), make("span", "", `${event.risk_level || ""} · ${event.status || ""}`)); list.append(item); }); wrapper.append(list); return wrapper;
         }
         if (block.type === "security_event_detail" && data && typeof data === "object") {
-          const grid = make("div", "response-grid"); responseStat(grid, "事件", data.event_id || "—"); responseStat(grid, "风险", data.risk_level || "—"); responseStat(grid, "证据", data.evidence_completeness == null ? "—" : formatPercent(data.evidence_completeness)); wrapper.append(grid); if (Array.isArray(data.timeline)) { const list = make("div", "response-list"); data.timeline.slice(0, 4).forEach((item) => { const row = make("div", "response-list-item"); row.append(make("strong", "", sourceLabels[item.source] || item.source), make("span", "", item.summary || "")); list.append(row); }); wrapper.append(list); } return wrapper;
+          const grid = make("div", "response-grid"); responseStat(grid, "事件", data.event_id || "—"); responseStat(grid, "风险", data.risk_level || "—"); responseStat(grid, "证据", data.evidence_completeness == null ? "—" : formatPercent(data.evidence_completeness)); wrapper.append(grid); if (Array.isArray(data.timeline)) { const list = make("div", "response-list"); data.timeline.slice(0, 4).forEach((item) => { const row = make("div", "response-list-item"); row.append(make("strong", "", sourceLabels[item.source] || item.source), make("span", "", localizeEvidenceSummary(item.summary || ""))); list.append(row); }); wrapper.append(list); } return wrapper;
         }
         if (block.type === "shift_context" && data && typeof data === "object") {
           const grid = make("div", "response-grid"); responseStat(grid, "值班", data.on_duty_guard?.name || "无"); responseStat(grid, "状态", data.on_duty ? "值班中" : "无值班"); responseStat(grid, "重点区域", data.key_areas?.length ?? 0); wrapper.append(grid); return wrapper;
         }
         if (block.type === "energy_trend") { renderEnergyTrend(wrapper, data); return wrapper; }
         if (block.type === "energy_ranking") {
-          const list = make("div", "response-list"); energyItems(data).slice(0, 8).forEach((item) => { const row = make("div", "response-list-item"); row.append(make("strong", "", energyValue(item, ["building_id", "meter_id", "name"])), make("span", "", `${energyValue(item, ["value", "total"])} ${item.unit || ""}`)); list.append(row); }); wrapper.append(list); return wrapper;
+          const list = make("div", "response-list"); energyItems(data).slice(0, 8).forEach((item) => { const row = make("div", "response-list-item"); row.append(make("strong", "", energyValue(item, ["building_id", "buildingId", "meter_id", "meterId", "name"])), make("span", "", `${energyValue(item, ["value", "energy", "total"])} ${item.unit || ""}`)); list.append(row); }); wrapper.append(list); return wrapper;
         }
         if (block.type === "energy_peak" && data && typeof data === "object") {
           const grid = make("div", "response-grid"); responseStat(grid, "峰值", `${energyValue(data, ["peak_value", "value"])} ${data.unit || ""}`); responseStat(grid, "发生时间", energyValue(data, ["peak_time", "timestamp"])); wrapper.append(grid); return wrapper;
@@ -113,14 +123,39 @@ import { createInitialEvents, shiftContext } from "./mock-data.js";
         if (Array.isArray(payload.blocks)) payload.blocks.forEach((block) => message.append(renderResponseBlock(block)));
       }
 
+      async function consumeSse(response, onEvent) {
+        if (!response.body) throw new Error("浏览器不支持流式响应");
+        const reader = response.body.getReader(); const decoder = new TextDecoder(); let buffer = "";
+        const dispatch = (frame) => {
+          const lines = frame.split(/\r?\n/); const eventLine = lines.find((line) => line.startsWith("event:")); const dataLine = lines.find((line) => line.startsWith("data:"));
+          if (!dataLine) return; let data; try { data = JSON.parse(dataLine.slice(5).trim()); } catch (_) { data = { message: dataLine.slice(5).trim() }; }
+          onEvent({ event: eventLine ? eventLine.slice(6).trim() : "message", data });
+        };
+        while (true) { const { value, done } = await reader.read(); if (done) break; buffer += decoder.decode(value, { stream: true }); const frames = buffer.split("\n\n"); buffer = frames.pop() || ""; frames.forEach(dispatch); }
+        buffer += decoder.decode(); if (buffer.trim()) dispatch(buffer);
+      }
+
       async function askAgent(prompt) {
         const cleanPrompt = String(prompt || "").trim(); if (!cleanPrompt) return;
-        appendMessage("user", cleanPrompt); setText(elements.chatStatus, "Agent 正在查询安防能力…"); elements.chatStatus.classList.remove("error"); elements.chatSubmit.disabled = true;
+        appendMessage("user", cleanPrompt); setText(elements.chatStatus, "Agent 正在处理你的请求…"); elements.chatStatus.classList.remove("error"); elements.chatSubmit.disabled = true;
         try {
           const endpoint = elements.agentEndpoint.value.trim() || defaultAgentEndpoint();
-          const response = await fetch(endpoint, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ prompt: cleanPrompt, response_mode: "structured" }) });
+          const isStreamingEndpoint = endpoint.replace(/\/+$/, "").endsWith("/stream");
+          const response = await fetch(endpoint, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ prompt: cleanPrompt, response_mode: isStreamingEndpoint ? "stream" : "structured" }) });
           if (!response.ok) throw new Error(`Agent 返回 HTTP ${response.status}`);
-          const payload = await response.json(); appendAgentResponse(payload); setText(elements.chatStatus, `已完成 · run_id ${payload.run_id || "local"}`);
+          if (isStreamingEndpoint) {
+            let finalPayload = null;
+            await consumeSse(response, (event) => {
+              if (event.event === "status") setText(elements.chatStatus, event.data.message || "Agent 正在处理你的请求…");
+              if (event.event === "tool_started") setText(elements.chatStatus, `正在查询 ${event.data.tool || "Agent 能力"}…`);
+              if (event.event === "result") { finalPayload = event.data; appendAgentResponse(finalPayload); }
+              if (event.event === "error") throw new Error(event.data.message || "Agent 流式处理失败");
+            });
+            if (!finalPayload) throw new Error("Agent 未返回最终结果");
+            setText(elements.chatStatus, `已完成 · run_id ${finalPayload.run_id || "local"}`);
+          } else {
+            const payload = await response.json(); appendAgentResponse(payload); setText(elements.chatStatus, `已完成 · run_id ${payload.run_id || "local"}`);
+          }
         } catch (error) { setText(elements.chatStatus, `${error.message}。请确认 Agent 已启动、能力开关已开启，并检查 API 地址。`); elements.chatStatus.classList.add("error"); appendMessage("assistant", "这次请求没有完成，我保留了本地模拟看板，你仍可以查看已有事件。"); }
         finally { elements.chatSubmit.disabled = false; }
       }
@@ -163,7 +198,7 @@ import { createInitialEvents, shiftContext } from "./mock-data.js";
         const event = selectedEvent(); elements.timeline.replaceChildren(); elements.auditList.replaceChildren();
         if (!event) return;
         [...event.timeline].sort((a, b) => new Date(a.occurred_at) - new Date(b.occurred_at)).forEach((item) => {
-          const row = make("div", "timeline-item"); row.append(make("span", "timeline-dot")); const body = make("div"); body.append(make("div", "timeline-source", sourceLabels[item.source] || item.source), make("div", "timeline-summary", item.summary), make("div", "timeline-ref", `${formatTime(item.occurred_at)} · ${item.reference}`)); row.append(body); elements.timeline.append(row);
+          const row = make("div", "timeline-item"); row.append(make("span", "timeline-dot")); const body = make("div"); body.append(make("div", "timeline-source", sourceLabels[item.source] || item.source), make("div", "timeline-summary", localizeEvidenceSummary(item.summary)), make("div", "timeline-ref", `${formatTime(item.occurred_at)} · ${item.reference}`)); row.append(body); elements.timeline.append(row);
         });
         event.audit_records.forEach((record) => { const item = make("div", "audit-item"); item.append(make("strong", "", record.action), make("span", "", ` · ${record.operator_id} · ${formatTime(record.occurred_at)}`)); if (record.note) item.append(make("div", "", record.note)); elements.auditList.append(item); });
         event.work_orders.forEach((order) => { const item = make("div", "audit-item"); item.append(make("strong", "", `工单 ${order.work_order_id}`), make("span", "", ` · ${order.status} · ${order.assignee}`)); elements.auditList.append(item); });

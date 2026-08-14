@@ -12,6 +12,7 @@ from src.agent.application.requests import (
     enqueue_input,
     handle_input_async,
     handle_input_structured_async,
+    stream_input_structured_async,
 )
 from src.agent.domain.capabilities.models import ToolSource
 from src.agent.infrastructure.mcp.manager import MCPClientManager

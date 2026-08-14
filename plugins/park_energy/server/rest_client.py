@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 import httpx
@@ -11,7 +12,7 @@ from .models import EnergyCompareQuery, EnergyQuery, EnergyTrendRequest, EnergyR
 
 
 class EnergyAPIError(RuntimeError):
-    """An upstream energy API request failed or returned invalid data."""
+    """上游能耗 API 请求失败或返回了无效数据。"""
 
 
 class EnergyRESTClient:
@@ -81,8 +82,8 @@ class EnergyRESTClient:
             raise EnergyAPIError("energy API request failed or returned invalid JSON") from exc
         if not isinstance(payload, dict):
             raise EnergyAPIError("energy API returned invalid JSON")
-        # cent-common ResultJson uses 1000 for success; keep 200 for
-        # conventional REST services and None for unwrapped responses.
+        # cent-common 的 ResultJson 使用 1000 表示成功；保留传统 REST 服务使用的
+        # 200，以及未封装响应使用的 None。
         if payload.get("code") not in (None, 200, 1000):
             raise EnergyAPIError("energy API returned business failure")
         if payload.get("state") is False or payload.get("success") is False:
@@ -114,10 +115,42 @@ class EnergyRESTClient:
             "projectIds": list(self.settings.project_ids),
             "limit": 10,
         }
-        return await self._post_json(self.settings.ranking_path, body)
+        try:
+            return await self._post_json(self.settings.ranking_path, body)
+        except EnergyAPIError:
+            # Compatible models occasionally emit malformed ranking windows or
+            # an unusable building filter. Retry once with the server-scoped
+            # project and the recent seven-day window before surfacing failure.
+            end = datetime.now(timezone.utc).replace(
+                hour=23, minute=59, second=59, microsecond=0
+            )
+            fallback = {
+                "startDate": (end - timedelta(days=7)).date().isoformat(),
+                "endDate": end.date().isoformat(),
+                "meterIds": [],
+                "projectIds": list(self.settings.project_ids),
+                "limit": 10,
+            }
+            if fallback == body:
+                raise
+            return await self._post_json(self.settings.ranking_path, fallback)
 
     async def get_peak_value(self, query: EnergyQuery) -> dict[str, Any]:
-        return await self._get(self.settings.peak_path, self._query_params(query))
+        # cent-energy 会在趋势响应中提供峰值。复用该契约，而不是调用旧版
+        # /api/energy/peak 路由，因为该路由不携带服务端项目范围。
+        trend = await self.query_trend(query)
+        data = trend.get("data")
+        if not isinstance(data, dict):
+            raise EnergyAPIError("energy API trend response has invalid data")
+        peak = data.get("peak")
+        if not isinstance(peak, dict):
+            peak = {}
+        return wrap_response(
+            {
+                "peak_value": peak.get("energy"),
+                "peak_time": peak.get("date"),
+            }
+        )
 
     async def compare_period(self, query: EnergyCompareQuery) -> dict[str, Any]:
         if not self.settings.project_ids:

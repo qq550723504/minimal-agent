@@ -137,7 +137,7 @@ def test_compose_mounts_plugins_read_only():
     compose = (ROOT / "docker-compose.yml").read_text(encoding="utf-8")
 
     assert "./plugins:/app/plugins:ro" in compose
-    assert "AGENT_CAPABILITY_RUNTIME_ENABLED: ${AGENT_CAPABILITY_RUNTIME_ENABLED:-false}" in compose
+    assert "AGENT_CAPABILITY_RUNTIME_ENABLED: ${AGENT_CAPABILITY_RUNTIME_ENABLED:-true}" in compose
 
 
 def test_compose_forwards_and_documents_mcp_security_allowlists():
@@ -145,7 +145,7 @@ def test_compose_forwards_and_documents_mcp_security_allowlists():
     readme = (ROOT / "README.md").read_text(encoding="utf-8")
     guide = (ROOT / "docs" / "AGENT_GUIDE.md").read_text(encoding="utf-8")
 
-    assert "AGENT_MCP_ALLOWED_HOSTS: ${AGENT_MCP_ALLOWED_HOSTS:-}" in compose
+    assert "AGENT_MCP_ALLOWED_HOSTS: ${DOCKER_AGENT_MCP_ALLOWED_HOSTS:-park_energy,park_security}" in compose
     assert (
         "AGENT_MCP_STDIO_ALLOWED_COMMANDS: ${AGENT_MCP_STDIO_ALLOWED_COMMANDS:-}"
         in compose
@@ -173,7 +173,7 @@ def test_compose_and_docs_cover_structured_mcp_tool_calling():
     readme = (ROOT / "README.md").read_text(encoding="utf-8")
     architecture = (ROOT / "docs" / "ARCHITECTURE.md").read_text(encoding="utf-8")
 
-    assert _compose_default("AGENT_STRUCTURED_TOOL_CALLING_ENABLED") == "false"
+    assert _compose_default("AGENT_STRUCTURED_TOOL_CALLING_ENABLED") == "true"
     assert "AGENT_STRUCTURED_TOOL_CALLING_ENABLED" in readme
     assert "`name`、`description`、`input_schema`、`side_effects`、`idempotent`" in readme
     assert "CapabilityRegistry.invoke()" in readme
@@ -219,10 +219,20 @@ def test_compose_forwards_global_tool_result_limit():
 def test_compose_forwards_java_backed_energy_runtime_configuration():
     compose = (ROOT / "docker-compose.yml").read_text(encoding="utf-8")
 
-    assert "ENERGY_API_BASE_URL: ${ENERGY_API_BASE_URL:-http://cent-energy:9714}" in compose
+    assert "ENERGY_API_BASE_URL: ${ENERGY_API_BASE_URL:-http://host.docker.internal:9714}" in compose
     assert "ENERGY_PROJECT_IDS: ${ENERGY_PROJECT_IDS:-}" in compose
     assert "ENERGY_TREND_PATH: ${ENERGY_TREND_PATH:-/api/agent/v1/energy/trend}" in compose
-    assert "PARK_ENERGY_DATA_MODE: ${PARK_ENERGY_DATA_MODE:-mock}" in compose
+    assert "PARK_ENERGY_DATA_MODE: ${PARK_ENERGY_DATA_MODE:-rest}" in compose
+
+
+def test_development_compose_starts_agent_capabilities_with_container_network_urls():
+    compose = (ROOT / "docker-compose.yml").read_text(encoding="utf-8")
+
+    assert "AGENT_CAPABILITY_RUNTIME_ENABLED: ${AGENT_CAPABILITY_RUNTIME_ENABLED:-true}" in compose
+    assert "AGENT_STRUCTURED_TOOL_CALLING_ENABLED: ${AGENT_STRUCTURED_TOOL_CALLING_ENABLED:-true}" in compose
+    assert "AGENT_MCP_ALLOWED_HOSTS: ${DOCKER_AGENT_MCP_ALLOWED_HOSTS:-park_energy,park_security}" in compose
+    assert "PARK_ENERGY_MCP_URL: ${DOCKER_PARK_ENERGY_MCP_URL:-http://park_energy:8100/mcp}" in compose
+    assert "PARK_SECURITY_MCP_URL: ${DOCKER_PARK_SECURITY_MCP_URL:-http://park_security:8200/mcp}" in compose
 
 
 def test_docker_build_context_excludes_local_runtime_data():
