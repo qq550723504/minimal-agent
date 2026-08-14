@@ -18,6 +18,7 @@ def test_security_dashboard_contains_agent_chat_surface():
     assert 'get("demo") === "1"' in app
     assert "export function createInitialEvents" in mock_data
     assert "event-fire-003" not in page
+    assert 'raw ? formatPercent(state.events.length / raw) : "—"' in app
 
     source = page + app
     for marker in (

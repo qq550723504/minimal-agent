@@ -128,7 +128,7 @@ import { createInitialEvents, shiftContext } from "./mock-data.js";
       function renderKpis() {
         const raw = state.events.reduce((sum, event) => sum + event.alarm_ids.length, 0);
         const urgent = state.events.filter((event) => event.risk_level === "critical" || event.risk_level === "high").length;
-        setText(elements.kpiTotal, state.events.length); setText(elements.kpiCritical, urgent); setText(elements.kpiRaw, raw); setText(elements.kpiRate, formatPercent(state.events.length / raw));
+        setText(elements.kpiTotal, state.events.length); setText(elements.kpiCritical, urgent); setText(elements.kpiRaw, raw); setText(elements.kpiRate, raw ? formatPercent(state.events.length / raw) : "—");
       }
 
       function renderEventList() {
