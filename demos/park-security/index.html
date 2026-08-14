@@ -46,14 +46,14 @@
       <p class="chat-status" id="chat-status">页面只会把问题发送到你配置的 Agent API，不会直连数据库或 MCP；能耗 MCP 地址由 <code>PARK_ENERGY_MCP_URL</code> 配置。</p>
     </section>
 
-    <section class="kpis local-dashboard" id="local-kpis" aria-label="安防指标">
+    <section class="kpis local-dashboard" id="local-kpis" aria-label="安防指标" hidden>
       <article class="kpi"><div class="kpi-label">归并事件</div><div class="kpi-value" id="kpi-total">—</div><div class="kpi-note">跨门禁、视频、消防和巡更</div></article>
       <article class="kpi kpi-critical"><div class="kpi-label">严重 / 高风险</div><div class="kpi-value" id="kpi-critical">—</div><div class="kpi-note">需要人工确认的开放事件</div></article>
       <article class="kpi"><div class="kpi-label">原始告警</div><div class="kpi-value" id="kpi-raw">—</div><div class="kpi-note">已归并重复告警</div></article>
       <article class="kpi kpi-rate"><div class="kpi-label">有效告警率</div><div class="kpi-value" id="kpi-rate">—</div><div class="kpi-note">归并事件 / 原始告警</div></article>
     </section>
 
-    <main class="dashboard local-dashboard" id="local-dashboard">
+    <main class="dashboard local-dashboard" id="local-dashboard" hidden>
       <section class="panel" aria-labelledby="events-title">
         <div class="panel-header">
           <div><h2 id="events-title">风险事件</h2><p class="panel-subtitle">点击事件查看证据链和处置建议</p></div>
@@ -90,7 +90,7 @@
         </section>
       </aside>
     </main>
-    <p class="footer-note local-dashboard">演示页面 · 不代表真实安防系统已执行任何操作</p>
+    <p class="footer-note local-dashboard" hidden>演示页面 · 不代表真实安防系统已执行任何操作</p>
   </div>
 
   <dialog id="action-dialog" aria-labelledby="dialog-title">

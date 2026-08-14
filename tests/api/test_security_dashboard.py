@@ -12,6 +12,8 @@ def test_security_dashboard_contains_agent_chat_surface():
     assert '<style>' not in page
     assert '<script>' not in page
     assert 'style=' not in page
+    assert '<section class="kpis local-dashboard" id="local-kpis" aria-label="安防指标" hidden>' in page
+    assert '<main class="dashboard local-dashboard" id="local-dashboard" hidden' in page
     app = (ROOT / "demos" / "park-security" / "app.js").read_text(encoding="utf-8")
     mock_data = (ROOT / "demos" / "park-security" / "mock-data.js").read_text(encoding="utf-8")
     assert 'import { createInitialEvents, shiftContext } from "./mock-data.js";' in app
