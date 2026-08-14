@@ -126,6 +126,14 @@ def test_legacy_security_dashboard_route_remains_available():
     assert "园区智能运营 Agent" in response.text
 
 
+def test_agent_dashboard_serves_external_assets():
+    client = TestClient(server.app)
+
+    for asset in ("styles.css", "app.js", "mock-data.js"):
+        response = client.get(f"/park-agent/{asset}")
+        assert response.status_code == 200
+
+
 @pytest.mark.anyio
 async def test_handle_input_structured_async_builds_security_message_and_blocks(monkeypatch):
     registry = get_capability_registry().__class__()
