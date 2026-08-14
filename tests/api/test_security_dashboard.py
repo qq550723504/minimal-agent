@@ -7,8 +7,8 @@ ROOT = Path(__file__).parents[2]
 def test_security_dashboard_contains_agent_chat_surface():
     page = (ROOT / "demos" / "park-security" / "index.html").read_text(encoding="utf-8")
 
-    assert '<link rel="stylesheet" href="styles.css">' in page
-    assert '<script type="module" src="app.js"></script>' in page
+    assert '<link rel="stylesheet" href="styles.css?v=20260814-2">' in page
+    assert '<script type="module" src="app.js?v=20260814-2"></script>' in page
     assert '<style>' not in page
     assert '<script>' not in page
     assert 'style=' not in page
