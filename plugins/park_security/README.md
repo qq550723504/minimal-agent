@@ -10,6 +10,18 @@
 
 设置 `PARK_SECURITY_DATA_MODE=mock`（默认且当前唯一支持的模式）即可使用这些可重复的数据。
 
+## Mock dashboard
+
+仓库提供一个无需构建链的静态展示页，用于查看当前 `park-1` 的事件总览、风险事件、证据时间线、值班升级规则和浏览器内存模拟处置流程。页面不连接数据库或 MCP，刷新后会恢复初始数据。
+
+在仓库根目录执行：
+
+```powershell
+python -m http.server 8088 --directory demos
+```
+
+然后访问 <http://127.0.0.1:8088/park-security/>。
+
 ## 本地运行
 
 在仓库根目录执行：

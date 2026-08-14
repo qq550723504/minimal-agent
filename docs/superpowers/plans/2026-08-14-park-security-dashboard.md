@@ -27,11 +27,11 @@
 - `const initialState` contains `events`, `selectedEventId`, `riskFilter`, `statusFilter`, `queryTime`, and `shiftContext`.
 - `render()` updates the page from state without network requests.
 
-- [ ] **Step 1: Add the failing smoke expectation**
+- [x] **Step 1: Add the failing smoke expectation**
 
 Create the page with stable IDs for `#event-list`, `#event-detail`, `#evidence-timeline`, `#shift-panel`, `#kpi-total`, `#kpi-critical`, `#kpi-raw`, and `#kpi-rate`; add a visible `MOCK DATA` label and the three event IDs.
 
-- [ ] **Step 2: Run the static smoke check**
+- [x] **Step 2: Run the static smoke check**
 
 Run:
 
@@ -42,11 +42,11 @@ Select-String -Path demos/park-security/index.html -Pattern 'event-list','event-
 
 Expected: the file exists and all required IDs/data keys are found.
 
-- [ ] **Step 3: Implement the shell and state**
+- [x] **Step 3: Implement the shell and state**
 
 Add semantic sections for header, KPI cards, filters, event cards, detail metadata, evidence timeline, shift rules, and workflow controls. Embed the three deterministic scenarios with their risk, status, timestamps, impact scopes, recommendations, evidence, responsible teams, and initial audit records.
 
-- [ ] **Step 4: Verify the shell in a local static server**
+- [x] **Step 4: Verify the shell in a local static server**
 
 Run:
 
@@ -58,7 +58,7 @@ finally { Stop-Job $job -ErrorAction SilentlyContinue; Remove-Job $job -Force -E
 
 Expected: HTTP status `200`.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```powershell
 git add demos/park-security/index.html
@@ -77,23 +77,23 @@ git commit -m "feat: add park security mock dashboard shell"
 - `renderTimeline()` renders sorted evidence items.
 - `renderShiftContext()` renders the fixed duty and escalation context.
 
-- [ ] **Step 1: Add rendering assertions to the page smoke script**
+- [x] **Step 1: Add rendering assertions to the page smoke script**
 
 Expose a small `window.__parkSecurityDemo` object with `getState()` and `render()` so a browser console or a later test can verify the selected event and KPI values without accessing private variables.
 
-- [ ] **Step 2: Implement deterministic rendering**
+- [x] **Step 2: Implement deterministic rendering**
 
 Render initial KPIs as total events `3`, critical/high events `3`, raw alarms `8`, and effective alarm rate `37.5%`. Default to `event-fire-003`; render its critical risk, three evidence items, `team-fire`, evacuation scope, and the two escalation levels. Sort timeline entries by parsed timestamp.
 
-- [ ] **Step 3: Implement filtering and selection**
+- [x] **Step 3: Implement filtering and selection**
 
 Wire risk and status `<select>` controls to state. Re-render cards and detail on change. Clicking an event card sets `selectedEventId`; an empty result shows a clear empty state without throwing.
 
-- [ ] **Step 4: Verify the read-only interactions**
+- [x] **Step 4: Verify the read-only interactions**
 
 Start the static server, open the page in a browser, and verify all three cards, risk/status filters, event detail, evidence timeline, and shift panel. Confirm the page has no network requests beyond the document itself.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```powershell
 git add demos/park-security/index.html
@@ -109,23 +109,23 @@ git commit -m "feat: render park security mock insights"
 - `transitionEvent(eventId, nextStatus, operatorId, note)` validates and mutates only in-memory state.
 - `window.__parkSecurityDemo.reset()` restores the initial state.
 
-- [ ] **Step 1: Add workflow behavior checks**
+- [x] **Step 1: Add workflow behavior checks**
 
 Verify the action controls are disabled unless the selected event is in the required state, and define the allowed transitions exactly as `open -> confirmed -> work_order_created -> closed`.
 
-- [ ] **Step 2: Implement confirmation and note input**
+- [x] **Step 2: Implement confirmation and note input**
 
 Use a native `<dialog>` or an accessible modal requiring a nonblank operator ID and note. Show a second confirmation before applying the transition. Do not request or store an approval token.
 
-- [ ] **Step 3: Implement state, audit, and UI updates**
+- [x] **Step 3: Implement state, audit, and UI updates**
 
 On confirmation, update status, append an audit record, create a deterministic in-memory work order for the work-order transition, update `work_order_id`, and render a success notice. Reject invalid transitions with a visible message and leave state unchanged.
 
-- [ ] **Step 4: Verify the complete workflow and reset**
+- [x] **Step 4: Verify the complete workflow and reset**
 
 Exercise the three transitions on one event, confirm the detail panel and audit timeline update, attempt an out-of-order transition and confirm rejection, then call `window.__parkSecurityDemo.reset()` and confirm all events return to `open` with no work orders.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```powershell
 git add demos/park-security/index.html
@@ -141,11 +141,11 @@ git commit -m "feat: demo park security response workflow"
 **Interfaces:**
 - README provides the exact static-server command and dashboard URL.
 
-- [ ] **Step 1: Add the usage documentation**
+- [x] **Step 1: Add the usage documentation**
 
 Add a short “Mock dashboard” section linking the page and documenting that data and workflow state are browser-local demonstrations.
 
-- [ ] **Step 2: Run syntax and repository checks**
+- [x] **Step 2: Run syntax and repository checks**
 
 Run:
 
@@ -155,14 +155,13 @@ python -m pytest -q tests/infrastructure/plugins/test_park_security.py
 git diff --check
 ```
 
-If `node --check` cannot inspect HTML directly, extract the inline script to a temporary file for syntax checking and remove the temporary file after verification.
+The environment does not provide Node.js, so the inline script was checked for HTML parsing and the page was verified through the static server instead.
 
 Expected: JavaScript syntax passes, existing park-security tests pass, and `git diff --check` reports no whitespace errors.
 
-- [ ] **Step 3: Commit documentation**
+- [x] **Step 3: Commit documentation**
 
 ```powershell
 git add plugins/park_security/README.md
 git commit -m "docs: add park security dashboard usage"
 ```
-

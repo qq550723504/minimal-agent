@@ -1,0 +1,421 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>园区安防智能态势 · Mock Dashboard</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #07111f;
+      --panel: rgba(15, 29, 48, .9);
+      --panel-strong: #12253e;
+      --line: rgba(148, 163, 184, .16);
+      --text: #e5edf7;
+      --muted: #8fa3bb;
+      --cyan: #45d6ff;
+      --green: #55e6a5;
+      --amber: #ffc857;
+      --red: #ff6b78;
+      --violet: #a78bfa;
+      --shadow: 0 22px 65px rgba(0, 0, 0, .28);
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-width: 320px;
+      color: var(--text);
+      background:
+        radial-gradient(circle at 10% 0%, rgba(69, 214, 255, .12), transparent 32%),
+        radial-gradient(circle at 100% 20%, rgba(167, 139, 250, .10), transparent 28%),
+        var(--bg);
+      font-family: "Segoe UI", "Microsoft YaHei", system-ui, sans-serif;
+    }
+
+    button, select, input, textarea { font: inherit; }
+    button { cursor: pointer; }
+    .page { max-width: 1500px; margin: 0 auto; padding: 28px 28px 54px; }
+    .topbar { display: flex; align-items: flex-start; justify-content: space-between; gap: 24px; margin-bottom: 24px; }
+    .eyebrow { margin: 0 0 7px; color: var(--cyan); font-size: 12px; font-weight: 700; letter-spacing: .16em; text-transform: uppercase; }
+    h1, h2, h3, p { margin-top: 0; }
+    h1 { margin-bottom: 8px; font-size: clamp(26px, 4vw, 42px); letter-spacing: -.04em; }
+    h2 { margin-bottom: 0; font-size: 17px; }
+    h3 { margin-bottom: 6px; font-size: 15px; }
+    .subtitle { max-width: 680px; margin-bottom: 0; color: var(--muted); line-height: 1.6; }
+    .topbar-meta { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 10px; }
+    .pill, .badge { display: inline-flex; align-items: center; gap: 7px; border: 1px solid var(--line); border-radius: 999px; padding: 7px 11px; color: var(--muted); background: rgba(255,255,255,.035); font-size: 12px; white-space: nowrap; }
+    .pill strong { color: var(--text); }
+    .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--green); box-shadow: 0 0 14px var(--green); }
+    .mock-badge { color: #07111f; background: var(--cyan); border-color: transparent; font-weight: 800; letter-spacing: .08em; }
+
+    .kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; margin-bottom: 18px; }
+    .kpi, .panel { border: 1px solid var(--line); border-radius: 18px; background: var(--panel); box-shadow: var(--shadow); }
+    .kpi { position: relative; overflow: hidden; padding: 18px; }
+    .kpi::after { position: absolute; right: -24px; bottom: -36px; width: 110px; height: 110px; border-radius: 50%; background: rgba(69,214,255,.11); content: ""; }
+    .kpi-label { color: var(--muted); font-size: 12px; }
+    .kpi-value { margin: 8px 0 2px; font-size: 31px; font-weight: 760; letter-spacing: -.04em; }
+    .kpi-note { color: var(--muted); font-size: 12px; }
+    .kpi-critical .kpi-value { color: var(--red); }
+    .kpi-rate .kpi-value { color: var(--green); }
+
+    .dashboard { display: grid; grid-template-columns: minmax(270px, .85fr) minmax(400px, 1.45fr) minmax(260px, .8fr); gap: 16px; align-items: start; }
+    .panel { padding: 18px; }
+    .panel-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 16px; }
+    .panel-subtitle { margin: 4px 0 0; color: var(--muted); font-size: 12px; }
+    .filters { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 14px; }
+    label { color: var(--muted); font-size: 12px; }
+    select, input, textarea { width: 100%; margin-top: 6px; border: 1px solid var(--line); border-radius: 10px; padding: 9px 10px; color: var(--text); background: #0b1b2d; outline: none; }
+    select:focus, input:focus, textarea:focus { border-color: rgba(69,214,255,.8); box-shadow: 0 0 0 3px rgba(69,214,255,.12); }
+    .event-list { display: grid; gap: 10px; max-height: 595px; overflow: auto; padding-right: 2px; }
+    .event-card { width: 100%; border: 1px solid var(--line); border-radius: 14px; padding: 13px; color: var(--text); background: rgba(255,255,255,.025); text-align: left; transition: .2s ease; }
+    .event-card:hover, .event-card.selected { border-color: rgba(69,214,255,.8); background: rgba(69,214,255,.08); transform: translateY(-1px); }
+    .event-card-top, .event-card-meta, .detail-head, .action-row, .timeline-item { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+    .event-card h3 { margin: 10px 0 5px; font-size: 14px; }
+    .event-card-meta, .small { color: var(--muted); font-size: 12px; }
+    .badge { padding: 4px 8px; font-size: 11px; }
+    .badge-critical { color: #ffb4bb; background: rgba(255,107,120,.12); border-color: rgba(255,107,120,.34); }
+    .badge-high { color: #ffd98a; background: rgba(255,200,87,.11); border-color: rgba(255,200,87,.3); }
+    .badge-medium { color: #9ce7ff; background: rgba(69,214,255,.11); border-color: rgba(69,214,255,.3); }
+    .badge-open { color: #ffd98a; }
+    .badge-confirmed { color: #9ce7ff; }
+    .badge-work_order_created { color: var(--violet); }
+    .badge-closed { color: var(--green); }
+    .empty { border: 1px dashed var(--line); border-radius: 12px; padding: 22px 12px; color: var(--muted); text-align: center; }
+
+    .detail-column { display: grid; gap: 16px; }
+    .detail-head { align-items: flex-start; }
+    .detail-title { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+    .detail-title h2 { font-size: 22px; letter-spacing: -.03em; }
+    .detail-id { margin: 4px 0 0; color: var(--muted); font-family: ui-monospace, monospace; font-size: 12px; }
+    .detail-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 11px; margin: 18px 0; }
+    .fact { border: 1px solid var(--line); border-radius: 12px; padding: 11px; background: rgba(255,255,255,.025); }
+    .fact-label { color: var(--muted); font-size: 11px; }
+    .fact-value { margin-top: 5px; font-size: 13px; line-height: 1.4; }
+    .section-label { margin: 19px 0 9px; color: var(--muted); font-size: 11px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; }
+    .chips { display: flex; flex-wrap: wrap; gap: 7px; }
+    .chip { border: 1px solid rgba(69,214,255,.22); border-radius: 999px; padding: 6px 9px; color: #a9eaff; background: rgba(69,214,255,.08); font-size: 12px; }
+    .recommendation { border-left: 3px solid var(--amber); padding: 11px 13px; color: #f9e3ad; background: rgba(255,200,87,.07); line-height: 1.55; }
+    .action-row { align-items: stretch; justify-content: flex-start; flex-wrap: wrap; margin-top: 19px; }
+    .btn { border: 1px solid var(--line); border-radius: 10px; padding: 10px 13px; color: var(--text); background: #12253e; transition: .2s ease; }
+    .btn:hover:not(:disabled) { border-color: rgba(69,214,255,.75); background: #183652; }
+    .btn-primary { border-color: transparent; color: #06131e; background: var(--cyan); font-weight: 700; }
+    .btn-danger { border-color: rgba(255,107,120,.4); color: #ffc0c6; background: rgba(255,107,120,.11); }
+    .btn:disabled { cursor: not-allowed; opacity: .35; }
+    .notice { min-height: 19px; margin: 13px 0 0; color: var(--green); font-size: 12px; }
+    .notice.error { color: #ffadb5; }
+
+    .timeline { display: grid; gap: 0; }
+    .timeline-item { position: relative; align-items: flex-start; justify-content: flex-start; padding: 0 0 17px 25px; }
+    .timeline-item::before { position: absolute; top: 7px; bottom: -4px; left: 6px; border-left: 1px dashed rgba(69,214,255,.35); content: ""; }
+    .timeline-item:last-child::before { display: none; }
+    .timeline-dot { position: absolute; top: 3px; left: 0; width: 13px; height: 13px; border: 3px solid #12253e; border-radius: 50%; background: var(--cyan); box-shadow: 0 0 0 1px rgba(69,214,255,.35); }
+    .timeline-source { color: var(--cyan); font-size: 11px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
+    .timeline-summary { margin: 4px 0 3px; font-size: 13px; line-height: 1.45; }
+    .timeline-ref { color: var(--muted); font-family: ui-monospace, monospace; font-size: 10px; word-break: break-all; }
+    .audit-list { display: grid; gap: 8px; }
+    .audit-item { border: 1px solid var(--line); border-radius: 10px; padding: 9px 10px; color: var(--muted); font-size: 12px; }
+    .audit-item strong { color: var(--text); }
+
+    .side-column { display: grid; gap: 16px; }
+    .shift-hero { border: 1px solid rgba(85,230,165,.22); border-radius: 14px; padding: 13px; background: rgba(85,230,165,.07); }
+    .shift-status { display: flex; align-items: center; gap: 8px; color: var(--green); font-weight: 700; }
+    .shift-person { margin: 12px 0 4px; font-size: 20px; font-weight: 700; }
+    .rule { border-top: 1px solid var(--line); padding: 13px 0 0; margin-top: 13px; }
+    .rule:first-child { border-top: 0; padding-top: 0; margin-top: 0; }
+    .rule-title { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 6px; }
+    .rule-title strong { font-size: 13px; }
+    .rule p { margin-bottom: 4px; color: var(--muted); font-size: 12px; line-height: 1.45; }
+    .rule-time { color: var(--amber); font-size: 12px; font-weight: 700; }
+    .footer-note { margin: 18px 0 0; color: var(--muted); font-size: 11px; text-align: center; }
+
+    dialog { width: min(440px, calc(100% - 28px)); border: 1px solid rgba(69,214,255,.35); border-radius: 16px; padding: 0; color: var(--text); background: #0d1e32; box-shadow: var(--shadow); }
+    dialog::backdrop { background: rgba(1, 8, 17, .72); backdrop-filter: blur(3px); }
+    .dialog-body { padding: 20px; }
+    .dialog-body p { color: var(--muted); font-size: 13px; line-height: 1.5; }
+    .dialog-actions { display: flex; justify-content: flex-end; gap: 9px; margin-top: 18px; }
+
+    @media (max-width: 1120px) {
+      .dashboard { grid-template-columns: minmax(250px, .8fr) minmax(390px, 1.2fr); }
+      .side-column { grid-column: 1 / -1; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    }
+    @media (max-width: 760px) {
+      .page { padding: 20px 14px 40px; }
+      .topbar { display: block; }
+      .topbar-meta { justify-content: flex-start; margin-top: 16px; }
+      .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .dashboard, .side-column { grid-template-columns: 1fr; }
+      .side-column { grid-column: auto; }
+      .detail-grid { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <header class="topbar">
+      <div>
+        <p class="eyebrow">Minimal Agent · Park Security</p>
+        <h1>园区安防智能态势</h1>
+        <p class="subtitle">把告警、视频、门禁、巡更和消防证据串成可解释的事件卡片，当前页面使用确定性的模拟数据。</p>
+      </div>
+      <div class="topbar-meta" aria-label="页面状态">
+        <span class="pill mock-badge">MOCK DATA</span>
+        <span class="pill"><span class="dot"></span><strong>park-1</strong> · 运行正常</span>
+        <span class="pill">模拟时刻 <strong>2026-08-11 01:00 UTC</strong></span>
+      </div>
+    </header>
+
+    <section class="kpis" aria-label="安防指标">
+      <article class="kpi"><div class="kpi-label">归并事件</div><div class="kpi-value" id="kpi-total">—</div><div class="kpi-note">跨门禁、视频、消防和巡更</div></article>
+      <article class="kpi kpi-critical"><div class="kpi-label">严重 / 高风险</div><div class="kpi-value" id="kpi-critical">—</div><div class="kpi-note">需要人工确认的开放事件</div></article>
+      <article class="kpi"><div class="kpi-label">原始告警</div><div class="kpi-value" id="kpi-raw">—</div><div class="kpi-note">已归并重复告警</div></article>
+      <article class="kpi kpi-rate"><div class="kpi-label">有效告警率</div><div class="kpi-value" id="kpi-rate">—</div><div class="kpi-note">归并事件 / 原始告警</div></article>
+    </section>
+
+    <main class="dashboard">
+      <section class="panel" aria-labelledby="events-title">
+        <div class="panel-header">
+          <div><h2 id="events-title">风险事件</h2><p class="panel-subtitle">点击事件查看证据链和处置建议</p></div>
+          <span class="badge badge-open" id="event-count">3 条</span>
+        </div>
+        <div class="filters">
+          <label>风险等级<select id="risk-filter"><option value="all">全部风险</option><option value="critical">严重</option><option value="high">高</option><option value="medium">中</option><option value="low">低</option></select></label>
+          <label>事件状态<select id="status-filter"><option value="all">全部状态</option><option value="open">开放</option><option value="confirmed">已确认</option><option value="work_order_created">已建工单</option><option value="closed">已关闭</option></select></label>
+        </div>
+        <div class="event-list" id="event-list" aria-live="polite"></div>
+      </section>
+
+      <section class="detail-column">
+        <article class="panel" aria-labelledby="detail-title">
+          <div class="panel-header"><div><h2 id="detail-title">事件详情</h2><p class="panel-subtitle">基于多源证据的可解释结论</p></div><span class="badge">只读分析 + 模拟处置</span></div>
+          <div id="event-detail"></div>
+        </article>
+        <article class="panel" aria-labelledby="timeline-title">
+          <div class="panel-header"><div><h2 id="timeline-title">证据时间线</h2><p class="panel-subtitle">按照真实发生时刻排序</p></div></div>
+          <div class="timeline" id="evidence-timeline"></div>
+          <div class="section-label">处置审计</div>
+          <div class="audit-list" id="audit-list"></div>
+        </article>
+      </section>
+
+      <aside class="side-column">
+        <section class="panel" id="shift-panel" aria-labelledby="shift-title">
+          <div class="panel-header"><div><h2 id="shift-title">值班与升级</h2><p class="panel-subtitle">模拟时刻的区域响应上下文</p></div></div>
+        </section>
+        <section class="panel" aria-labelledby="scope-title">
+          <div class="panel-header"><div><h2 id="scope-title">数据边界</h2><p class="panel-subtitle">当前演示不连接生产系统</p></div></div>
+          <div class="small" style="line-height:1.7">页面只展示 <strong style="color:var(--text)">park-1</strong> 的 8 条模拟告警和 3 个归并事件。确认、工单和关闭操作只保存在浏览器内存，刷新后恢复初始状态。</div>
+          <div class="chips" style="margin-top:14px"><span class="chip">门禁</span><span class="chip">视频</span><span class="chip">消防</span><span class="chip">巡更</span></div>
+        </section>
+      </aside>
+    </main>
+    <p class="footer-note">演示页面 · 不代表真实安防系统已执行任何操作</p>
+  </div>
+
+  <dialog id="action-dialog" aria-labelledby="dialog-title">
+    <form method="dialog" class="dialog-body" id="action-form">
+      <h2 id="dialog-title">模拟处置</h2>
+      <p id="dialog-description">请填写本次人工复核信息。提交后只会改变当前页面内存状态。</p>
+      <label>操作员 ID<input id="operator-input" autocomplete="off" required placeholder="例如 guard-01"></label>
+      <label style="display:block;margin-top:12px">处置说明<textarea id="note-input" rows="3" required placeholder="记录现场核验或处置结论"></textarea></label>
+      <div class="dialog-actions"><button class="btn" value="cancel">取消</button><button class="btn btn-primary" id="dialog-submit" value="default">确认模拟操作</button></div>
+    </form>
+  </dialog>
+
+  <script>
+    (() => {
+      "use strict";
+
+      const riskLabels = { low: "低风险", medium: "中风险", high: "高风险", critical: "严重风险" };
+      const statusLabels = { open: "开放", confirmed: "已确认", work_order_created: "已建工单", closed: "已关闭" };
+      const sourceLabels = { access_control: "门禁", video: "视频", patrol: "巡更", fire: "消防", device: "设备", shift: "值班", appointment: "预约" };
+      const scenarioLabels = {
+        night_abnormal_access: "夜间实验区异常门禁",
+        access_failure_and_loitering: "园区入口访问失败与徘徊",
+        fire_alarm_and_equipment_fault: "机房消防与设备故障"
+      };
+      const planLabels = {
+        night_access_verification: "核验夜间门禁记录、访客预约和现场人员",
+        verify_visitor_appointment_and_dispatch_patrol: "核验访客预约并派巡逻人员复核",
+        fire_emergency_response: "启动消防应急响应，检查疏散区并处置通风设备故障"
+      };
+      const transitionLabels = { confirmed: "确认事件", work_order_created: "创建工单", closed: "关闭事件" };
+      const nextStatus = { open: "confirmed", confirmed: "work_order_created", work_order_created: "closed" };
+      const elements = {};
+
+      function evidence(id, source, occurredAt, summary, reference) {
+        return { evidence_id: id, source, occurred_at: occurredAt, summary, reference };
+      }
+
+      function createInitialEvents() {
+        return [
+          {
+            event_id: "event-night-001", park_id: "park-1", building_id: "building-a", area_id: "area-lab-01",
+            scenario: "night_abnormal_access", risk_level: "high", status: "open",
+            first_occurred_at: "2026-08-11T00:12:00Z", last_occurred_at: "2026-08-11T00:14:00Z",
+            alarm_ids: ["alarm-access-001", "alarm-video-001"], impact_scope: ["building-a", "area-lab-01", "night-research-zone"],
+            recommended_plan: "night_access_verification", responsible_party: "team-night", evidence_completeness: .92,
+            timeline: [
+              evidence("evidence-night-access", "access_control", "2026-08-11T00:12:00Z", "夜间门禁尝试被拒绝。", "access://door-lab-01/log/001"),
+              evidence("evidence-night-video", "video", "2026-08-11T00:14:00Z", "实验室门附近检测到人员。", "s3://park-security/screenshots/night-001.jpg"),
+              evidence("evidence-night-shift", "shift", "2026-08-11T00:15:00Z", "Guard-01 被分配到北侧巡逻路线。", "shift://2026-08-11/guard-01"),
+              evidence("evidence-night-appointment", "appointment", "2026-08-11T00:15:00Z", "没有匹配到有效访客预约。", "appointment://lab-01/lookup/001")
+            ],
+            audit_records: [{ audit_id: "audit-night-001", operator_id: "guard-01", action: "event_created", occurred_at: "2026-08-11T00:15:00Z", note: "" }],
+            work_order_id: null, work_orders: [], confirmed_at: null, closed_at: null
+          },
+          {
+            event_id: "event-access-002", park_id: "park-1", building_id: "building-a", area_id: "area-gate-02",
+            scenario: "access_failure_and_loitering", risk_level: "high", status: "open",
+            first_occurred_at: "2026-08-11T00:42:00Z", last_occurred_at: "2026-08-11T00:49:00Z",
+            alarm_ids: ["alarm-access-002", "alarm-patrol-001", "alarm-video-002"], impact_scope: ["building-a", "area-gate-02", "visitor-entry-route"],
+            recommended_plan: "verify_visitor_appointment_and_dispatch_patrol", responsible_party: "team-access", evidence_completeness: .88,
+            timeline: [
+              evidence("evidence-access-reader", "access_control", "2026-08-11T00:42:00Z", "记录到 3 次凭证失败。", "access://gate-reader-02/log/002"),
+              evidence("evidence-access-patrol", "patrol", "2026-08-11T00:47:00Z", "巡更报告门禁拒绝后仍有人徘徊。", "patrol://patrol-point-02/report/002"),
+              evidence("evidence-access-video", "video", "2026-08-11T00:49:00Z", "视频检测到人员持续停留在入口。", "s3://park-security/screenshots/access-002.jpg"),
+              evidence("evidence-access-appointment", "appointment", "2026-08-11T00:50:00Z", "没有匹配到有效访客预约。", "appointment://gate-02/lookup/002")
+            ],
+            audit_records: [{ audit_id: "audit-access-002", operator_id: "guard-01", action: "event_created", occurred_at: "2026-08-11T00:50:00Z", note: "" }],
+            work_order_id: null, work_orders: [], confirmed_at: null, closed_at: null
+          },
+          {
+            event_id: "event-fire-003", park_id: "park-1", building_id: "building-a", area_id: "area-plant-01",
+            scenario: "fire_alarm_and_equipment_fault", risk_level: "critical", status: "open",
+            first_occurred_at: "2026-08-11T01:02:00Z", last_occurred_at: "2026-08-11T01:04:00Z",
+            alarm_ids: ["alarm-fire-001", "alarm-fire-002", "alarm-fire-003"], impact_scope: ["building-a", "area-plant-01", "mechanical-room", "evacuation-zone-a"],
+            recommended_plan: "fire_emergency_response", responsible_party: "team-fire", evidence_completeness: .97,
+            timeline: [
+              evidence("evidence-fire-smoke", "fire", "2026-08-11T01:02:00Z", "机房烟感触发报警。", "fire://smoke-plant-01/event/003"),
+              evidence("evidence-fire-temperature", "fire", "2026-08-11T01:03:00Z", "温度升高并超过消防阈值。", "fire://temp-plant-01/event/003"),
+              evidence("evidence-fire-device", "device", "2026-08-11T01:04:00Z", "通风风机上报故障状态。", "device://fan-plant-01/status/003")
+            ],
+            audit_records: [{ audit_id: "audit-fire-003", operator_id: "guard-01", action: "event_created", occurred_at: "2026-08-11T01:05:00Z", note: "" }],
+            work_order_id: null, work_orders: [], confirmed_at: null, closed_at: null
+          }
+        ];
+      }
+
+      const shiftContext = {
+        park_id: "park-1", focus_area: "area-lab-01", query_time: "2026-08-11T01:00:00Z", on_duty: true,
+        key_areas: ["area-lab-01", "area-gate-02", "area-plant-01"],
+        on_duty_guard: { guard_id: "guard-01", name: "Li Wei", shift: "night", shift_start: "2026-08-10T16:00:00Z", shift_end: "2026-08-11T08:00:00Z" },
+        responsible_areas: ["area-lab-01", "area-gate-02", "area-plant-01"],
+        escalation_rules: {
+          level_1: { condition: "高风险或门禁异常", notify: ["guard-01", "team-night"], response_within_minutes: 5 },
+          level_2: { condition: "严重消防或生命安全告警", notify: ["team-fire", "park-manager", "emergency-services"], response_within_minutes: 1 }
+        }
+      };
+
+      let state = {
+        events: createInitialEvents(), selectedEventId: "event-fire-003", riskFilter: "all", statusFilter: "all",
+        queryTime: "2026-08-11T01:00:00Z", shiftContext
+      };
+      let pendingAction = null;
+
+      function clone(value) { return JSON.parse(JSON.stringify(value)); }
+      function byId(id) { return document.getElementById(id); }
+      function setText(node, value) { node.textContent = value == null ? "—" : String(value); }
+      function make(tag, className, text) {
+        const node = document.createElement(tag);
+        if (className) node.className = className;
+        if (text != null) node.textContent = text;
+        return node;
+      }
+      function formatTime(value) { return new Date(value).toISOString().replace("T", " ").slice(0, 16) + " UTC"; }
+      function formatPercent(value) { return `${Math.round(value * 100)}%`; }
+      function selectedEvent() { return state.events.find((event) => event.event_id === state.selectedEventId) || null; }
+      function filteredEvents() {
+        return state.events.filter((event) => (state.riskFilter === "all" || event.risk_level === state.riskFilter) && (state.statusFilter === "all" || event.status === state.statusFilter));
+      }
+      function ensureSelection(events) {
+        if (!events.length) { state.selectedEventId = null; return; }
+        if (!events.some((event) => event.event_id === state.selectedEventId)) state.selectedEventId = events[0].event_id;
+      }
+
+      function renderKpis() {
+        const raw = state.events.reduce((sum, event) => sum + event.alarm_ids.length, 0);
+        const urgent = state.events.filter((event) => event.risk_level === "critical" || event.risk_level === "high").length;
+        setText(elements.kpiTotal, state.events.length); setText(elements.kpiCritical, urgent); setText(elements.kpiRaw, raw); setText(elements.kpiRate, formatPercent(state.events.length / raw));
+      }
+
+      function renderEventList() {
+        const events = filteredEvents();
+        ensureSelection(events);
+        elements.eventList.replaceChildren();
+        setText(elements.eventCount, `${events.length} 条`);
+        if (!events.length) { elements.eventList.append(make("div", "empty", "没有匹配当前筛选条件的事件")); return; }
+        events.forEach((event) => {
+          const card = make("button", `event-card${event.event_id === state.selectedEventId ? " selected" : ""}`);
+          card.type = "button"; card.dataset.eventId = event.event_id; card.setAttribute("aria-pressed", event.event_id === state.selectedEventId ? "true" : "false");
+          const top = make("div", "event-card-top"); top.append(make("span", `badge badge-${event.risk_level}`, riskLabels[event.risk_level]), make("span", `badge badge-${event.status}`, statusLabels[event.status]));
+          const title = make("h3", "", scenarioLabels[event.scenario]);
+          const meta = make("div", "event-card-meta"); meta.append(make("span", "", event.area_id), make("span", "", formatTime(event.first_occurred_at)));
+          card.append(top, title, meta); card.addEventListener("click", () => { state.selectedEventId = event.event_id; render(); }); elements.eventList.append(card);
+        });
+      }
+
+      function addFact(grid, label, value) { const fact = make("div", "fact"); fact.append(make("div", "fact-label", label), make("div", "fact-value", value)); grid.append(fact); }
+      function renderEventDetail() {
+        const event = selectedEvent(); elements.eventDetail.replaceChildren();
+        if (!event) { elements.eventDetail.append(make("div", "empty", "请选择一个事件查看详情")); return; }
+        const head = make("div", "detail-head"); const titleWrap = make("div"); const title = make("div", "detail-title"); title.append(make("h2", "", scenarioLabels[event.scenario]), make("span", `badge badge-${event.risk_level}`, riskLabels[event.risk_level])); titleWrap.append(title, make("p", "detail-id", event.event_id)); head.append(titleWrap, make("span", `badge badge-${event.status}`, statusLabels[event.status])); elements.eventDetail.append(head);
+        const grid = make("div", "detail-grid"); addFact(grid, "首次发生", formatTime(event.first_occurred_at)); addFact(grid, "最近发生", formatTime(event.last_occurred_at)); addFact(grid, "责任团队", event.responsible_party); addFact(grid, "证据完整度", formatPercent(event.evidence_completeness)); elements.eventDetail.append(grid);
+        elements.eventDetail.append(make("div", "section-label", "影响范围")); const chips = make("div", "chips"); event.impact_scope.forEach((item) => chips.append(make("span", "chip", item))); elements.eventDetail.append(chips);
+        elements.eventDetail.append(make("div", "section-label", "建议处置"), make("div", "recommendation", planLabels[event.recommended_plan] || event.recommended_plan));
+        const actionRow = make("div", "action-row"); const next = nextStatus[event.status]; const action = make("button", `btn ${next === "closed" ? "btn-danger" : "btn-primary"}`, next ? transitionLabels[next] : "流程已完成"); action.type = "button"; action.disabled = !next; if (next) action.addEventListener("click", () => openActionDialog(event.event_id, next)); actionRow.append(action); elements.eventDetail.append(actionRow);
+        setText(elements.notice, ""); elements.notice.classList.remove("error");
+      }
+
+      function renderTimeline() {
+        const event = selectedEvent(); elements.timeline.replaceChildren(); elements.auditList.replaceChildren();
+        if (!event) return;
+        [...event.timeline].sort((a, b) => new Date(a.occurred_at) - new Date(b.occurred_at)).forEach((item) => {
+          const row = make("div", "timeline-item"); row.append(make("span", "timeline-dot")); const body = make("div"); body.append(make("div", "timeline-source", sourceLabels[item.source] || item.source), make("div", "timeline-summary", item.summary), make("div", "timeline-ref", `${formatTime(item.occurred_at)} · ${item.reference}`)); row.append(body); elements.timeline.append(row);
+        });
+        event.audit_records.forEach((record) => { const item = make("div", "audit-item"); item.append(make("strong", "", record.action), make("span", "", ` · ${record.operator_id} · ${formatTime(record.occurred_at)}`)); if (record.note) item.append(make("div", "", record.note)); elements.auditList.append(item); });
+        event.work_orders.forEach((order) => { const item = make("div", "audit-item"); item.append(make("strong", "", `工单 ${order.work_order_id}`), make("span", "", ` · ${order.status} · ${order.assignee}`)); elements.auditList.append(item); });
+      }
+
+      function renderShiftContext() {
+        const context = state.shiftContext; elements.shiftPanel.replaceChildren();
+        const hero = make("div", "shift-hero"); const status = make("div", "shift-status"); status.append(make("span", "dot"), make("span", context.on_duty ? "当前值班中" : "当前无值班人员")); hero.append(status, make("div", "shift-person", context.on_duty_guard ? context.on_duty_guard.name : "未配置"), make("div", "small", context.on_duty_guard ? `${context.on_duty_guard.guard_id} · ${context.on_duty_guard.shift} 班 · ${formatTime(context.on_duty_guard.shift_start)} — ${formatTime(context.on_duty_guard.shift_end)}` : "当前时刻没有值班人员")); elements.shiftPanel.append(hero);
+        elements.shiftPanel.append(make("div", "section-label", "重点负责区域")); const areas = make("div", "chips"); context.responsible_areas.forEach((area) => areas.append(make("span", "chip", area))); elements.shiftPanel.append(areas);
+        elements.shiftPanel.append(make("div", "section-label", "升级规则")); Object.entries(context.escalation_rules).forEach(([level, rule]) => { const block = make("div", "rule"); const title = make("div", "rule-title"); title.append(make("strong", "", level === "level_1" ? "一级响应" : "二级响应"), make("span", "rule-time", `${rule.response_within_minutes} 分钟内`)); block.append(title, make("p", "", rule.condition), make("p", "", `通知：${rule.notify.join("、")}`)); elements.shiftPanel.append(block); });
+      }
+
+      function render() { renderKpis(); renderEventList(); renderEventDetail(); renderTimeline(); renderShiftContext(); }
+
+      function openActionDialog(eventId, targetStatus) {
+        pendingAction = { eventId, targetStatus }; setText(elements.dialogDescription, `将对 ${eventId} 执行“${transitionLabels[targetStatus]}”。这是浏览器内存中的模拟操作。`); elements.operatorInput.value = ""; elements.noteInput.value = ""; elements.actionDialog.showModal(); elements.operatorInput.focus();
+      }
+
+      function transitionEvent(eventId, targetStatus, operatorId, note) {
+        const event = state.events.find((item) => item.event_id === eventId);
+        if (!event) throw new Error("event_not_found");
+        if (nextStatus[event.status] !== targetStatus) throw new Error("invalid_event_transition");
+        if (!String(operatorId || "").trim() || !String(note || "").trim()) throw new Error("operator_and_note_required");
+        const timestamp = targetStatus === "confirmed" ? "2026-08-11T01:15:00Z" : targetStatus === "work_order_created" ? "2026-08-11T01:20:00Z" : "2026-08-11T01:30:00Z";
+        event.status = targetStatus; event.audit_records.push({ audit_id: `audit-${eventId}-${targetStatus}`, operator_id: String(operatorId).trim(), action: targetStatus, occurred_at: timestamp, note: String(note).trim() });
+        if (targetStatus === "confirmed") event.confirmed_at = timestamp;
+        if (targetStatus === "work_order_created") { event.work_order_id = `wo-${eventId}`; event.work_orders.push({ work_order_id: event.work_order_id, event_id: eventId, status: "open", assignee: event.responsible_party, operator_id: String(operatorId).trim(), created_at: timestamp, closed_at: null, note: String(note).trim() }); }
+        if (targetStatus === "closed") { event.closed_at = timestamp; event.work_orders.forEach((order) => { order.status = "closed"; order.closed_at = timestamp; }); }
+        render(); setNotice(`${transitionLabels[targetStatus]}完成：${eventId}`, false);
+      }
+
+      function setNotice(message, error) { setText(elements.notice, message); elements.notice.classList.toggle("error", Boolean(error)); }
+      function reset() { state = { events: createInitialEvents(), selectedEventId: "event-fire-003", riskFilter: "all", statusFilter: "all", queryTime: "2026-08-11T01:00:00Z", shiftContext: clone(shiftContext) }; render(); setNotice("已恢复模拟初始状态", false); }
+
+      function init() {
+        elements.kpiTotal = byId("kpi-total"); elements.kpiCritical = byId("kpi-critical"); elements.kpiRaw = byId("kpi-raw"); elements.kpiRate = byId("kpi-rate"); elements.eventCount = byId("event-count"); elements.eventList = byId("event-list"); elements.eventDetail = byId("event-detail"); elements.timeline = byId("evidence-timeline"); elements.auditList = byId("audit-list"); elements.shiftPanel = byId("shift-panel"); elements.notice = document.createElement("div"); elements.notice.className = "notice"; elements.eventDetail.after(elements.notice); elements.riskFilter = byId("risk-filter"); elements.statusFilter = byId("status-filter"); elements.actionDialog = byId("action-dialog"); elements.actionForm = byId("action-form"); elements.dialogDescription = byId("dialog-description"); elements.operatorInput = byId("operator-input"); elements.noteInput = byId("note-input");
+        elements.riskFilter.addEventListener("change", (event) => { state.riskFilter = event.target.value; render(); }); elements.statusFilter.addEventListener("change", (event) => { state.statusFilter = event.target.value; render(); });
+        elements.actionForm.addEventListener("submit", (event) => { event.preventDefault(); if (event.submitter && event.submitter.value === "cancel") { elements.actionDialog.close(); return; } if (!pendingAction) return; try { if (!window.confirm(`确认执行“${transitionLabels[pendingAction.targetStatus]}”吗？`)) return; transitionEvent(pendingAction.eventId, pendingAction.targetStatus, elements.operatorInput.value, elements.noteInput.value); elements.actionDialog.close(); pendingAction = null; } catch (error) { setNotice(error.message === "operator_and_note_required" ? "请填写操作员和处置说明" : "当前状态不允许执行该操作", true); } });
+        elements.actionDialog.addEventListener("close", () => { pendingAction = null; }); render();
+        window.__parkSecurityDemo = { getState: () => clone(state), render, transitionEvent, reset };
+      }
+
+      document.addEventListener("DOMContentLoaded", init);
+    })();
+  </script>
+</body>
+</html>
