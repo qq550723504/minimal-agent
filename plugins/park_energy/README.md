@@ -45,7 +45,7 @@ $env:PARK_SECURITY_MCP_URL = "http://127.0.0.1:8200/mcp"
 $env:PARK_ENERGY_MCP_URL = "http://127.0.0.1:8100/mcp"
 ```
 
-然后访问 <http://127.0.0.1:8000/security/>。页面会在同一个对话中展示安防卡片和能耗趋势、排名、峰值、周期对比及异常卡片；页面不连接 `cent_energy` 数据库。
+然后访问 <http://127.0.0.1:8000/park-agent/>。页面会在同一个对话中展示安防卡片和能耗趋势、排名、峰值、周期对比及异常卡片；页面不连接 `cent_energy` 数据库。旧地址 `/security/` 仍可访问。
 - `PARK_ENERGY_DATA_MODE` 取值为 `rest` 或 `mock`，默认是 `rest`。
 - `mock` 模式下，五个工具返回可重复的示例数据，不会请求上游 API。
 

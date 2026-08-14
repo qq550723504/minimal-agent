@@ -113,10 +113,17 @@ def test_structured_response_blocks_decode_energy_tools(remote_tool, block_type,
 def test_agent_serves_security_dashboard_from_same_origin():
     client = TestClient(server.app)
 
-    response = client.get("/security/")
+    response = client.get("/park-agent/")
 
     assert response.status_code == 200
-    assert "园区安防智能态势" in response.text
+    assert "园区智能运营 Agent" in response.text
+
+
+def test_legacy_security_dashboard_route_remains_available():
+    response = TestClient(server.app).get("/security/")
+
+    assert response.status_code == 200
+    assert "园区智能运营 Agent" in response.text
 
 
 @pytest.mark.anyio

@@ -34,9 +34,9 @@ $env:PARK_SECURITY_MCP_URL = "http://127.0.0.1:8200/mcp"
 python -m uvicorn src.agent.api.app:app --host 127.0.0.1 --port 8000
 ```
 
-访问 <http://127.0.0.1:8000/security/>，在页面顶部提问。页面会调用 Agent 的
+访问 <http://127.0.0.1:8000/park-agent/>，在页面顶部提问。页面会调用 Agent 的
 `POST /api/handle`（`response_mode=structured`），同时展示自然语言回答和安防结果卡片。
-同源访问可以避免把 Agent API 暴露给独立静态页面；生产环境仍需按 Agent 的认证配置保护接口。
+旧地址 `/security/` 仍保留为兼容别名。同源访问可以避免把 Agent API 暴露给独立静态页面；生产环境仍需按 Agent 的认证配置保护接口。
 
 ## 本地运行
 

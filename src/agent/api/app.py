@@ -100,11 +100,15 @@ setup_metrics(app)
 
 _SECURITY_DASHBOARD_DIR = Path(__file__).resolve().parents[3] / "demos" / "park-security"
 if _SECURITY_DASHBOARD_DIR.is_dir():
-    app.mount(
-        "/security",
-        StaticFiles(directory=_SECURITY_DASHBOARD_DIR, html=True),
-        name="security_dashboard",
-    )
+    for dashboard_route, dashboard_name in (
+        ("/park-agent", "park_agent_dashboard"),
+        ("/security", "security_dashboard_legacy"),
+    ):
+        app.mount(
+            dashboard_route,
+            StaticFiles(directory=_SECURITY_DASHBOARD_DIR, html=True),
+            name=dashboard_name,
+        )
 
 
 @app.exception_handler(ClientInputError)
