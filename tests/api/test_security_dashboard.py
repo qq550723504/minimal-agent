@@ -16,6 +16,8 @@ def test_security_dashboard_contains_agent_chat_surface():
     mock_data = (ROOT / "demos" / "park-security" / "mock-data.js").read_text(encoding="utf-8")
     assert 'import { createInitialEvents, shiftContext } from "./mock-data.js";' in app
     assert 'get("demo") === "1"' in app
+    assert 'hidden = !demoMode' in app
+    assert 'local-dashboard' in page
     assert "export function createInitialEvents" in mock_data
     assert "event-fire-003" not in page
     assert 'raw ? formatPercent(state.events.length / raw) : "—"' in app
