@@ -55,6 +55,11 @@ _STRUCTURED_BLOCK_TYPES = {
     "security.list_events": "security_events",
     "security.get_event_detail": "security_event_detail",
     "security.get_shift_context": "shift_context",
+    "energy.query_trend": "energy_trend",
+    "energy.query_ranking": "energy_ranking",
+    "energy.get_peak_value": "energy_peak",
+    "energy.compare_period": "energy_compare",
+    "energy.get_alarm_summary": "energy_alarm",
 }
 
 
@@ -119,6 +124,18 @@ def _response_message(blocks: list[dict[str, object]], results: list[str]) -> st
             return f"已获取事件 {data.get('event_id', 'unknown')} 的证据链和处置信息。"
         if block_type == "shift_context" and isinstance(data, dict):
             return "当前已获取值班覆盖和升级通知规则。"
+        if block_type == "energy_trend" and isinstance(data, dict):
+            items = data.get("items")
+            return f"已获取能耗趋势，共 {len(items)} 个时间点。" if isinstance(items, list) else "已获取能耗趋势数据。"
+        if block_type == "energy_ranking" and isinstance(data, dict):
+            items = data.get("items")
+            return f"已获取能耗排名，共 {len(items)} 个对象。" if isinstance(items, list) else "已获取能耗排名数据。"
+        if block_type == "energy_peak" and isinstance(data, dict):
+            return f"当前峰值为 {data.get('peak_value', '—')} {data.get('unit', '')}，发生在 {data.get('peak_time', '—')}。"
+        if block_type == "energy_compare" and isinstance(data, dict):
+            return f"本期能耗 {data.get('current_total', '—')} {data.get('unit', '')}，较对比期变化 {data.get('change_rate', '—')}。"
+        if block_type == "energy_alarm" and isinstance(data, dict):
+            return f"发现 {data.get('total', 0)} 条能耗异常，其中严重 {data.get('critical', 0)} 条。"
         if block_type == "tool_error":
             return "Agent 调用安防能力失败，请检查服务状态或权限。"
     return "; ".join(results)

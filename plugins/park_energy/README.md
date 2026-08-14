@@ -37,6 +37,15 @@ $env:ENERGY_API_MAX_RESPONSE_BYTES = "1048576"
 4. 启动 Agent，并显式设置 `AGENT_CAPABILITY_RUNTIME_ENABLED=true`、`AGENT_STRUCTURED_TOOL_CALLING_ENABLED=true`、`AGENT_MCP_ALLOWED_HOSTS=127.0.0.1`。
 
 用户请求“查询最近 7 天能耗”时，Agent 会调用 `energy.query_trend`，由 Java 查询 `cent_energy` 后返回趋势、累计值、峰值和数据质量。
+
+与安防 Agent 页面合并展示时，同时设置：
+
+```powershell
+$env:PARK_SECURITY_MCP_URL = "http://127.0.0.1:8200/mcp"
+$env:PARK_ENERGY_MCP_URL = "http://127.0.0.1:8100/mcp"
+```
+
+然后访问 <http://127.0.0.1:8000/security/>。页面会在同一个对话中展示安防卡片和能耗趋势、排名、峰值、周期对比及异常卡片；页面不连接 `cent_energy` 数据库。
 - `PARK_ENERGY_DATA_MODE` 取值为 `rest` 或 `mock`，默认是 `rest`。
 - `mock` 模式下，五个工具返回可重复的示例数据，不会请求上游 API。
 

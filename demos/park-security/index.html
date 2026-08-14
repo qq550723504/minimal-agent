@@ -78,6 +78,12 @@
     .response-list-item { display: flex; align-items: center; justify-content: space-between; gap: 10px; border-top: 1px solid var(--line); padding-top: 8px; font-size: 12px; }
     .response-list-item:first-child { border-top: 0; padding-top: 0; }
     .response-list-item span:last-child { color: var(--muted); }
+    .energy-trend { display: flex; align-items: flex-end; gap: 7px; min-height: 94px; padding: 8px 2px 0; }
+    .energy-point { display: grid; flex: 1; min-width: 0; gap: 5px; justify-items: center; }
+    .energy-bar { width: 100%; min-height: 8px; border-radius: 5px 5px 2px 2px; background: linear-gradient(180deg, var(--cyan), rgba(69,214,255,.22)); }
+    .energy-point-label, .energy-point-value { overflow: hidden; max-width: 100%; color: var(--muted); font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
+    .energy-point-value { color: var(--text); font-weight: 700; }
+    .energy-alarm { color: #ffd98a; }
     .response-json { margin: 0; color: var(--muted); font-size: 11px; white-space: pre-wrap; word-break: break-word; }
 
     .kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; margin-bottom: 18px; }
@@ -201,7 +207,7 @@
 
     <section class="panel chat-panel" aria-labelledby="chat-title">
       <div class="chat-header">
-        <div class="chat-header-copy"><h2 id="chat-title">问问现有 Agent</h2><p class="panel-subtitle">自然语言提问，Agent 返回回答和可展开的安防结构化卡片。</p></div>
+        <div class="chat-header-copy"><h2 id="chat-title">问问现有 Agent</h2><p class="panel-subtitle">自然语言提问，Agent 返回回答和可展开的安防、能耗结构化卡片。</p></div>
         <span class="badge">response_mode: structured</span>
       </div>
       <div class="chat-messages" id="chat-messages" aria-live="polite">
@@ -215,9 +221,12 @@
         <button class="prompt-chip" type="button" data-prompt="园区当前有哪些高风险事件？">高风险事件</button>
         <button class="prompt-chip" type="button" data-prompt="机房有没有消防风险？">机房消防风险</button>
         <button class="prompt-chip" type="button" data-prompt="凌晨一点谁在值班？">当前值班</button>
+        <button class="prompt-chip" type="button" data-prompt="查询最近 7 天园区能耗趋势">7 天能耗趋势</button>
+        <button class="prompt-chip" type="button" data-prompt="哪栋楼能耗最高？">能耗排名</button>
+        <button class="prompt-chip" type="button" data-prompt="最近有没有能耗异常？">能耗异常</button>
         <label class="endpoint">Agent API 地址<input id="agent-endpoint" autocomplete="off"></label>
       </div>
-      <p class="chat-status" id="chat-status">页面只会把问题发送到你配置的 Agent API，不会直连数据库或 MCP。</p>
+      <p class="chat-status" id="chat-status">页面只会把问题发送到你配置的 Agent API，不会直连数据库或 MCP；能耗 MCP 地址由 <code>PARK_ENERGY_MCP_URL</code> 配置。</p>
     </section>
 
     <section class="kpis" aria-label="安防指标">
@@ -402,8 +411,17 @@
         const stat = make("div", "response-stat"); stat.append(make("div", "response-stat-label", label), make("div", "response-stat-value", value)); parent.append(stat);
       }
 
+      function energyItems(data) { return Array.isArray(data) ? data : Array.isArray(data?.items) ? data.items : []; }
+      function energyValue(item, keys, fallback = "—") { for (const key of keys) if (item?.[key] != null) return item[key]; return fallback; }
+
+      function renderEnergyTrend(wrapper, data) {
+        const items = energyItems(data); const values = items.map((item) => Number(item.value)).filter(Number.isFinite); const max = Math.max(...values, 1);
+        if (!items.length) { wrapper.append(make("div", "empty", "没有可展示的趋势点")); return; }
+        const trend = make("div", "energy-trend"); items.slice(-12).forEach((item) => { const point = make("div", "energy-point"); const value = Number(item.value); const bar = make("div", "energy-bar"); bar.style.height = `${Math.max(8, Math.round((Number.isFinite(value) ? value : 0) / max * 70))}px`; point.append(bar, make("div", "energy-point-value", `${energyValue(item, ["value"])} ${item.unit || ""}`), make("div", "energy-point-label", String(energyValue(item, ["timestamp", "time"], "—")).slice(0, 10))); trend.append(point); }); wrapper.append(trend); if (data && typeof data === "object" && data.total != null) { const grid = make("div", "response-grid"); responseStat(grid, "累计能耗", `${data.total} ${data.unit || ""}`); wrapper.append(grid); }
+      }
+
       function renderResponseBlock(block) {
-        const wrapper = make("div", "response-block"); const title = make("div", "response-block-title"); const labels = { security_summary: "安防态势摘要", security_events: "事件列表", security_event_detail: "事件详情", shift_context: "值班与升级", tool_result: "工具结果", tool_error: "工具调用失败" }; title.append(make("span", "", labels[block.type] || block.type), make("span", "small", block.tool || "agent")); wrapper.append(title);
+        const wrapper = make("div", "response-block"); const title = make("div", "response-block-title"); const labels = { security_summary: "安防态势摘要", security_events: "事件列表", security_event_detail: "事件详情", shift_context: "值班与升级", energy_trend: "能耗趋势", energy_ranking: "能耗排名", energy_peak: "能耗峰值", energy_compare: "周期对比", energy_alarm: "能耗异常", tool_result: "工具结果", tool_error: "工具调用失败" }; title.append(make("span", "", labels[block.type] || block.type), make("span", "small", block.tool || "agent")); wrapper.append(title);
         const data = block.data;
         if (block.type === "security_summary" && data && typeof data === "object") {
           const grid = make("div", "response-grid"); responseStat(grid, "归并事件", data.total_events ?? 0); responseStat(grid, "严重风险", data.risk_counts?.critical ?? 0); responseStat(grid, "原始告警", data.raw_alarm_count ?? 0); wrapper.append(grid); return wrapper;
@@ -416,6 +434,19 @@
         }
         if (block.type === "shift_context" && data && typeof data === "object") {
           const grid = make("div", "response-grid"); responseStat(grid, "值班", data.on_duty_guard?.name || "无"); responseStat(grid, "状态", data.on_duty ? "值班中" : "无值班"); responseStat(grid, "重点区域", data.key_areas?.length ?? 0); wrapper.append(grid); return wrapper;
+        }
+        if (block.type === "energy_trend") { renderEnergyTrend(wrapper, data); return wrapper; }
+        if (block.type === "energy_ranking") {
+          const list = make("div", "response-list"); energyItems(data).slice(0, 8).forEach((item) => { const row = make("div", "response-list-item"); row.append(make("strong", "", energyValue(item, ["building_id", "meter_id", "name"])), make("span", "", `${energyValue(item, ["value", "total"])} ${item.unit || ""}`)); list.append(row); }); wrapper.append(list); return wrapper;
+        }
+        if (block.type === "energy_peak" && data && typeof data === "object") {
+          const grid = make("div", "response-grid"); responseStat(grid, "峰值", `${energyValue(data, ["peak_value", "value"])} ${data.unit || ""}`); responseStat(grid, "发生时间", energyValue(data, ["peak_time", "timestamp"])); wrapper.append(grid); return wrapper;
+        }
+        if (block.type === "energy_compare" && data && typeof data === "object") {
+          const grid = make("div", "response-grid"); responseStat(grid, "本期", `${energyValue(data, ["current_total", "currentTotal"])} ${data.unit || ""}`); responseStat(grid, "对比期", `${energyValue(data, ["compare_total", "baselineTotal"])} ${data.unit || ""}`); responseStat(grid, "变化率", energyValue(data, ["change_rate", "changePercent"])); wrapper.append(grid); return wrapper;
+        }
+        if (block.type === "energy_alarm" && data && typeof data === "object") {
+          const grid = make("div", "response-grid"); responseStat(grid, "异常总数", energyValue(data, ["total"] , 0)); responseStat(grid, "严重", energyValue(data, ["critical"], 0)); responseStat(grid, "预警", energyValue(data, ["warning"], 0)); wrapper.append(grid); const items = energyItems(data); if (items.length) { const list = make("div", "response-list"); items.slice(0, 6).forEach((item) => { const row = make("div", "response-list-item"); row.append(make("strong", "energy-alarm", energyValue(item, ["code", "name"])), make("span", "", `${energyValue(item, ["count", "value"], 0)} 条`)); list.append(row); }); wrapper.append(list); } return wrapper;
         }
         const pre = make("pre", "response-json", typeof data === "string" ? data : JSON.stringify(data, null, 2)); wrapper.append(pre); return wrapper;
       }

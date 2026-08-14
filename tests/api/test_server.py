@@ -85,6 +85,31 @@ def test_structured_response_blocks_decode_security_tool_and_unwrap_data():
     }]
 
 
+@pytest.mark.parametrize(
+    ("remote_tool", "block_type", "data"),
+    [
+        ("energy.query_trend", "energy_trend", {"total": 720.0, "points": []}),
+        ("energy.query_ranking", "energy_ranking", {"items": []}),
+        ("energy.get_peak_value", "energy_peak", {"value": 42.0}),
+        ("energy.compare_period", "energy_compare", {"delta": -3.0}),
+        ("energy.get_alarm_summary", "energy_alarm", {"anomalies": []}),
+    ],
+)
+def test_structured_response_blocks_decode_energy_tools(remote_tool, block_type, data):
+    result = ToolResult(
+        call_id=f"{block_type}-1",
+        tool=capability_namespaced_id(
+            "park-energy", "energy", encode_remote_tool_name(remote_tool)
+        ),
+        status=ToolResultStatus.SUCCESS,
+        content={"success": True, "data": data},
+    )
+
+    blocks = main._build_response_blocks([result])
+
+    assert blocks == [{"type": block_type, "tool": remote_tool, "data": data}]
+
+
 def test_agent_serves_security_dashboard_from_same_origin():
     client = TestClient(server.app)
 
