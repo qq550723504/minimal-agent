@@ -2,6 +2,7 @@ import asyncio
 import json
 import re
 import uuid
+from dataclasses import dataclass
 from typing import Any, Collection, List, Optional
 
 from src.agent.config import MAX_TOOL_RESULT_BYTES
@@ -27,6 +28,14 @@ class WorkflowExecutionError(RuntimeError):
         self.cause = cause
         self.completed_results = list(completed_results or [])
         super().__init__(f"workflow step {step_index} failed: {cause}")
+
+
+@dataclass(frozen=True)
+class ExecutionReport:
+    """Rendered step results plus structured tool outcomes for API consumers."""
+
+    results: list[str]
+    tool_results: list[ToolResult]
 
 
 def _invoke_tool(tool_name: str, payload: str) -> str:
@@ -179,14 +188,14 @@ def _restore_legacy_step(step: str) -> Any:
     return step
 
 
-async def execute_plan_items(
+async def _execute_plan_items(
     steps: list[PlanItem],
     owner_id: str,
     run_id: str | None = None,
     active_skill_ids: tuple[str, ...] = (),
     registry: CapabilityRegistry | None = None,
     allowed_tools: Collection[str] | None = None,
-) -> list[str]:
+) -> ExecutionReport:
     """执行文本步骤和结构化工具调用，并阻止 Planner 调用未授权的隐藏工具。"""
 
     context = ToolInvocationContext(
@@ -196,6 +205,7 @@ async def execute_plan_items(
     )
     active_registry = registry or get_capability_registry()
     results: list[str] = []
+    tool_results: list[ToolResult] = []
     for step in steps:
         if isinstance(step, ToolCallPlan):
             if (
@@ -215,12 +225,54 @@ async def execute_plan_items(
                     context,
                     active_registry,
                 )
+            tool_results.append(tool_result)
             results.append(_render_tool_result(tool_result))
             continue
 
         legacy_step = _restore_legacy_step(step) if isinstance(step, str) else step
         results.append(await asyncio.to_thread(execute_step, legacy_step))
-    return results
+    return ExecutionReport(results=results, tool_results=tool_results)
+
+
+async def execute_plan_items(
+    steps: list[PlanItem],
+    owner_id: str,
+    run_id: str | None = None,
+    active_skill_ids: tuple[str, ...] = (),
+    registry: CapabilityRegistry | None = None,
+    allowed_tools: Collection[str] | None = None,
+) -> list[str]:
+    """Execute plan items and preserve the legacy list-of-strings contract."""
+
+    report = await _execute_plan_items(
+        steps,
+        owner_id=owner_id,
+        run_id=run_id,
+        active_skill_ids=active_skill_ids,
+        registry=registry,
+        allowed_tools=allowed_tools,
+    )
+    return report.results
+
+
+async def execute_plan_items_detailed(
+    steps: list[PlanItem],
+    owner_id: str,
+    run_id: str | None = None,
+    active_skill_ids: tuple[str, ...] = (),
+    registry: CapabilityRegistry | None = None,
+    allowed_tools: Collection[str] | None = None,
+) -> ExecutionReport:
+    """Execute plan items while retaining structured tool metadata."""
+
+    return await _execute_plan_items(
+        steps,
+        owner_id=owner_id,
+        run_id=run_id,
+        active_skill_ids=active_skill_ids,
+        registry=registry,
+        allowed_tools=allowed_tools,
+    )
 
 
 class DurableWorkflowRunner:

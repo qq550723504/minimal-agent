@@ -5,9 +5,14 @@ from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
 
 from src.agent import config
-from src.agent.application.requests import enqueue_input, handle_input_async
+from src.agent.application.requests import (
+    enqueue_input,
+    handle_input_async,
+    handle_input_structured_async,
+)
 from src.agent.domain.capabilities.models import ToolSource
 from src.agent.infrastructure.mcp.manager import MCPClientManager
 from src.agent.infrastructure.memory.memory_manager import initialize_memory, save_memory
@@ -92,6 +97,14 @@ app.state.plugin_catalog = PluginCatalog()
 app.state.skill_catalog = SkillCatalog()
 app.state.mcp_manager = None
 setup_metrics(app)
+
+_SECURITY_DASHBOARD_DIR = Path(__file__).resolve().parents[3] / "demos" / "park-security"
+if _SECURITY_DASHBOARD_DIR.is_dir():
+    app.mount(
+        "/security",
+        StaticFiles(directory=_SECURITY_DASHBOARD_DIR, html=True),
+        name="security_dashboard",
+    )
 
 
 @app.exception_handler(ClientInputError)

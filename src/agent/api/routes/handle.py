@@ -26,6 +26,14 @@ async def handle_route(
 ):
     safe_prompt = sanitize_input(payload.prompt)
     audit_log(user_id, "request_received", safe_prompt)
+    if payload.response_mode == "structured":
+        result = await _app_module().handle_input_structured_async(
+            safe_prompt,
+            user_id=user_id,
+            skill_catalog=request.app.state.skill_catalog,
+        )
+        audit_log(user_id, "request_completed", result)
+        return result
     result = await _app_module().handle_input_async(
         safe_prompt,
         user_id=user_id,
