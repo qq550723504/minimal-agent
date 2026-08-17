@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from typing import Any
 
 from mcp.server import MCPServer
@@ -22,10 +23,47 @@ service = SecurityService(MockSecurityRepository(), approval_token=settings.appr
 mcp = MCPServer("park-security")
 
 
+def _normalise_shift_query(
+    park_id: str,
+    at_time: str | None,
+) -> tuple[str, str | None]:
+    """Replace obvious model placeholders with the deterministic demo context."""
+    normalised_park_id = (
+        "park-1"
+        if (
+            not park_id.strip()
+            or "PLACEHOLDER" in park_id.upper()
+            or park_id.upper() in {"PARK001", "PARK-001", "UNKNOWN"}
+        )
+        else park_id
+    )
+    if at_time is None or not at_time.strip() or "PLACEHOLDER" in at_time.upper():
+        return normalised_park_id, "2026-08-11T01:00:00Z"
+    if at_time.startswith("2023-"):
+        return normalised_park_id, "2026-08-11T01:00:00Z"
+    time_only = re.fullmatch(r"(\d{1,2}):(\d{2})", at_time.strip())
+    if time_only:
+        hour, minute = (int(value) for value in time_only.groups())
+        if 0 <= hour <= 23 and 0 <= minute <= 59:
+            return normalised_park_id, f"2026-08-11T{hour:02d}:{minute:02d}:00Z"
+    return normalised_park_id, at_time
+
+
+def _normalise_park_id(park_id: str) -> str:
+    """Map common model aliases to the single park in the mock dataset."""
+    if (
+        not park_id.strip()
+        or "PLACEHOLDER" in park_id.upper()
+        or park_id.upper() in {"PARK001", "PARK-001", "UNKNOWN"}
+    ):
+        return "park-1"
+    return park_id
+
+
 @mcp.tool(name="security.get_event_summary")
 async def get_event_summary(park_id: str) -> dict[str, Any]:
     """返回指定园区的安防事件风险汇总。"""
-    return await service.get_event_summary(park_id)
+    return await service.get_event_summary(_normalise_park_id(park_id))
 
 
 @mcp.tool(name="security.list_events")
@@ -37,6 +75,7 @@ async def list_events(
     status: EventStatus | None = None,
 ) -> dict[str, Any]:
     """按时间、风险等级和状态筛选并返回事件卡片。"""
+    query.park_id = _normalise_park_id(query.park_id)
     return await service.list_events(EventListQuery(
         park_id=park_id,
         start_time=start_time,
@@ -59,6 +98,7 @@ async def get_shift_context(
     at_time: str | None = None,
 ) -> dict[str, Any]:
     """返回区域值班覆盖、升级规则和空间上下文。"""
+    park_id, at_time = _normalise_shift_query(park_id, at_time)
     return await service.get_shift_context(park_id, area_id, at_time)
 
 

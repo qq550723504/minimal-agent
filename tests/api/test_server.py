@@ -4,14 +4,24 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 from src.agent.application import requests as main
+from src.agent.application.execution.service import ExecutionReport
 from src.agent.api import app as server
-from src.agent.domain.capabilities.models import ToolCall, ToolInvocationContext, ToolSource, ToolSpec
+from src.agent.domain.capabilities.models import (
+    ToolCall,
+    ToolInvocationContext,
+    ToolResult,
+    ToolResultStatus,
+    ToolSource,
+    ToolSpec,
+)
 from src.agent.domain.planning.models import ToolCallPlan
 from src.agent.infrastructure.plugins.catalog import LoadedPlugin, PluginCatalog
 from src.agent.infrastructure.plugins.models import PluginManifest
 from src.agent.infrastructure.skills.loader import SkillCatalog
 from src.agent.infrastructure.workflows.task_queue import enqueue_task
 from src.agent.tool_registry import get_capability_registry
+from src.agent.infrastructure.mcp.adapter import encode_remote_tool_name
+from src.agent.namespaces import capability_namespaced_id
 
 
 ROOT = Path(__file__).parents[2]
@@ -30,6 +40,178 @@ def test_handle_endpoint(monkeypatch):
     assert resp.status_code == 200
     assert resp.json()["result"] == "async-result"
     assert seen == [("hello", "default", server.app.state.skill_catalog)]
+
+
+def test_structured_handle_endpoint_returns_agent_blocks(monkeypatch):
+    seen = []
+
+    async def fake_handle_input_structured_async(prompt, user_id="default", skill_catalog=None):
+        seen.append((prompt, user_id, skill_catalog))
+        return {
+            "message": "机房存在严重消防风险。",
+            "blocks": [{"type": "security_event_detail", "data": {"event_id": "event-fire-003"}}],
+            "run_id": "run-structured-1",
+        }
+
+    monkeypatch.setattr(server, "handle_input_structured_async", fake_handle_input_structured_async)
+    client = TestClient(server.app)
+    resp = client.post("/api/handle", json={"prompt": "机房有火灾风险吗？", "response_mode": "structured"})
+
+    assert resp.status_code == 200
+    assert resp.json()["message"] == "机房存在严重消防风险。"
+    assert resp.json()["blocks"][0]["type"] == "security_event_detail"
+    assert seen == [("机房有火灾风险吗？", "default", server.app.state.skill_catalog)]
+
+
+def test_stream_handle_endpoint_returns_sse_events(monkeypatch):
+    seen = []
+
+    async def fake_stream_input_structured_async(prompt, user_id="default", skill_catalog=None):
+        seen.append((prompt, user_id, skill_catalog))
+        yield {"event": "status", "data": {"message": "开始处理"}}
+        yield {"event": "result", "data": {"message": "已完成", "blocks": [], "run_id": "run-stream-1"}}
+
+    monkeypatch.setattr(server, "stream_input_structured_async", fake_stream_input_structured_async)
+    client = TestClient(server.app)
+    resp = client.post(
+        "/api/handle/stream",
+        json={"prompt": "查询园区安防态势汇总", "response_mode": "stream"},
+    )
+
+    assert resp.status_code == 200
+    assert resp.headers["content-type"].startswith("text/event-stream")
+    assert "event: status" in resp.text
+    assert '"message": "开始处理"' in resp.text
+    assert "event: result" in resp.text
+    assert '"run_id": "run-stream-1"' in resp.text
+    assert seen == [("查询园区安防态势汇总", "default", server.app.state.skill_catalog)]
+
+
+def test_structured_response_blocks_decode_security_tool_and_unwrap_data():
+    result = ToolResult(
+        call_id="summary-1",
+        tool=capability_namespaced_id(
+            "park-security", "security", encode_remote_tool_name("security.get_event_summary")
+        ),
+        status=ToolResultStatus.SUCCESS,
+        content={
+            "success": True,
+            "data": {"park_id": "park-1", "total_events": 3, "risk_counts": {"critical": 1}},
+        },
+    )
+
+    blocks = main._build_response_blocks([result])
+
+    assert blocks == [{
+        "type": "security_summary",
+        "tool": "security.get_event_summary",
+        "data": {"park_id": "park-1", "total_events": 3, "risk_counts": {"critical": 1}},
+    }]
+
+
+def test_planner_security_tool_typo_is_mapped_to_registered_capability():
+    registry = get_capability_registry().__class__()
+    canonical = capability_namespaced_id(
+        "park-security", "security", encode_remote_tool_name("security.get_shift_context")
+    )
+    registry.register(
+        ToolSpec(
+            name=canonical,
+            description="shift",
+            input_schema={"type": "object"},
+            source=ToolSource.MCP,
+            plugin_id="park-security",
+            side_effects=False,
+            idempotent=True,
+        ),
+        lambda _arguments, _context: {},
+    )
+
+    steps = main._normalise_planner_tool_aliases(
+        [ToolCallPlan(
+            kind="tool_call",
+            call_id="shift-1",
+            tool="securiy.get_shift_context",
+            arguments={"park_id": "park-1"},
+        )],
+        registry,
+    )
+
+    assert steps[0].tool == canonical
+
+
+@pytest.mark.parametrize(
+    ("remote_tool", "block_type", "data"),
+    [
+        ("energy.query_trend", "energy_trend", {"total": 720.0, "points": []}),
+        ("energy.query_ranking", "energy_ranking", {"items": []}),
+        ("energy.get_peak_value", "energy_peak", {"value": 42.0}),
+        ("energy.compare_period", "energy_compare", {"delta": -3.0}),
+        ("energy.get_alarm_summary", "energy_alarm", {"anomalies": []}),
+    ],
+)
+def test_structured_response_blocks_decode_energy_tools(remote_tool, block_type, data):
+    result = ToolResult(
+        call_id=f"{block_type}-1",
+        tool=capability_namespaced_id(
+            "park-energy", "energy", encode_remote_tool_name(remote_tool)
+        ),
+        status=ToolResultStatus.SUCCESS,
+        content={"success": True, "data": data},
+    )
+
+    blocks = main._build_response_blocks([result])
+
+    assert blocks == [{"type": block_type, "tool": remote_tool, "data": data}]
+
+
+def test_agent_serves_security_dashboard_from_same_origin():
+    client = TestClient(server.app)
+
+    response = client.get("/park-agent/")
+
+    assert response.status_code == 200
+    assert "园区智能运营 Agent" in response.text
+
+
+def test_legacy_security_dashboard_route_remains_available():
+    response = TestClient(server.app).get("/security/")
+
+    assert response.status_code == 200
+    assert "园区智能运营 Agent" in response.text
+
+
+def test_agent_dashboard_serves_external_assets():
+    client = TestClient(server.app)
+
+    for asset in ("styles.css", "app.js", "mock-data.js"):
+        response = client.get(f"/park-agent/{asset}")
+        assert response.status_code == 200
+
+
+@pytest.mark.anyio
+async def test_handle_input_structured_async_builds_security_message_and_blocks(monkeypatch):
+    registry = get_capability_registry().__class__()
+    tool = ToolResult(
+        call_id="summary-1",
+        tool="security.get_event_summary",
+        status=ToolResultStatus.SUCCESS,
+        content={"total_events": 3, "risk_counts": {"critical": 1, "high": 2}},
+    )
+
+    monkeypatch.setattr(main, "get_capability_registry", lambda: registry)
+    monkeypatch.setattr(main, "_structured_tool_calling_enabled", lambda: True)
+    monkeypatch.setattr(main, "plan_task", lambda *args, **kwargs: [])
+
+    async def fake_execute_plan_items_detailed(*args, **kwargs):
+        return ExecutionReport(results=[], tool_results=[tool])
+
+    monkeypatch.setattr(main, "execute_plan_items_detailed", fake_execute_plan_items_detailed)
+
+    response = await main.handle_input_structured_async("园区当前有多少事件？")
+
+    assert response["message"] == "当前园区有 3 个归并安防事件，其中严重/高风险 3 个。"
+    assert response["blocks"][0]["type"] == "security_summary"
 
 
 @pytest.mark.anyio

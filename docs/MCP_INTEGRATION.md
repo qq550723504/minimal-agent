@@ -272,9 +272,10 @@ curl -H "X-API-Key: <api-key>" http://localhost:8000/api/skills
 
 本地联调时需要区分 Docker Compose 和直接运行 Python：
 
-- 两个 capability 开关默认都是 `false`。修改 `.env` 或环境变量后必须重启 agent；已经运行的进程不会重新读取配置。
+- 直接运行 Agent 时两个 capability 开关默认都是 `false`；开发 Compose 为了让园区能力开箱可用会覆盖为 `true`。修改 `.env` 或环境变量后必须重启 agent；已经运行的进程不会重新读取配置。
 - Docker Compose 会自动读取项目根目录的 `.env`。直接执行 `python -m plugins.park_energy.server.main` 或 `python -m uvicorn ...` 不会自动读取 `.env`，必须在同一个 PowerShell 会话中显式设置环境变量，或使用 Compose 启动。
 - 宿主机直接运行时使用 `PARK_ENERGY_MCP_URL=http://127.0.0.1:8100/mcp` 和 `AGENT_MCP_ALLOWED_HOSTS=127.0.0.1`；Compose 内的 agent 必须使用 `http://park_energy:8100/mcp` 和 `AGENT_MCP_ALLOWED_HOSTS=park_energy`，容器内的 `127.0.0.1` 指向 agent 自身。
+- Compose 的 `park_energy` 默认使用 `PARK_ENERGY_DATA_MODE=rest`，通过 `http://host.docker.internal:9714` 访问宿主机 `cent-energy`；Java 服务未启动时应显式切换为 `mock`，否则能耗工具会返回上游连接错误。
 - `PARK_ENERGY_DATA_MODE=mock` 只对实际启动的 `park_energy` 进程生效。若直接运行 Python 时没有传入该变量，服务会回退到 `rest`，随后可能出现 `mcp_tool_error`，实际根因是上游 REST API 不可用或返回了非 JSON。
 - Gemini 结构化调用依赖 JSON 响应约束和工具输入 Schema。只提供自然语言提示时，模型可能只输出“调用某接口”的文字；这不等于工具已经执行。`/api/handle` 的请求应包含 `park_id`、时间范围等工具必填参数，缺少 `park_id` 时要求补充是正常行为。
 - 审计日志中的 `[REDACTED]` 是脱敏标记，不代表时间或业务数据被 MCP 修改。`mcp_tool_error` 表示 MCP Server 返回了错误结果；应同时检查 MCP 服务自身日志和 `PARK_ENERGY_DATA_MODE`，不要只看 agent 的脱敏错误码。

@@ -1,10 +1,11 @@
-from typing import Any, List, Optional
+from typing import Any, List, Literal, Optional
 
 from pydantic import BaseModel
 
 
 class PromptIn(BaseModel):
     prompt: str
+    response_mode: Literal["text", "structured", "stream"] = "text"
 
 
 class TaskStatusOut(BaseModel):

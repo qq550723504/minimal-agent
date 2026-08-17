@@ -13,6 +13,7 @@ from src.agent.application.execution.service import (
     WorkflowRunner,
     enqueue_task_execution,
     execute_plan_items,
+    execute_plan_items_detailed,
     execute_step,
     execute_structured_calls,
     execute_tasks,
@@ -173,6 +174,45 @@ async def test_execute_plan_items_runs_text_and_tool_call_in_order():
     assert result[0] == "first"
     assert '"value": "second"' in result[1]
     assert seen == [({"value": "second"}, "user-1", "run-1")]
+
+
+@pytest.mark.anyio
+async def test_execute_plan_items_detailed_preserves_tool_metadata():
+    registry = CapabilityRegistry()
+
+    async def handler(arguments, context):
+        return {"total_events": 3, "risk_counts": {"critical": 1}}
+
+    registry.register(
+        _make_capability_spec(
+            "security.get_event_summary",
+            input_schema={
+                "type": "object",
+                "properties": {"park_id": {"type": "string"}},
+                "required": ["park_id"],
+            },
+        ),
+        handler,
+    )
+
+    report = await execute_plan_items_detailed(
+        [
+            ToolCallPlan(
+                kind="tool_call",
+                call_id="security-call-1",
+                tool="security.get_event_summary",
+                arguments={"park_id": "park-1"},
+            )
+        ],
+        owner_id="user-1",
+        run_id="run-1",
+        registry=registry,
+    )
+
+    assert report.results == ['{"risk_counts": {"critical": 1}, "total_events": 3}']
+    assert len(report.tool_results) == 1
+    assert report.tool_results[0].tool == "security.get_event_summary"
+    assert report.tool_results[0].content == {"total_events": 3, "risk_counts": {"critical": 1}}
 
 
 @pytest.mark.anyio

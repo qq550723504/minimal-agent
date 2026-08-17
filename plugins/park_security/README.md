@@ -10,6 +10,34 @@
 
 设置 `PARK_SECURITY_DATA_MODE=mock`（默认且当前唯一支持的模式）即可使用这些可重复的数据。
 
+## Mock dashboard
+
+仓库提供一个无需构建链的静态展示页。默认只显示空状态和 Agent 对话入口，不加载本地模拟数据；访问 `?demo=1` 才会加载 `park-1` 的事件总览、风险事件、证据时间线、值班升级规则和浏览器内存模拟处置流程。页面不连接数据库或 MCP。
+
+在仓库根目录执行：
+
+```powershell
+python -m http.server 8088 --directory demos
+```
+
+然后访问 <http://127.0.0.1:8088/park-security/>。
+
+## 通过现有 Agent 对话展示
+
+Agent 启用能力运行时和结构化工具调用后，可以直接访问同源页面：
+
+```powershell
+$env:AGENT_CAPABILITY_RUNTIME_ENABLED = "true"
+$env:AGENT_STRUCTURED_TOOL_CALLING_ENABLED = "true"
+$env:AGENT_MCP_ALLOWED_HOSTS = "127.0.0.1"
+$env:PARK_SECURITY_MCP_URL = "http://127.0.0.1:8200/mcp"
+python -m uvicorn src.agent.api.app:app --host 127.0.0.1 --port 8000
+```
+
+访问 <http://127.0.0.1:8000/park-agent/>，在页面顶部提问。页面会调用 Agent 的
+`POST /api/handle`（`response_mode=structured`），同时展示自然语言回答和安防结果卡片。
+旧地址 `/security/` 仍保留为兼容别名。同源访问可以避免把 Agent API 暴露给独立静态页面；生产环境仍需按 Agent 的认证配置保护接口。
+
 ## 本地运行
 
 在仓库根目录执行：

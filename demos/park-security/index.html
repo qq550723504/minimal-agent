@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="agent-route" content="/park-agent/">
+  <title>园区智能运营 Agent · 安防与能耗</title>
+  <link rel="stylesheet" href="styles.css?v=20260814-2">
+</head>
+<body>
+  <div class="page">
+    <header class="topbar">
+      <div>
+        <p class="eyebrow">Minimal Agent · Park Operations</p>
+        <h1>园区智能运营 Agent</h1>
+        <p class="subtitle">把安防事件、值班规则和能耗数据汇聚到同一个可解释的 Agent 工作台。</p>
+      </div>
+      <div class="topbar-meta" aria-label="页面状态">
+        <span class="pill"><span class="dot"></span><strong>park-1</strong> · 运行正常</span>
+      </div>
+    </header>
+
+    <section class="panel chat-panel" aria-labelledby="chat-title">
+      <div class="chat-header">
+        <div class="chat-header-copy"><h2 id="chat-title">问问现有 Agent</h2><p class="panel-subtitle">自然语言提问，Agent 返回回答和可展开的安防、能耗结构化卡片。</p></div>
+        <span class="badge">response_mode: stream</span>
+      </div>
+      <div class="chat-messages" id="chat-messages" aria-live="polite">
+        <div class="message message-assistant"><div class="message-role">Agent</div><p class="message-text">你好，我可以帮你查看园区事件、证据链、值班规则和能耗数据。试试问“查询最近 7 天园区能耗趋势”。</p></div>
+      </div>
+      <form class="chat-form" id="chat-form">
+        <label>输入你的问题<textarea id="chat-input" rows="2" required placeholder="例如：园区当前有哪些高风险事件？"></textarea></label>
+        <button class="btn btn-primary" type="submit" id="chat-submit">发送给 Agent</button>
+      </form>
+      <div class="chat-tools">
+        <button class="prompt-chip" type="button" data-prompt="查询园区安防态势汇总">安防态势汇总</button>
+        <button class="prompt-chip" type="button" data-prompt="查看事件 event-fire-003 的详情">消防事件详情</button>
+        <button class="prompt-chip" type="button" data-prompt="查看事件 event-night-001 的详情">夜间门禁详情</button>
+        <button class="prompt-chip" type="button" data-prompt="凌晨一点谁在值班？">当前值班</button>
+        <button class="prompt-chip" type="button" data-prompt="查询园区能耗排名">能耗排名</button>
+        <button class="prompt-chip" type="button" data-prompt="哪栋楼能耗最高？">最高能耗电表</button>
+        <label class="endpoint">Agent API 地址<input id="agent-endpoint" autocomplete="off"></label>
+      </div>
+      <p class="chat-status" id="chat-status">页面只会把问题发送到你配置的 Agent API，不会直连数据库或 MCP；能耗 MCP 地址由 <code>PARK_ENERGY_MCP_URL</code> 配置。</p>
+    </section>
+
+    <section class="kpis local-dashboard" id="local-kpis" aria-label="安防指标" hidden>
+      <article class="kpi"><div class="kpi-label">归并事件</div><div class="kpi-value" id="kpi-total">—</div><div class="kpi-note">跨门禁、视频、消防和巡更</div></article>
+      <article class="kpi kpi-critical"><div class="kpi-label">严重 / 高风险</div><div class="kpi-value" id="kpi-critical">—</div><div class="kpi-note">需要人工确认的开放事件</div></article>
+      <article class="kpi"><div class="kpi-label">原始告警</div><div class="kpi-value" id="kpi-raw">—</div><div class="kpi-note">已归并重复告警</div></article>
+      <article class="kpi kpi-rate"><div class="kpi-label">有效告警率</div><div class="kpi-value" id="kpi-rate">—</div><div class="kpi-note">归并事件 / 原始告警</div></article>
+    </section>
+
+    <main class="dashboard local-dashboard" id="local-dashboard" hidden>
+      <section class="panel" aria-labelledby="events-title">
+        <div class="panel-header">
+          <div><h2 id="events-title">风险事件</h2><p class="panel-subtitle">点击事件查看证据链和处置建议</p></div>
+          <span class="badge badge-open" id="event-count">3 条</span>
+        </div>
+        <div class="filters">
+          <label>风险等级<select id="risk-filter"><option value="all">全部风险</option><option value="critical">严重</option><option value="high">高</option><option value="medium">中</option><option value="low">低</option></select></label>
+          <label>事件状态<select id="status-filter"><option value="all">全部状态</option><option value="open">开放</option><option value="confirmed">已确认</option><option value="work_order_created">已建工单</option><option value="closed">已关闭</option></select></label>
+        </div>
+        <div class="event-list" id="event-list" aria-live="polite"></div>
+      </section>
+
+      <section class="detail-column">
+        <article class="panel" aria-labelledby="detail-title">
+          <div class="panel-header"><div><h2 id="detail-title">事件详情</h2><p class="panel-subtitle">基于多源证据的可解释结论</p></div><span class="badge">只读分析 + 模拟处置</span></div>
+          <div id="event-detail"></div>
+        </article>
+        <article class="panel" aria-labelledby="timeline-title">
+          <div class="panel-header"><div><h2 id="timeline-title">证据时间线</h2><p class="panel-subtitle">按照真实发生时刻排序</p></div></div>
+          <div class="timeline" id="evidence-timeline"></div>
+          <div class="section-label">处置审计</div>
+          <div class="audit-list" id="audit-list"></div>
+        </article>
+      </section>
+
+      <aside class="side-column">
+        <section class="panel" id="shift-panel" aria-labelledby="shift-title">
+          <div class="panel-header"><div><h2 id="shift-title">值班与升级</h2><p class="panel-subtitle">当前查询时段的区域响应上下文</p></div></div>
+        </section>
+        <section class="panel" aria-labelledby="scope-title">
+          <div class="panel-header"><div><h2 id="scope-title">数据边界</h2><p class="panel-subtitle">当前演示不连接生产系统</p></div></div>
+          <div class="small info-copy">默认不加载本地模拟数据；需要演示时访问 <code>?demo=1</code>。Agent 返回的安防数据和处置结果仍按请求展示。</div>
+          <div class="chips chips-spaced"><span class="chip">门禁</span><span class="chip">视频</span><span class="chip">消防</span><span class="chip">巡更</span></div>
+        </section>
+      </aside>
+    </main>
+    <p class="footer-note local-dashboard" hidden>演示页面 · 不代表真实安防系统已执行任何操作</p>
+  </div>
+
+  <dialog id="action-dialog" aria-labelledby="dialog-title">
+    <form method="dialog" class="dialog-body" id="action-form">
+      <h2 id="dialog-title">模拟处置</h2>
+      <p id="dialog-description">请填写本次人工复核信息。提交后只会改变当前页面内存状态。</p>
+      <label>操作员 ID<input id="operator-input" autocomplete="off" required placeholder="例如 guard-01"></label>
+      <label class="label-spaced">处置说明<textarea id="note-input" rows="3" required placeholder="记录现场核验或处置结论"></textarea></label>
+      <div class="dialog-actions"><button class="btn" value="cancel">取消</button><button class="btn btn-primary" id="dialog-submit" value="default">确认模拟操作</button></div>
+    </form>
+  </dialog>
+
+  <script type="module" src="app.js?v=20260814-9"></script>
+</body>
+</html>

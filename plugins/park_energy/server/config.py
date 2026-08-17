@@ -26,6 +26,7 @@ class Settings:
     host: str
     port: int
     data_mode: Literal["rest", "mock"]
+    project_ids: tuple[int, ...]
 
     @classmethod
     def from_env(cls) -> "Settings":
@@ -40,12 +41,17 @@ class Settings:
             token_prefix=os.getenv("ENERGY_API_TOKEN_PREFIX", "Bearer"),
             timeout_seconds=_float_env("ENERGY_API_TIMEOUT_SECONDS", 10.0),
             max_response_bytes=int(os.getenv("ENERGY_API_MAX_RESPONSE_BYTES", "1048576")),
-            trend_path=os.getenv("ENERGY_TREND_PATH", "/api/energy/trend"),
-            ranking_path=os.getenv("ENERGY_RANKING_PATH", "/api/energy/ranking"),
+            trend_path=os.getenv("ENERGY_TREND_PATH", "/api/agent/v1/energy/trend"),
+            ranking_path=os.getenv("ENERGY_RANKING_PATH", "/api/agent/v1/energy/ranking"),
             peak_path=os.getenv("ENERGY_PEAK_PATH", "/api/energy/peak"),
-            compare_path=os.getenv("ENERGY_COMPARE_PATH", "/api/energy/compare"),
-            alarms_path=os.getenv("ENERGY_ALARMS_PATH", "/api/energy/alarms"),
+            compare_path=os.getenv("ENERGY_COMPARE_PATH", "/api/agent/v1/energy/compare"),
+            alarms_path=os.getenv("ENERGY_ALARMS_PATH", "/api/agent/v1/energy/anomalies"),
             host=os.getenv("PARK_ENERGY_MCP_HOST", "127.0.0.1"),
             port=int(os.getenv("PARK_ENERGY_MCP_PORT", "8100")),
             data_mode=data_mode,
+            project_ids=tuple(
+                int(value.strip())
+                for value in os.getenv("ENERGY_PROJECT_IDS", "").split(",")
+                if value.strip()
+            ),
         )
